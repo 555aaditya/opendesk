@@ -35,6 +35,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
+import { tone, toneFor } from "@/lib/tones";
 import { folders, type FolderId } from "@/lib/folders";
 import { q } from "@/lib/queries";
 import { atLeast, selectWorkspace, signOut, useRole, useSession, useWorkspace } from "@/lib/session";
@@ -327,8 +328,9 @@ export function WorkspaceGlyph({ name, small }: { name: string; small?: boolean 
     <span
       aria-hidden
       className={cn(
-        "flex shrink-0 items-center justify-center bg-inverse font-semibold tracking-tight text-inverse-fg",
-        small ? "size-4 rounded-sm text-[9px] !text-inverse-fg" : "size-6 rounded-md text-[10.5px]",
+        "flex shrink-0 items-center justify-center font-semibold tracking-tight text-white",
+        tone[toneFor(name)].solid,
+        small ? "size-4 rounded-sm text-[9px] !text-white" : "size-6 rounded-md text-[10.5px]",
       )}
     >
       {name.trim().charAt(0).toUpperCase() || "?"}

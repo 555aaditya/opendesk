@@ -75,7 +75,7 @@ export type Company = {
 export type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 export type Priority = "low" | "normal" | "high" | "urgent";
 export type Channel = "email" | "chat" | "api" | "portal";
-export type Tag = { id: string; name: string };
+export type Tag = { id: string; name: string; color?: string | null };
 export type TicketSla = {
   policy_id: string;
   first_response_due_at: string | null;

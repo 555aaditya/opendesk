@@ -6,7 +6,7 @@ import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { PriorityIcon, SlaBadge, StatusIcon, statusLabel } from "./bits";
+import { PriorityIcon, priorityLabel, SlaBadge, StatusIcon, statusLabel } from "./bits";
 import { useTicketViewers } from "./presence";
 
 export type RowProps = {
@@ -133,10 +133,11 @@ export const TicketRow = memo(function TicketRow({ ticket: t, active, focused, s
           <StatusIcon status={t.status} />
         </span>
       </Tooltip>
-      {/* Only priorities that change triage get an icon; the slot keeps columns aligned. */}
-      <span className="flex w-4 shrink-0 justify-center">
-        {(t.priority === "urgent" || t.priority === "high") && <PriorityIcon priority={t.priority} />}
-      </span>
+      <Tooltip content={`${priorityLabel[t.priority]} priority`}>
+        <span className="flex w-4 shrink-0 justify-center">
+          <PriorityIcon priority={t.priority} muted={t.priority === "low"} />
+        </span>
+      </Tooltip>
       <span className={cn("w-[168px] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
         {contactName}
       </span>
@@ -150,7 +151,7 @@ export const TicketRow = memo(function TicketRow({ ticket: t, active, focused, s
       </span>
       <span className="hidden shrink-0 items-center gap-1 lg:flex">
         {t.tags.slice(0, 2).map((tag) => (
-          <TagChip key={tag.id} name={tag.name} />
+          <TagChip key={tag.id} name={tag.name} color={tag.color} />
         ))}
         {t.tags.length > 2 && <span className="text-[11px] text-fg-4">+{t.tags.length - 2}</span>}
       </span>

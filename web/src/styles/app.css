@@ -45,6 +45,55 @@
   --shadow-xs: 0 1px 2px rgb(10 10 10 / 0.04);
   --shadow-pop: 0 4px 12px -2px rgb(10 10 10 / 0.08), 0 2px 4px rgb(10 10 10 / 0.04);
   --shadow-float: 0 1px 2px rgb(10 10 10 / 0.04), 0 30px 70px -32px rgb(10 10 10 / 0.32);
+  /* Tones: soft tinted fills with stronger ink, for status, priority, tags, channels, charts and avatars. */
+  --tone-blue-soft: oklch(0.965 0.033 250);
+  --tone-blue-line: oklch(0.9 0.068 250);
+  --tone-blue: oklch(0.5 0.150 250);
+  --tone-blue-solid: oklch(0.63 0.158 250);
+  --tone-indigo-soft: oklch(0.965 0.033 272);
+  --tone-indigo-line: oklch(0.9 0.068 272);
+  --tone-indigo: oklch(0.5 0.150 272);
+  --tone-indigo-solid: oklch(0.63 0.158 272);
+  --tone-violet-soft: oklch(0.965 0.033 298);
+  --tone-violet-line: oklch(0.9 0.068 298);
+  --tone-violet: oklch(0.5 0.150 298);
+  --tone-violet-solid: oklch(0.63 0.158 298);
+  --tone-pink-soft: oklch(0.965 0.033 350);
+  --tone-pink-line: oklch(0.9 0.068 350);
+  --tone-pink: oklch(0.5 0.150 350);
+  --tone-pink-solid: oklch(0.63 0.158 350);
+  --tone-red-soft: oklch(0.965 0.037 25);
+  --tone-red-line: oklch(0.9 0.077 25);
+  --tone-red: oklch(0.5 0.170 25);
+  --tone-red-solid: oklch(0.63 0.179 25);
+  --tone-orange-soft: oklch(0.965 0.033 48);
+  --tone-orange-line: oklch(0.9 0.068 48);
+  --tone-orange: oklch(0.5 0.150 48);
+  --tone-orange-solid: oklch(0.63 0.158 48);
+  --tone-amber-soft: oklch(0.965 0.031 80);
+  --tone-amber-line: oklch(0.9 0.063 80);
+  --tone-amber: oklch(0.5 0.140 80);
+  --tone-amber-solid: oklch(0.63 0.147 80);
+  --tone-lime-soft: oklch(0.965 0.031 125);
+  --tone-lime-line: oklch(0.9 0.063 125);
+  --tone-lime: oklch(0.5 0.140 125);
+  --tone-lime-solid: oklch(0.63 0.147 125);
+  --tone-green-soft: oklch(0.965 0.029 152);
+  --tone-green-line: oklch(0.9 0.059 152);
+  --tone-green: oklch(0.5 0.130 152);
+  --tone-green-solid: oklch(0.63 0.137 152);
+  --tone-teal-soft: oklch(0.965 0.022 185);
+  --tone-teal-line: oklch(0.9 0.045 185);
+  --tone-teal: oklch(0.5 0.100 185);
+  --tone-teal-solid: oklch(0.63 0.105 185);
+  --tone-cyan-soft: oklch(0.965 0.024 222);
+  --tone-cyan-line: oklch(0.9 0.050 222);
+  --tone-cyan: oklch(0.5 0.110 222);
+  --tone-cyan-solid: oklch(0.63 0.116 222);
+  --tone-gray-soft: oklch(0.965 0.003 260);
+  --tone-gray-line: oklch(0.9 0.005 260);
+  --tone-gray: oklch(0.5 0.012 260);
+  --tone-gray-solid: oklch(0.63 0.013 260);
 }
 
 .dark {
@@ -82,6 +131,55 @@
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-pop: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px rgb(0 0 0 / 0.3);
   --shadow-float: 0 30px 70px -32px rgb(0 0 0 / 0.8);
+  /* Tones, dark: deep tinted fills with bright ink. */
+  --tone-blue-soft: oklch(0.29 0.052 250 / 0.55);
+  --tone-blue-line: oklch(0.38 0.075 250 / 0.7);
+  --tone-blue: oklch(0.8 0.120 250);
+  --tone-blue-solid: oklch(0.7 0.150 250);
+  --tone-indigo-soft: oklch(0.29 0.052 272 / 0.55);
+  --tone-indigo-line: oklch(0.38 0.075 272 / 0.7);
+  --tone-indigo: oklch(0.8 0.120 272);
+  --tone-indigo-solid: oklch(0.7 0.150 272);
+  --tone-violet-soft: oklch(0.29 0.052 298 / 0.55);
+  --tone-violet-line: oklch(0.38 0.075 298 / 0.7);
+  --tone-violet: oklch(0.8 0.120 298);
+  --tone-violet-solid: oklch(0.7 0.150 298);
+  --tone-pink-soft: oklch(0.29 0.052 350 / 0.55);
+  --tone-pink-line: oklch(0.38 0.075 350 / 0.7);
+  --tone-pink: oklch(0.8 0.120 350);
+  --tone-pink-solid: oklch(0.7 0.150 350);
+  --tone-red-soft: oklch(0.29 0.059 25 / 0.55);
+  --tone-red-line: oklch(0.38 0.085 25 / 0.7);
+  --tone-red: oklch(0.8 0.136 25);
+  --tone-red-solid: oklch(0.7 0.170 25);
+  --tone-orange-soft: oklch(0.29 0.052 48 / 0.55);
+  --tone-orange-line: oklch(0.38 0.075 48 / 0.7);
+  --tone-orange: oklch(0.8 0.120 48);
+  --tone-orange-solid: oklch(0.7 0.150 48);
+  --tone-amber-soft: oklch(0.29 0.049 80 / 0.55);
+  --tone-amber-line: oklch(0.38 0.070 80 / 0.7);
+  --tone-amber: oklch(0.8 0.112 80);
+  --tone-amber-solid: oklch(0.7 0.140 80);
+  --tone-lime-soft: oklch(0.29 0.049 125 / 0.55);
+  --tone-lime-line: oklch(0.38 0.070 125 / 0.7);
+  --tone-lime: oklch(0.8 0.112 125);
+  --tone-lime-solid: oklch(0.7 0.140 125);
+  --tone-green-soft: oklch(0.29 0.045 152 / 0.55);
+  --tone-green-line: oklch(0.38 0.065 152 / 0.7);
+  --tone-green: oklch(0.8 0.104 152);
+  --tone-green-solid: oklch(0.7 0.130 152);
+  --tone-teal-soft: oklch(0.29 0.035 185 / 0.55);
+  --tone-teal-line: oklch(0.38 0.050 185 / 0.7);
+  --tone-teal: oklch(0.8 0.080 185);
+  --tone-teal-solid: oklch(0.7 0.100 185);
+  --tone-cyan-soft: oklch(0.29 0.038 222 / 0.55);
+  --tone-cyan-line: oklch(0.38 0.055 222 / 0.7);
+  --tone-cyan: oklch(0.8 0.088 222);
+  --tone-cyan-solid: oklch(0.7 0.110 222);
+  --tone-gray-soft: oklch(0.29 0.004 260 / 0.55);
+  --tone-gray-line: oklch(0.38 0.006 260 / 0.7);
+  --tone-gray: oklch(0.8 0.010 260);
+  --tone-gray-solid: oklch(0.7 0.012 260);
 }
 
 @theme inline {
@@ -151,6 +249,60 @@
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
   --animate-module-snap: module-snap 220ms var(--ease-out-expo) both;
+  --animate-indicator-in: indicator-in 200ms var(--ease-out-expo);
+  --color-tone-blue-soft: var(--tone-blue-soft);
+  --color-tone-blue-line: var(--tone-blue-line);
+  --color-tone-blue: var(--tone-blue);
+  --color-tone-blue-solid: var(--tone-blue-solid);
+  --color-tone-indigo-soft: var(--tone-indigo-soft);
+  --color-tone-indigo-line: var(--tone-indigo-line);
+  --color-tone-indigo: var(--tone-indigo);
+  --color-tone-indigo-solid: var(--tone-indigo-solid);
+  --color-tone-violet-soft: var(--tone-violet-soft);
+  --color-tone-violet-line: var(--tone-violet-line);
+  --color-tone-violet: var(--tone-violet);
+  --color-tone-violet-solid: var(--tone-violet-solid);
+  --color-tone-pink-soft: var(--tone-pink-soft);
+  --color-tone-pink-line: var(--tone-pink-line);
+  --color-tone-pink: var(--tone-pink);
+  --color-tone-pink-solid: var(--tone-pink-solid);
+  --color-tone-red-soft: var(--tone-red-soft);
+  --color-tone-red-line: var(--tone-red-line);
+  --color-tone-red: var(--tone-red);
+  --color-tone-red-solid: var(--tone-red-solid);
+  --color-tone-orange-soft: var(--tone-orange-soft);
+  --color-tone-orange-line: var(--tone-orange-line);
+  --color-tone-orange: var(--tone-orange);
+  --color-tone-orange-solid: var(--tone-orange-solid);
+  --color-tone-amber-soft: var(--tone-amber-soft);
+  --color-tone-amber-line: var(--tone-amber-line);
+  --color-tone-amber: var(--tone-amber);
+  --color-tone-amber-solid: var(--tone-amber-solid);
+  --color-tone-lime-soft: var(--tone-lime-soft);
+  --color-tone-lime-line: var(--tone-lime-line);
+  --color-tone-lime: var(--tone-lime);
+  --color-tone-lime-solid: var(--tone-lime-solid);
+  --color-tone-green-soft: var(--tone-green-soft);
+  --color-tone-green-line: var(--tone-green-line);
+  --color-tone-green: var(--tone-green);
+  --color-tone-green-solid: var(--tone-green-solid);
+  --color-tone-teal-soft: var(--tone-teal-soft);
+  --color-tone-teal-line: var(--tone-teal-line);
+  --color-tone-teal: var(--tone-teal);
+  --color-tone-teal-solid: var(--tone-teal-solid);
+  --color-tone-cyan-soft: var(--tone-cyan-soft);
+  --color-tone-cyan-line: var(--tone-cyan-line);
+  --color-tone-cyan: var(--tone-cyan);
+  --color-tone-cyan-solid: var(--tone-cyan-solid);
+  --color-tone-gray-soft: var(--tone-gray-soft);
+  --color-tone-gray-line: var(--tone-gray-line);
+  --color-tone-gray: var(--tone-gray);
+  --color-tone-gray-solid: var(--tone-gray-solid);
+}
+
+@keyframes indicator-in {
+  from { opacity: 0.4; transform: scale(0.8); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes module-snap {

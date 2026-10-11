@@ -178,7 +178,7 @@ export function TicketProperties({ t, assignOpen, onAssignOpenChange }: { t: Tic
           <span className="w-[76px] shrink-0 pt-1.5 text-[12px] text-fg-3">Tags</span>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-1 py-1">
             {t.tags.map((tag) => (
-              <TagChip key={tag.id} name={tag.name} onRemove={canEdit ? () => patch({ tags: tagNames.filter((n) => n !== tag.name) }) : undefined} />
+              <TagChip key={tag.id} name={tag.name} color={tag.color} onRemove={canEdit ? () => patch({ tags: tagNames.filter((n) => n !== tag.name) }) : undefined} />
             ))}
             {canEdit && (
               <Picker

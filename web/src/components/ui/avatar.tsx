@@ -1,19 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/cn";
-
-const shades = [
-  "bg-[#e9e9e9] text-[#3a3a3a] dark:bg-[#2a2a2a] dark:text-[#d4d4d4]",
-  "bg-[#dcdcdc] text-[#262626] dark:bg-[#333333] dark:text-[#e4e4e4]",
-  "bg-[#f0f0f0] text-[#525252] dark:bg-[#242424] dark:text-[#b4b4b4]",
-  "bg-[#d2d2d2] text-[#171717] dark:bg-[#3b3b3b] dark:text-[#f4f4f4]",
-  "bg-[#262626] text-[#f4f4f4] dark:bg-[#e4e4e4] dark:text-[#171717]",
-];
-
-function hash(s: string) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
+import { tone, toneFor } from "@/lib/tones";
 
 export function initials(name: string) {
   const parts = name.trim().split(/[\s@._-]+/).filter(Boolean);
@@ -46,7 +33,7 @@ export function Avatar({
   ring?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
-  const shade = shades[hash(name || "?") % shades.length];
+  const shade = tone[toneFor(name)].chip;
   return (
     <span
       className={cn(
