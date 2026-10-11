@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
 
@@ -19,6 +19,26 @@ const sizes = {
   xl: "size-10 text-[13px]",
   "2xl": "size-14 text-[17px]",
 };
+export type Presence = "online" | "away" | "offline";
+/** Presence dot colours: online green, away amber, offline grey. Shared with the availability menu. */
+export const presenceDot: Record<Presence, string> = {
+  online: "bg-tone-green-solid",
+  away: "bg-tone-amber-solid",
+  offline: "bg-tone-gray-solid",
+};
+const dotSizes = { xs: "size-1.5", sm: "size-[7px]", md: "size-2", lg: "size-2.5", xl: "size-[11px]", "2xl": "size-3.5" };
+
+const SMALL = new Set(["xs", "sm", "md", "lg"]);
+
+/**
+ * Our own processed images (`GET /v1/images/{id}`) come in 256 and 64 px; ask
+ * for the small one where the avatar is 32 px or less. Other URLs are left alone.
+ */
+export function sizedSrc(src: string | null | undefined, size: string): string | null | undefined {
+  if (!src || !SMALL.has(size) || src.includes("?") || !/\/v1\/images\/[^/]+$/.test(src.split("#")[0])) return src;
+  return `${src}?s=64`;
+}
+
 const squares = { xs: "rounded-xs", sm: "rounded-sm", md: "rounded-sm", lg: "rounded-md", xl: "rounded-lg", "2xl": "rounded-xl" };
 
 export function Avatar({
@@ -28,6 +48,7 @@ export function Avatar({
   className,
   ring,
   square,
+  presence,
 }: {
   name: string;
   src?: string | null;
@@ -36,16 +57,17 @@ export function Avatar({
   ring?: boolean;
   /** A company or workspace: rounded square instead of a circle. */
   square?: boolean;
+  /** A presence dot at the bottom right, ringed in the surface colour. */
+  presence?: Presence;
 }) {
-  const [broken, setBroken] = useState(false);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    setLoaded(false);
-    setBroken(false);
-  }, [src]);
-  const showImg = !!src && !broken;
+  // Keyed by URL, so a new picture starts hidden even when it loads before an effect could reset a flag.
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const url = sizedSrc(src, size);
+  const loaded = !!url && loadedUrl === url;
+  const showImg = !!url && brokenUrl !== url;
   const shade = tone[toneFor(name)].chip;
-  return (
+  const face = (
     <span
       className={cn(
         "relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden font-semibold tracking-[-0.02em]",
@@ -62,15 +84,29 @@ export function Avatar({
       <span className={cn("transition-opacity duration-200", showImg && loaded && "opacity-0")}>{initials(name)}</span>
       {showImg && (
         <img
-          key={src}
-          src={src}
+          key={url}
+          src={url ?? undefined}
           alt=""
           className={cn("absolute inset-0 size-full object-cover transition-opacity duration-200 ease-out", loaded ? "opacity-100" : "opacity-0")}
-          onLoad={() => setLoaded(true)}
-          onError={() => setBroken(true)}
+          onLoad={() => setLoadedUrl(url ?? null)}
+          onError={() => setBrokenUrl(url ?? null)}
           referrerPolicy="no-referrer"
         />
       )}
+    </span>
+  );
+  if (!presence) return face;
+  return (
+    <span className="relative inline-flex shrink-0" aria-hidden>
+      {face}
+      <span
+        className={cn(
+          "absolute rounded-full ring-2 ring-surface transition-colors duration-200",
+          square ? "-bottom-0.5 -right-0.5" : "bottom-0 right-0",
+          dotSizes[size],
+          presenceDot[presence],
+        )}
+      />
     </span>
   );
 }

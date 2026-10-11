@@ -14,8 +14,9 @@ import settings from "./locales/en/settings.json";
 import settingsChannels from "./locales/en/settingsChannels.json";
 import settingsDev from "./locales/en/settingsDev.json";
 import settingsInbox from "./locales/en/settingsInbox.json";
+import setup from "./locales/en/setup.json";
 import shell from "./locales/en/shell.json";
 
-export const en = { common, billing, ai, aiTicket, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, contacts, kb, reports, inbox } as const;
-export const NAMESPACES = ["common", "billing", "ai", "aiTicket", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "contacts", "kb", "reports", "inbox"] as const;
+export const en = { common, billing, ai, aiTicket, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, contacts, kb, reports, inbox, setup } as const;
+export const NAMESPACES = ["common", "billing", "ai", "aiTicket", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "contacts", "kb", "reports", "inbox", "setup"] as const;
 export type Namespace = (typeof NAMESPACES)[number];
