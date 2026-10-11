@@ -51,7 +51,7 @@ On `ticket:<wid>:<tid>`:
   as `{ "ticket_id", "user": {id, name} }` (chat tickets only).
 
 On `contact:<wid>:<cid>`:
-- `"typing"` `{ "ticket_id": "..." }` broadcasts `"customer_typing"` `{ticket_id, contact_id}`
+- `"typing"` `{ "ticket_id": "..." }` broadcasts `"customer_typing"` `{ticket_id, contact_id}` to that ticket topic; `contact_id` comes from the token, and clients show it only when it is the ticket's contact
   to `ticket:<wid>:<ticket_id>`.
 
 Clients send messages through REST, never through the socket.

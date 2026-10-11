@@ -5,7 +5,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { getWorkspaceId } from "../api/client";
 import { api } from "../api/endpoints";
-import type { Envelope, Notification } from "../api/types";
+import type { Envelope, Notification, Ticket } from "../api/types";
+import { qk } from "../queries";
 import { config } from "../config";
 import { applyEnvelope } from "./apply";
 import { syncDiff, syncState, type PresenceDiff, type PresenceState } from "./presence";
@@ -218,7 +219,12 @@ export class RealtimeManager {
         const t = p as { user_id: string; name: string };
         if (t.user_id !== this.opts.userId) noteTyping(id, t);
       });
-      ch.on("customer_typing", () => noteCustomerTyping(id));
+      // contact_id comes from the visitor's token, so only the ticket's own contact counts.
+      ch.on("customer_typing", (p) => {
+        const contactId = (p as { contact_id?: string }).contact_id;
+        const ticket = this.opts.qc.getQueryData<Ticket>(qk.ticket(id));
+        if (contactId && ticket?.contact?.id === contactId) noteCustomerTyping(id);
+      });
     }
     ch.join().receive("ok", () => {
       if (mode === "active") ch.push("presence", { state: "viewing" });
