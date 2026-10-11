@@ -13,6 +13,9 @@ name: Deploy
 #   vars:    AWS_REGION, AWS_DEPLOY_ROLE_ARN, ECS_MIGRATE_NETWORK,
 #            CLOUDFLARE_ACCOUNT_ID, WEB_POSTHOG_KEY, WEB_POSTHOG_HOST, TURNSTILE_SITE_KEY
 #   secrets: CLOUDFLARE_API_TOKEN
+#
+# Deploys run only when the repository variable DEPLOY_ENABLED is "true", so
+# forks and a fresh clone of the repository never try to deploy.
 on:
   push:
     branches: [main]
@@ -41,7 +44,7 @@ env:
 jobs:
   images:
     name: Build and push images
-    if: (inputs.target || 'all') == 'all' || inputs.target == 'backend'
+    if: vars.DEPLOY_ENABLED == 'true' && ((inputs.target || 'all') == 'all' || inputs.target == 'backend')
     # Fargate runs ARM64 (Graviton); a native runner builds Erlang without QEMU.
     runs-on: ubuntu-24.04-arm
     environment: production
@@ -199,7 +202,7 @@ jobs:
 
   pages:
     name: Pages ${{ matrix.project }}
-    if: (inputs.target || 'all') != 'backend'
+    if: vars.DEPLOY_ENABLED == 'true' && (inputs.target || 'all') != 'backend'
     runs-on: ubuntu-latest
     environment: production
     permissions:
@@ -295,7 +298,7 @@ jobs:
 
   email-worker:
     name: Email worker
-    if: (inputs.target || 'all') == 'all'
+    if: vars.DEPLOY_ENABLED == 'true' && (inputs.target || 'all') == 'all'
     runs-on: ubuntu-latest
     environment: production
     permissions:
