@@ -1,3 +1,4 @@
+import { OTPInput, REGEXP_ONLY_DIGITS } from "input-otp";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/client";
@@ -8,51 +9,40 @@ import { TextInput } from "@/components/ui/input";
 import { AuthHeading } from "@/app/AuthLayout";
 import { Notice } from "./parts";
 
-/** Six boxes over one real input: paste, autofill and screen readers just work. */
+/** Six boxes over one real input (input-otp): paste, autofill and screen readers just work. */
 export function OtpInput({ value, onChange, onComplete, disabled, invalid }: { value: string; onChange: (v: string) => void; onComplete?: (v: string) => void; disabled?: boolean; invalid?: boolean }) {
-  const ref = useRef<HTMLInputElement>(null);
-  const [focused, setFocused] = useState(false);
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
   return (
-    <div className="relative" onClick={() => ref.current?.focus()}>
-      <input
-        ref={ref}
-        value={value}
-        disabled={disabled}
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        aria-label="6-digit code"
-        aria-invalid={invalid || undefined}
-        maxLength={6}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        onChange={(e) => {
-          const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-          onChange(v);
-          if (v.length === 6) onComplete?.(v);
-        }}
-        className="absolute inset-0 z-10 w-full cursor-text opacity-0"
-      />
-      <div className="flex gap-2" aria-hidden>
-        {Array.from({ length: 6 }).map((_, i) => {
-          const active = focused && (i === value.length || (i === 5 && value.length === 6));
-          return (
+    <OTPInput
+      autoFocus
+      maxLength={6}
+      value={value}
+      onChange={onChange}
+      onComplete={(v: string) => onComplete?.(v)}
+      disabled={disabled}
+      pattern={REGEXP_ONLY_DIGITS}
+      inputMode="numeric"
+      autoComplete="one-time-code"
+      aria-label="6-digit code"
+      aria-invalid={invalid || undefined}
+      containerClassName={cn("flex items-center", invalid && "animate-[shake_260ms_ease-in-out] motion-reduce:animate-none")}
+      render={({ slots }) => (
+        <div className="flex w-full items-center gap-2">
+          {slots.map((s, i) => (
             <div
               key={i}
               className={cn(
-                "mono flex h-12 flex-1 items-center justify-center rounded-md border bg-surface text-[20px] font-medium tabular-nums transition-[border-color,box-shadow] duration-100",
-                invalid ? "border-danger" : active ? "border-fg-3 shadow-[0_0_0_3px_var(--focus)]" : "border-line",
+                "mono relative flex h-12 flex-1 items-center justify-center rounded-md border bg-surface text-[20px] font-medium tabular-nums transition-[border-color,box-shadow,transform] duration-150",
+                invalid ? "border-tone-red-solid" : s.isActive ? "border-focus-line shadow-[0_0_0_3px_var(--focus)]" : s.char ? "border-line-strong" : "border-line",
                 i === 2 && "mr-2",
               )}
             >
-              {value[i] ?? (active ? <span className="h-5 w-px animate-pulse-soft bg-fg" /> : "")}
+              {s.char && <span className="animate-indicator-in motion-reduce:animate-none">{s.char}</span>}
+              {s.hasFakeCaret && <span className="h-5 w-px animate-pulse-soft bg-fg" />}
             </div>
-          );
-        })}
-      </div>
-    </div>
+          ))}
+        </div>
+      )}
+    />
   );
 }
 
@@ -103,7 +93,8 @@ export function MfaStep({ mfaToken, onDone, onBack }: { mfaToken: string; onDone
         ) : (
           <TextInput
             ref={recoveryRef}
-            className="mono h-9 tracking-[0.04em]"
+            inputSize="lg"
+            className="mono tracking-[0.04em]"
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder="xxxx-xxxx-xxxx-xxxx"

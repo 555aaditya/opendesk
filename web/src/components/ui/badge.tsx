@@ -21,7 +21,7 @@ export function Badge({
     : { neutral: "bg-hover text-fg-2", solid: "bg-inverse text-inverse-fg", outline: "border border-line text-fg-2" }[tone as "neutral" | "solid" | "outline"];
   const dotCls = hue ? tones[hue].solid : { neutral: "bg-fg-4", solid: "bg-inverse-fg", outline: "bg-fg-4" }[tone as "neutral" | "solid" | "outline"];
   return (
-    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-[11px] font-medium", toneCls, className)}>
+    <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-[10.5px] font-medium", toneCls, className)}>
       {(dot || tone === "ok" || tone === "warn" || tone === "danger") && <span className={cn("size-1.5 rounded-full", dotCls)} />}
       {children}
     </span>
@@ -37,7 +37,7 @@ export function Dot({ tone, className, pulse }: { tone: "ok" | "warn" | "danger"
 export function TagChip({ name, color, onRemove, className }: { name: string; color?: string | null; onRemove?: () => void; className?: string }) {
   const hue = isTone(color) ? color : toneFor(name);
   return (
-    <span className={cn("inline-flex h-[18px] max-w-[140px] shrink-0 items-center gap-1 rounded-sm pl-1.5 text-[11px] font-medium", tones[hue].chip, onRemove ? "pr-0.5" : "pr-1.5", className)}>
+    <span className={cn("inline-flex h-[19px] max-w-[140px] shrink-0 items-center gap-1 rounded-sm pl-1.5 text-[10.5px] font-medium", tones[hue].chip, onRemove ? "pr-0.5" : "pr-1.5", className)}>
       <span className={cn("size-1.5 shrink-0 rounded-[2px]", tones[hue].solid)} />
       <span className="truncate">{name}</span>
       {onRemove && (

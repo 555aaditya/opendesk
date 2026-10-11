@@ -45,55 +45,67 @@
   --shadow-xs: 0 1px 2px rgb(10 10 10 / 0.04);
   --shadow-pop: 0 4px 12px -2px rgb(10 10 10 / 0.08), 0 2px 4px rgb(10 10 10 / 0.04);
   --shadow-float: 0 1px 2px rgb(10 10 10 / 0.04), 0 30px 70px -32px rgb(10 10 10 / 0.32);
-  /* Tones: soft tinted fills with stronger ink, for status, priority, tags, channels, charts and avatars. */
-  --tone-blue-soft: oklch(0.965 0.033 250);
-  --tone-blue-line: oklch(0.9 0.068 250);
-  --tone-blue: oklch(0.5 0.150 250);
-  --tone-blue-solid: oklch(0.63 0.158 250);
-  --tone-indigo-soft: oklch(0.965 0.033 272);
-  --tone-indigo-line: oklch(0.9 0.068 272);
-  --tone-indigo: oklch(0.5 0.150 272);
-  --tone-indigo-solid: oklch(0.63 0.158 272);
-  --tone-violet-soft: oklch(0.965 0.033 298);
-  --tone-violet-line: oklch(0.9 0.068 298);
-  --tone-violet: oklch(0.5 0.150 298);
-  --tone-violet-solid: oklch(0.63 0.158 298);
-  --tone-pink-soft: oklch(0.965 0.033 350);
-  --tone-pink-line: oklch(0.9 0.068 350);
-  --tone-pink: oklch(0.5 0.150 350);
-  --tone-pink-solid: oklch(0.63 0.158 350);
-  --tone-red-soft: oklch(0.965 0.037 25);
-  --tone-red-line: oklch(0.9 0.077 25);
-  --tone-red: oklch(0.5 0.170 25);
-  --tone-red-solid: oklch(0.63 0.179 25);
-  --tone-orange-soft: oklch(0.965 0.033 48);
-  --tone-orange-line: oklch(0.9 0.068 48);
-  --tone-orange: oklch(0.5 0.150 48);
-  --tone-orange-solid: oklch(0.63 0.158 48);
-  --tone-amber-soft: oklch(0.965 0.031 80);
-  --tone-amber-line: oklch(0.9 0.063 80);
-  --tone-amber: oklch(0.5 0.140 80);
-  --tone-amber-solid: oklch(0.63 0.147 80);
-  --tone-lime-soft: oklch(0.965 0.031 125);
-  --tone-lime-line: oklch(0.9 0.063 125);
-  --tone-lime: oklch(0.5 0.140 125);
-  --tone-lime-solid: oklch(0.63 0.147 125);
-  --tone-green-soft: oklch(0.965 0.029 152);
-  --tone-green-line: oklch(0.9 0.059 152);
-  --tone-green: oklch(0.5 0.130 152);
-  --tone-green-solid: oklch(0.63 0.137 152);
-  --tone-teal-soft: oklch(0.965 0.022 185);
-  --tone-teal-line: oklch(0.9 0.045 185);
-  --tone-teal: oklch(0.5 0.100 185);
-  --tone-teal-solid: oklch(0.63 0.105 185);
-  --tone-cyan-soft: oklch(0.965 0.024 222);
-  --tone-cyan-line: oklch(0.9 0.050 222);
-  --tone-cyan: oklch(0.5 0.110 222);
-  --tone-cyan-solid: oklch(0.63 0.116 222);
-  --tone-gray-soft: oklch(0.965 0.003 260);
-  --tone-gray-line: oklch(0.9 0.005 260);
-  --tone-gray: oklch(0.5 0.012 260);
-  --tone-gray-solid: oklch(0.63 0.013 260);
+  /* Tones (shared with the site): a solid hue, a 10% tint, an 18% hairline and an ink for text. */
+  --tone-gray-solid: #737373;
+  --tone-gray-soft: color-mix(in oklab, var(--tone-gray-solid) 10%, transparent);
+  --tone-gray-line: color-mix(in oklab, var(--tone-gray-solid) 18%, transparent);
+  --tone-gray: color-mix(in oklab, var(--tone-gray-solid) 82%, var(--fg));
+  --tone-red-solid: #e03131;
+  --tone-red-soft: color-mix(in oklab, var(--tone-red-solid) 10%, transparent);
+  --tone-red-line: color-mix(in oklab, var(--tone-red-solid) 18%, transparent);
+  --tone-red: color-mix(in oklab, var(--tone-red-solid) 82%, var(--fg));
+  --tone-orange-solid: #e8590c;
+  --tone-orange-soft: color-mix(in oklab, var(--tone-orange-solid) 10%, transparent);
+  --tone-orange-line: color-mix(in oklab, var(--tone-orange-solid) 18%, transparent);
+  --tone-orange: color-mix(in oklab, var(--tone-orange-solid) 82%, var(--fg));
+  --tone-amber-solid: #d48806;
+  --tone-amber-soft: color-mix(in oklab, var(--tone-amber-solid) 10%, transparent);
+  --tone-amber-line: color-mix(in oklab, var(--tone-amber-solid) 18%, transparent);
+  --tone-amber: color-mix(in oklab, var(--tone-amber-solid) 82%, var(--fg));
+  --tone-yellow-solid: #d9a404;
+  --tone-yellow-soft: color-mix(in oklab, var(--tone-yellow-solid) 10%, transparent);
+  --tone-yellow-line: color-mix(in oklab, var(--tone-yellow-solid) 18%, transparent);
+  --tone-yellow: color-mix(in oklab, var(--tone-yellow-solid) 82%, var(--fg));
+  --tone-lime-solid: #5c940d;
+  --tone-lime-soft: color-mix(in oklab, var(--tone-lime-solid) 10%, transparent);
+  --tone-lime-line: color-mix(in oklab, var(--tone-lime-solid) 18%, transparent);
+  --tone-lime: color-mix(in oklab, var(--tone-lime-solid) 82%, var(--fg));
+  --tone-green-solid: #12a150;
+  --tone-green-soft: color-mix(in oklab, var(--tone-green-solid) 10%, transparent);
+  --tone-green-line: color-mix(in oklab, var(--tone-green-solid) 18%, transparent);
+  --tone-green: color-mix(in oklab, var(--tone-green-solid) 82%, var(--fg));
+  --tone-teal-solid: #0c9488;
+  --tone-teal-soft: color-mix(in oklab, var(--tone-teal-solid) 10%, transparent);
+  --tone-teal-line: color-mix(in oklab, var(--tone-teal-solid) 18%, transparent);
+  --tone-teal: color-mix(in oklab, var(--tone-teal-solid) 82%, var(--fg));
+  --tone-cyan-solid: #0c8599;
+  --tone-cyan-soft: color-mix(in oklab, var(--tone-cyan-solid) 10%, transparent);
+  --tone-cyan-line: color-mix(in oklab, var(--tone-cyan-solid) 18%, transparent);
+  --tone-cyan: color-mix(in oklab, var(--tone-cyan-solid) 82%, var(--fg));
+  --tone-blue-solid: #2b6cf0;
+  --tone-blue-soft: color-mix(in oklab, var(--tone-blue-solid) 10%, transparent);
+  --tone-blue-line: color-mix(in oklab, var(--tone-blue-solid) 18%, transparent);
+  --tone-blue: color-mix(in oklab, var(--tone-blue-solid) 82%, var(--fg));
+  --tone-indigo-solid: #4c5fd5;
+  --tone-indigo-soft: color-mix(in oklab, var(--tone-indigo-solid) 10%, transparent);
+  --tone-indigo-line: color-mix(in oklab, var(--tone-indigo-solid) 18%, transparent);
+  --tone-indigo: color-mix(in oklab, var(--tone-indigo-solid) 82%, var(--fg));
+  --tone-violet-solid: #7048e8;
+  --tone-violet-soft: color-mix(in oklab, var(--tone-violet-solid) 10%, transparent);
+  --tone-violet-line: color-mix(in oklab, var(--tone-violet-solid) 18%, transparent);
+  --tone-violet: color-mix(in oklab, var(--tone-violet-solid) 82%, var(--fg));
+  --tone-purple-solid: #9c36b5;
+  --tone-purple-soft: color-mix(in oklab, var(--tone-purple-solid) 10%, transparent);
+  --tone-purple-line: color-mix(in oklab, var(--tone-purple-solid) 18%, transparent);
+  --tone-purple: color-mix(in oklab, var(--tone-purple-solid) 82%, var(--fg));
+  --tone-pink-solid: #d6336c;
+  --tone-pink-soft: color-mix(in oklab, var(--tone-pink-solid) 10%, transparent);
+  --tone-pink-line: color-mix(in oklab, var(--tone-pink-solid) 18%, transparent);
+  --tone-pink: color-mix(in oklab, var(--tone-pink-solid) 82%, var(--fg));
+  --tone-rose-solid: #e64980;
+  --tone-rose-soft: color-mix(in oklab, var(--tone-rose-solid) 10%, transparent);
+  --tone-rose-line: color-mix(in oklab, var(--tone-rose-solid) 18%, transparent);
+  --tone-rose: color-mix(in oklab, var(--tone-rose-solid) 82%, var(--fg));
 }
 
 .dark {
@@ -131,55 +143,67 @@
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-pop: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px rgb(0 0 0 / 0.3);
   --shadow-float: 0 30px 70px -32px rgb(0 0 0 / 0.8);
-  /* Tones, dark: deep tinted fills with bright ink. */
-  --tone-blue-soft: oklch(0.29 0.052 250 / 0.55);
-  --tone-blue-line: oklch(0.38 0.075 250 / 0.7);
-  --tone-blue: oklch(0.8 0.120 250);
-  --tone-blue-solid: oklch(0.7 0.150 250);
-  --tone-indigo-soft: oklch(0.29 0.052 272 / 0.55);
-  --tone-indigo-line: oklch(0.38 0.075 272 / 0.7);
-  --tone-indigo: oklch(0.8 0.120 272);
-  --tone-indigo-solid: oklch(0.7 0.150 272);
-  --tone-violet-soft: oklch(0.29 0.052 298 / 0.55);
-  --tone-violet-line: oklch(0.38 0.075 298 / 0.7);
-  --tone-violet: oklch(0.8 0.120 298);
-  --tone-violet-solid: oklch(0.7 0.150 298);
-  --tone-pink-soft: oklch(0.29 0.052 350 / 0.55);
-  --tone-pink-line: oklch(0.38 0.075 350 / 0.7);
-  --tone-pink: oklch(0.8 0.120 350);
-  --tone-pink-solid: oklch(0.7 0.150 350);
-  --tone-red-soft: oklch(0.29 0.059 25 / 0.55);
-  --tone-red-line: oklch(0.38 0.085 25 / 0.7);
-  --tone-red: oklch(0.8 0.136 25);
-  --tone-red-solid: oklch(0.7 0.170 25);
-  --tone-orange-soft: oklch(0.29 0.052 48 / 0.55);
-  --tone-orange-line: oklch(0.38 0.075 48 / 0.7);
-  --tone-orange: oklch(0.8 0.120 48);
-  --tone-orange-solid: oklch(0.7 0.150 48);
-  --tone-amber-soft: oklch(0.29 0.049 80 / 0.55);
-  --tone-amber-line: oklch(0.38 0.070 80 / 0.7);
-  --tone-amber: oklch(0.8 0.112 80);
-  --tone-amber-solid: oklch(0.7 0.140 80);
-  --tone-lime-soft: oklch(0.29 0.049 125 / 0.55);
-  --tone-lime-line: oklch(0.38 0.070 125 / 0.7);
-  --tone-lime: oklch(0.8 0.112 125);
-  --tone-lime-solid: oklch(0.7 0.140 125);
-  --tone-green-soft: oklch(0.29 0.045 152 / 0.55);
-  --tone-green-line: oklch(0.38 0.065 152 / 0.7);
-  --tone-green: oklch(0.8 0.104 152);
-  --tone-green-solid: oklch(0.7 0.130 152);
-  --tone-teal-soft: oklch(0.29 0.035 185 / 0.55);
-  --tone-teal-line: oklch(0.38 0.050 185 / 0.7);
-  --tone-teal: oklch(0.8 0.080 185);
-  --tone-teal-solid: oklch(0.7 0.100 185);
-  --tone-cyan-soft: oklch(0.29 0.038 222 / 0.55);
-  --tone-cyan-line: oklch(0.38 0.055 222 / 0.7);
-  --tone-cyan: oklch(0.8 0.088 222);
-  --tone-cyan-solid: oklch(0.7 0.110 222);
-  --tone-gray-soft: oklch(0.29 0.004 260 / 0.55);
-  --tone-gray-line: oklch(0.38 0.006 260 / 0.7);
-  --tone-gray: oklch(0.8 0.010 260);
-  --tone-gray-solid: oklch(0.7 0.012 260);
+  /* Tones, dark: lighter hues on the same tint system. */
+  --tone-gray-solid: #a3a3a3;
+  --tone-gray-soft: color-mix(in oklab, var(--tone-gray-solid) 10%, transparent);
+  --tone-gray-line: color-mix(in oklab, var(--tone-gray-solid) 18%, transparent);
+  --tone-gray: color-mix(in oklab, var(--tone-gray-solid) 82%, var(--fg));
+  --tone-red-solid: #ff6b6b;
+  --tone-red-soft: color-mix(in oklab, var(--tone-red-solid) 10%, transparent);
+  --tone-red-line: color-mix(in oklab, var(--tone-red-solid) 18%, transparent);
+  --tone-red: color-mix(in oklab, var(--tone-red-solid) 82%, var(--fg));
+  --tone-orange-solid: #ff8a4c;
+  --tone-orange-soft: color-mix(in oklab, var(--tone-orange-solid) 10%, transparent);
+  --tone-orange-line: color-mix(in oklab, var(--tone-orange-solid) 18%, transparent);
+  --tone-orange: color-mix(in oklab, var(--tone-orange-solid) 82%, var(--fg));
+  --tone-amber-solid: #f5b53d;
+  --tone-amber-soft: color-mix(in oklab, var(--tone-amber-solid) 10%, transparent);
+  --tone-amber-line: color-mix(in oklab, var(--tone-amber-solid) 18%, transparent);
+  --tone-amber: color-mix(in oklab, var(--tone-amber-solid) 82%, var(--fg));
+  --tone-yellow-solid: #ffd43b;
+  --tone-yellow-soft: color-mix(in oklab, var(--tone-yellow-solid) 10%, transparent);
+  --tone-yellow-line: color-mix(in oklab, var(--tone-yellow-solid) 18%, transparent);
+  --tone-yellow: color-mix(in oklab, var(--tone-yellow-solid) 82%, var(--fg));
+  --tone-lime-solid: #a9e34b;
+  --tone-lime-soft: color-mix(in oklab, var(--tone-lime-solid) 10%, transparent);
+  --tone-lime-line: color-mix(in oklab, var(--tone-lime-solid) 18%, transparent);
+  --tone-lime: color-mix(in oklab, var(--tone-lime-solid) 82%, var(--fg));
+  --tone-green-solid: #3dd68c;
+  --tone-green-soft: color-mix(in oklab, var(--tone-green-solid) 10%, transparent);
+  --tone-green-line: color-mix(in oklab, var(--tone-green-solid) 18%, transparent);
+  --tone-green: color-mix(in oklab, var(--tone-green-solid) 82%, var(--fg));
+  --tone-teal-solid: #2dd4bf;
+  --tone-teal-soft: color-mix(in oklab, var(--tone-teal-solid) 10%, transparent);
+  --tone-teal-line: color-mix(in oklab, var(--tone-teal-solid) 18%, transparent);
+  --tone-teal: color-mix(in oklab, var(--tone-teal-solid) 82%, var(--fg));
+  --tone-cyan-solid: #66d9e8;
+  --tone-cyan-soft: color-mix(in oklab, var(--tone-cyan-solid) 10%, transparent);
+  --tone-cyan-line: color-mix(in oklab, var(--tone-cyan-solid) 18%, transparent);
+  --tone-cyan: color-mix(in oklab, var(--tone-cyan-solid) 82%, var(--fg));
+  --tone-blue-solid: #6b9bff;
+  --tone-blue-soft: color-mix(in oklab, var(--tone-blue-solid) 10%, transparent);
+  --tone-blue-line: color-mix(in oklab, var(--tone-blue-solid) 18%, transparent);
+  --tone-blue: color-mix(in oklab, var(--tone-blue-solid) 82%, var(--fg));
+  --tone-indigo-solid: #91a7ff;
+  --tone-indigo-soft: color-mix(in oklab, var(--tone-indigo-solid) 10%, transparent);
+  --tone-indigo-line: color-mix(in oklab, var(--tone-indigo-solid) 18%, transparent);
+  --tone-indigo: color-mix(in oklab, var(--tone-indigo-solid) 82%, var(--fg));
+  --tone-violet-solid: #9d85ff;
+  --tone-violet-soft: color-mix(in oklab, var(--tone-violet-solid) 10%, transparent);
+  --tone-violet-line: color-mix(in oklab, var(--tone-violet-solid) 18%, transparent);
+  --tone-violet: color-mix(in oklab, var(--tone-violet-solid) 82%, var(--fg));
+  --tone-purple-solid: #da77f2;
+  --tone-purple-soft: color-mix(in oklab, var(--tone-purple-solid) 10%, transparent);
+  --tone-purple-line: color-mix(in oklab, var(--tone-purple-solid) 18%, transparent);
+  --tone-purple: color-mix(in oklab, var(--tone-purple-solid) 82%, var(--fg));
+  --tone-pink-solid: #f472b6;
+  --tone-pink-soft: color-mix(in oklab, var(--tone-pink-solid) 10%, transparent);
+  --tone-pink-line: color-mix(in oklab, var(--tone-pink-solid) 18%, transparent);
+  --tone-pink: color-mix(in oklab, var(--tone-pink-solid) 82%, var(--fg));
+  --tone-rose-solid: #ff8fab;
+  --tone-rose-soft: color-mix(in oklab, var(--tone-rose-solid) 10%, transparent);
+  --tone-rose-line: color-mix(in oklab, var(--tone-rose-solid) 18%, transparent);
+  --tone-rose: color-mix(in oklab, var(--tone-rose-solid) 82%, var(--fg));
 }
 
 @theme inline {
@@ -298,11 +322,29 @@
   --color-tone-gray-line: var(--tone-gray-line);
   --color-tone-gray: var(--tone-gray);
   --color-tone-gray-solid: var(--tone-gray-solid);
+  --color-tone-yellow-soft: var(--tone-yellow-soft);
+  --color-tone-yellow-line: var(--tone-yellow-line);
+  --color-tone-yellow: var(--tone-yellow);
+  --color-tone-yellow-solid: var(--tone-yellow-solid);
+  --color-tone-purple-soft: var(--tone-purple-soft);
+  --color-tone-purple-line: var(--tone-purple-line);
+  --color-tone-purple: var(--tone-purple);
+  --color-tone-purple-solid: var(--tone-purple-solid);
+  --color-tone-rose-soft: var(--tone-rose-soft);
+  --color-tone-rose-line: var(--tone-rose-line);
+  --color-tone-rose: var(--tone-rose);
+  --color-tone-rose-solid: var(--tone-rose-solid);
 }
 
 @keyframes indicator-in {
   from { opacity: 0.4; transform: scale(0.8); }
   to { opacity: 1; transform: none; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
 }
 
 @keyframes module-snap {

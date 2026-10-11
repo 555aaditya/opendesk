@@ -10,6 +10,8 @@ import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError } from "@/lib/api/client";
 import type { ExchangeResponse, LinkRequired, TokenResponse } from "@/lib/api/types";
 import { track } from "@/lib/analytics";
+import { tone } from "@/lib/tones";
+import { cn } from "@/lib/cn";
 
 const route = getRouteApi("/auth/auth/callback");
 
@@ -108,7 +110,7 @@ function LinkAccount({ link, provider, onResult }: { link: LinkRequired; provide
 
   return (
     <div>
-      <span className="mb-5 flex size-10 items-center justify-center rounded-lg border border-line text-fg-2">
+      <span className={cn("mb-5 flex size-10 animate-indicator-in items-center justify-center rounded-lg", tone.blue.chip)}>
         <Link2 className="size-[18px]" />
       </span>
       <AuthHeading

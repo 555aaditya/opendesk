@@ -88,7 +88,7 @@ export function SpamIcon({ className }: { className?: string }) {
 
 export function StatusPill({ status, className }: { status: TicketStatus; className?: string }) {
   return (
-    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[11px] font-medium", tone[statusTone[status]].chip, className)}>
+    <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[10.5px] font-medium", tone[statusTone[status]].chip, className)}>
       <StatusIcon status={status} className="size-3" />
       {statusLabel[status]}
     </span>
@@ -108,7 +108,7 @@ export function PriorityIcon({ priority, className, muted }: { priority: Priorit
       </Glyph>
     );
   const level = { low: 1, normal: 2, high: 3 }[priority];
-  const on = muted ? "var(--fg-3)" : priority === "high" ? toneVar(priorityTone.high) : "var(--fg-2)";
+  const on = muted ? "var(--fg-3)" : toneVar(priorityTone[priority]);
   return (
     <Glyph k={priority} label={priorityLabel[priority]} className={className}>
       {[0, 1, 2].map((i) => (
@@ -119,9 +119,9 @@ export function PriorityIcon({ priority, className, muted }: { priority: Priorit
 }
 
 export function PriorityPill({ priority, className }: { priority: Priority; className?: string }) {
-  const hue: Tone = priority === "urgent" ? "red" : priority === "high" ? "orange" : "gray";
+  const hue: Tone = priorityTone[priority];
   return (
-    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[11px] font-medium", tone[hue].chip, className)}>
+    <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[10.5px] font-medium", tone[hue].chip, className)}>
       <PriorityIcon priority={priority} className="size-3" />
       {priorityLabel[priority]}
     </span>

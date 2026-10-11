@@ -9,6 +9,8 @@ import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import { bootSession, useSession } from "@/lib/session";
+import { cn } from "@/lib/cn";
+import { tone, type Tone } from "@/lib/tones";
 
 const route = getRouteApi("/auth/verify");
 
@@ -65,7 +67,7 @@ export default function Verify() {
   if (!token)
     return (
       <div>
-        <Glyph><MailCheck className="size-[18px]" /></Glyph>
+        <Glyph hue="blue"><MailCheck className="size-[18px]" /></Glyph>
         <AuthHeading title="Verify your email" subtitle={<>We sent a link to {email ? <span className="font-medium text-fg">{email}</span> : "your inbox"}. Open it to confirm your address.</>} />
         {resendBlock}
       </div>
@@ -92,7 +94,7 @@ export default function Verify() {
 
   return (
     <div>
-      <Glyph><X className="size-[18px]" /></Glyph>
+      <Glyph hue="red"><X className="size-[18px]" /></Glyph>
       <AuthHeading title="That link didn't work" />
       {error && <Notice className="mb-5">{error}</Notice>}
       {resendBlock}
@@ -100,9 +102,9 @@ export default function Verify() {
   );
 }
 
-function Glyph({ children, solid }: { children: React.ReactNode; solid?: boolean }) {
+function Glyph({ children, solid, hue }: { children: React.ReactNode; solid?: boolean; hue?: Tone }) {
   return (
-    <span className={solid ? "mb-5 flex size-10 items-center justify-center rounded-lg bg-inverse text-inverse-fg" : "mb-5 flex size-10 items-center justify-center rounded-lg border border-line text-fg-2"}>
+    <span className={cn("mb-5 flex size-10 animate-indicator-in items-center justify-center rounded-lg", tone[hue ?? (solid ? "green" : "gray")].chip)}>
       {children}
     </span>
   );

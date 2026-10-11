@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Download, Laptop, ShieldCheck, Smartphone } from "lucide-react";
 import { useState } from "react";
 import { DeleteAccountDialog } from "@/components/account/DeleteAccountDialog";
+import { PasskeysSection } from "@/components/auth/PasskeysSection";
 import { SettingsPage, Section, Row, ListRow } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,8 +26,9 @@ import { updateUser, useSession } from "@/lib/session";
 
 export default function Security() {
   return (
-    <SettingsPage title="Security" description="Your password, two-factor authentication and signed-in devices.">
+    <SettingsPage title="Security" description="Your password, passkeys, two-factor authentication and signed-in devices.">
       <PasswordSection />
+      <PasskeysSection />
       <TwoFactorSection />
       <SessionsSection />
       <DeleteAccountSection />

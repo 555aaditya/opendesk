@@ -1,19 +1,36 @@
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { Check } from "lucide-react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { AuthHeading } from "@/app/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { AuthField, Notice, PasswordInput, StrengthMeter } from "@/components/auth/parts";
+import { AuthField, FieldError, Notice, PasswordInput, StrengthMeter } from "@/components/auth/parts";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError } from "@/lib/api/client";
+import { tone } from "@/lib/tones";
+import { cn } from "@/lib/cn";
 
 const route = getRouteApi("/auth/reset");
 
+const schema = z
+  .object({
+    password: z.string().min(12, "Use at least 12 characters.").max(128, "Use at most 128 characters."),
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, { message: "The passwords don't match.", path: ["confirm"] });
+type Values = z.infer<typeof schema>;
+
 export default function Reset() {
   const { token } = route.useSearch();
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [busy, setBusy] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { password: "", confirm: "" } });
+  const password = watch("password");
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +47,7 @@ export default function Reset() {
   if (done)
     return (
       <div>
-        <span className="mb-5 flex size-10 items-center justify-center rounded-lg bg-inverse text-inverse-fg">
+        <span className={cn("mb-5 flex size-10 animate-indicator-in items-center justify-center rounded-lg", tone.green.chip)}>
           <Check className="size-[18px]" strokeWidth={2.5} />
         </span>
         <AuthHeading title="Password updated" subtitle="You were signed out everywhere. Log in with your new password." />
@@ -40,22 +57,16 @@ export default function Reset() {
       </div>
     );
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = handleSubmit(async ({ password }) => {
     setError(null);
-    if (password.length < 12) return setError("Use at least 12 characters.");
-    if (password !== confirm) return setError("The passwords don't match.");
-    setBusy(true);
     try {
       await api.auth.reset(token, password);
       setDone(true);
     } catch (err) {
       if (isApiError(err) && (err.code === "invalid_token" || err.code === "not_found")) setError("This reset link has expired or was already used. Request a new one.");
       else setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
-  };
+  });
 
   return (
     <div>
@@ -65,15 +76,20 @@ export default function Reset() {
         <AuthField label="New password">
           {(id) => (
             <div className="flex flex-col gap-2">
-              <PasswordInput id={id} autoFocus autoComplete="new-password" value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} />
-              <StrengthMeter password={password} />
+              <PasswordInput id={id} autoFocus autoComplete="new-password" maxLength={128} invalid={!!errors.password} {...register("password")} />
+              {errors.password ? <FieldError message={errors.password.message} /> : <StrengthMeter password={password} />}
             </div>
           )}
         </AuthField>
         <AuthField label="Confirm password">
-          {(id) => <PasswordInput id={id} autoComplete="new-password" value={confirm} maxLength={128} onChange={(e) => setConfirm(e.target.value)} />}
+          {(id) => (
+            <div className="flex flex-col gap-1.5">
+              <PasswordInput id={id} autoComplete="new-password" maxLength={128} invalid={!!errors.confirm} {...register("confirm")} />
+              <FieldError message={errors.confirm?.message} />
+            </div>
+          )}
         </AuthField>
-        <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" loading={busy}>
+        <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" loading={isSubmitting}>
           Update password
         </Button>
       </form>

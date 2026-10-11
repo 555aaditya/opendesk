@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, Link, useRouter } from "@tanstack/react-router";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMemo, useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { AuthHeading } from "@/app/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/input";
-import { AuthField, completeSignIn, Notice, OrDivider, PasswordInput, ProviderButtons, safeNext, StrengthMeter } from "@/components/auth/parts";
+import { AuthField, completeSignIn, FieldError, Notice, OrDivider, PasswordInput, ProviderButtons, safeNext, StrengthMeter } from "@/components/auth/parts";
 import { Turnstile, type TurnstileHandle } from "@/components/auth/Turnstile";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError } from "@/lib/api/client";
@@ -21,29 +24,34 @@ function inviteTokenFrom(next: string | undefined): string | undefined {
   return u.pathname === "/invite" ? (u.searchParams.get("token") ?? undefined) : undefined;
 }
 
+const schema = z.object({
+  name: z.string().trim().min(1, "Tell us your name.").max(80, "Use at most 80 characters."),
+  email: z.string().trim().min(1, "Enter your email.").email("Enter a valid email address."),
+  password: z.string().min(12, "Use at least 12 characters.").max(128, "Use at most 128 characters."),
+});
+type Values = z.infer<typeof schema>;
+
 export default function Register() {
   const search = route.useSearch();
   const router = useRouter();
   const { data: cfg } = useQuery(q.authConfig());
   const invite = useMemo(() => inviteTokenFrom(search.next), [search.next]);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState(search.email ?? "");
-  const [password, setPassword] = useState("");
   const [token, setToken] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors, isSubmitting },
+  } = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { name: "", email: search.email ?? "", password: "" } });
+  const password = watch("password");
+  const [name, email] = watch(["name", "email"]);
   const [error, setError] = useState<React.ReactNode>(null);
   const turnstile = useRef<TurnstileHandle>(null);
 
   const closed = cfg?.signup_enabled === false && !invite;
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = handleSubmit(async ({ name, email, password }) => {
     setError(null);
-    if (!name.trim()) return setError("Tell us your name.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("Enter a valid email address.");
-    if (password.length < 12) return setError("Use at least 12 characters for your password.");
-    if (password.length > 128) return setError("Use at most 128 characters for your password.");
-    setBusy(true);
     try {
       const tok = await api.auth.register({
         name: name.trim(),
@@ -55,7 +63,6 @@ export default function Register() {
       track("signup_completed", { invited: !!invite });
       router.history.push(await completeSignIn(tok, search.next));
     } catch (err) {
-      setBusy(false);
       turnstile.current?.reset();
       if (isApiError(err, "email_taken") || isApiError(err, "conflict"))
         setError(
@@ -69,7 +76,7 @@ export default function Register() {
       else if (isApiError(err, "signup_disabled")) setError("New sign-ups are turned off. Ask an admin for an invitation.");
       else setError(errorMessage(err));
     }
-  };
+  });
 
   if (closed)
     return (
@@ -93,23 +100,31 @@ export default function Register() {
       {error && <Notice className="mb-4">{error}</Notice>}
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <AuthField label="Name">
-          {(id) => <TextInput id={id} className="h-9" autoComplete="name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" />}
+          {(id) => (
+            <div className="flex flex-col gap-1.5">
+              <TextInput id={id} inputSize="lg" autoComplete="name" autoFocus placeholder="Ada Lovelace" invalid={!!errors.name} {...register("name")} />
+              <FieldError message={errors.name?.message} />
+            </div>
+          )}
         </AuthField>
         <AuthField label="Work email">
           {(id) => (
-            <TextInput id={id} className="h-9" type="email" autoComplete="email" value={email} readOnly={!!invite && !!search.email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
+            <div className="flex flex-col gap-1.5">
+              <TextInput id={id} inputSize="lg" type="email" autoComplete="email" readOnly={!!invite && !!search.email} placeholder="you@company.com" invalid={!!errors.email} {...register("email")} />
+              <FieldError message={errors.email?.message} />
+            </div>
           )}
         </AuthField>
         <AuthField label="Password">
           {(id) => (
             <div className="flex flex-col gap-2">
-              <PasswordInput id={id} autoComplete="new-password" value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} />
-              <StrengthMeter password={password} />
+              <PasswordInput id={id} autoComplete="new-password" maxLength={128} invalid={!!errors.password} {...register("password")} />
+              {errors.password ? <FieldError message={errors.password.message} /> : <StrengthMeter password={password} userInputs={[name, email]} />}
             </div>
           )}
         </AuthField>
         <Turnstile ref={turnstile} onToken={setToken} action="register" />
-        <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" loading={busy}>
+        <Button type="submit" variant="primary" size="lg" className="mt-1 w-full" loading={isSubmitting}>
           Create account
         </Button>
         <p className="text-center text-[11.5px] leading-4 text-fg-4">

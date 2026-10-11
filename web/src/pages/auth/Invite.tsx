@@ -70,7 +70,7 @@ export default function Invite() {
         <Skeleton className="size-10 rounded-lg" />
         <Skeleton className="h-5 w-3/4" />
         <Skeleton className="h-3 w-1/2" />
-        <Skeleton className="mt-4 h-9 rounded-md" />
+        <Skeleton className="mt-4 h-10 rounded-md" />
       </div>
     );
 

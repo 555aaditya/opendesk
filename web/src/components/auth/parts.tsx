@@ -11,6 +11,8 @@ import { signIn } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { usePasswordStrength } from "@/lib/password-strength";
+import { tone } from "@/lib/tones";
 
 /** A same-origin relative path, or null. Guards every post-login redirect. */
 export function safeNext(v: string | null | undefined): string | null {
@@ -38,16 +40,20 @@ export function go(path: string) {
   location.assign(path);
 }
 
-export function Notice({ children, tone = "danger", className }: { children: ReactNode; tone?: "danger" | "ok" | "info"; className?: string }) {
+export function Notice({ children, tone: kind = "danger", className }: { children: ReactNode; tone?: "danger" | "ok" | "info"; className?: string }) {
   return (
     <div
-      role={tone === "danger" ? "alert" : "status"}
+      role={kind === "danger" ? "alert" : "status"}
       aria-live="polite"
-      className={cn("flex items-start gap-2.5 rounded-md border border-line bg-surface px-3 py-2.5 text-[12.5px] leading-[18px] text-fg-2", className)}
+      className={cn(
+        "flex animate-rise-in items-start gap-2.5 rounded-md border px-3 py-2.5 text-[12.5px] leading-[18px]",
+        kind === "danger" ? cn(tone.red.soft, tone.red.line, "text-fg") : kind === "ok" ? cn(tone.green.soft, tone.green.line, "text-fg") : "border-line bg-sunken text-fg-2",
+        className,
+      )}
     >
       <span
         aria-hidden
-        className={cn("mt-[6px] size-1.5 shrink-0 rounded-full", tone === "danger" ? "bg-danger" : tone === "ok" ? "bg-ok" : "bg-fg-3")}
+        className={cn("mt-[6px] size-1.5 shrink-0 rounded-full", kind === "danger" ? tone.red.solid : kind === "ok" ? tone.green.solid : "bg-fg-3")}
       />
       <div className="min-w-0">{children}</div>
     </div>
@@ -71,13 +77,14 @@ export const PasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribu
       <TextInput
         ref={ref}
         type={show ? "text" : "password"}
-        className={cn("[&_input]:h-9", className)}
+        inputSize="lg"
+        className={className}
         trailing={
           <button
             type="button"
             onClick={() => setShow((s) => !s)}
             aria-label={show ? "Hide password" : "Show password"}
-            className="flex size-6 items-center justify-center rounded-sm text-fg-4 hover:bg-hover hover:text-fg"
+            className="flex size-7 items-center justify-center rounded-sm text-fg-4 transition-colors hover:bg-hover hover:text-fg"
           >
             {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           </button>
@@ -88,32 +95,45 @@ export const PasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribu
   },
 );
 
-/** Length matters most; variety adds a little. Quiet, four segments. */
-export function passwordScore(pw: string): 0 | 1 | 2 | 3 | 4 {
-  if (!pw) return 0;
-  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
-  const unique = new Set(pw).size;
-  let s = 0;
-  if (pw.length >= 12) s = 2;
-  else if (pw.length >= 8) s = 1;
-  if (pw.length >= 16) s += 1;
-  if (kinds >= 3 && pw.length >= 12) s += 1;
-  if (unique < 5) s = Math.min(s, 1);
-  return Math.max(1, Math.min(4, s)) as 1 | 2 | 3 | 4;
+const strengthWords = ["Too weak", "Weak", "Fair", "Good", "Strong"] as const;
+const strengthBar = [tone.red.solid, tone.red.solid, tone.amber.solid, tone.green.solid, tone.green.solid] as const;
+
+/** Four segments that warm up as the password gets harder to guess (zxcvbn), plus its one warning. */
+export function StrengthMeter({ password, userInputs }: { password: string; userInputs?: string[] }) {
+  const { score, warning } = usePasswordStrength(password, userInputs);
+  const short = password.length > 0 && password.length < 12;
+  const label = !password ? "12 characters minimum" : short ? `${12 - password.length} more characters` : strengthWords[score];
+  const filled = !password ? 0 : Math.max(1, score);
+  return (
+    <div className="flex flex-col gap-1.5" aria-live="polite">
+      <div className="flex items-center gap-2.5">
+        <div className="flex flex-1 gap-1" aria-hidden>
+          {[1, 2, 3, 4].map((i) => (
+            <span key={i} className="relative h-[3px] flex-1 overflow-hidden rounded-full bg-line">
+              <span
+                className={cn(
+                  "absolute inset-0 origin-left rounded-full transition-transform duration-300 ease-out motion-reduce:transition-none",
+                  short ? tone.gray.solid : strengthBar[score],
+                  i <= filled ? "scale-x-100" : "scale-x-0",
+                )}
+              />
+            </span>
+          ))}
+        </div>
+        <span className="mono shrink-0 whitespace-nowrap text-right text-[11px] text-fg-3">{label}</span>
+      </div>
+      {warning && !short && score < 3 && <p className="text-[11.5px] leading-4 text-fg-3">{warning}</p>}
+    </div>
+  );
 }
 
-export function StrengthMeter({ password }: { password: string }) {
-  const score = passwordScore(password);
-  const label = password.length < 12 ? `${Math.max(0, 12 - password.length)} more characters` : ["", "Weak", "Fair", "Good", "Strong"][score];
+/** Inline field error, announced. */
+export function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
   return (
-    <div className="flex items-center gap-2.5" aria-live="polite">
-      <div className="flex flex-1 gap-1" aria-hidden>
-        {[1, 2, 3, 4].map((i) => (
-          <span key={i} className={cn("h-[3px] flex-1 rounded-full transition-colors duration-200", i <= score && password ? (score >= 3 ? "bg-fg" : "bg-fg-3") : "bg-line")} />
-        ))}
-      </div>
-      <span className="mono shrink-0 whitespace-nowrap text-right text-[11px] text-fg-3">{password ? label : "12 characters minimum"}</span>
-    </div>
+    <p role="alert" className="animate-rise-in text-[12px] leading-4 text-danger-fg">
+      {message}
+    </p>
   );
 }
 
@@ -174,8 +194,8 @@ export function ProviderButtons({ next, verb = "Continue" }: { next?: string | n
   if (isLoading)
     return (
       <div className="flex flex-col gap-2">
-        <Skeleton className="h-9 rounded-md" />
-        <Skeleton className="h-9 rounded-md" />
+        <Skeleton className="h-10 rounded-md" />
+        <Skeleton className="h-10 rounded-md" />
       </div>
     );
   const providers = data?.providers ?? [];
@@ -222,7 +242,7 @@ export function oauthErrorMessage(code: string | undefined): string | null {
   return oauthErrors[code] ?? "Sign-in failed. Try again.";
 }
 
-/** A labelled h-9 field used across the auth screens. */
+/** A labelled field used across the auth screens. */
 export function AuthField({ label, children, aside }: { label: string; children: (id: string) => ReactNode; aside?: ReactNode }) {
   const id = useId();
   return (
