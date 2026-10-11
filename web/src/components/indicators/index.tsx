@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import type { Channel, Priority, Sentiment, TicketStatus } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
-import { channelTone, priorityTone, sentimentTone, statusTone, tone, toneVar, type Tone } from "@/lib/tones";
+import { channelTone, isTone, priorityTone, sentimentTone, statusTone, tone, toneVar, type Tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export const statusLabel: Record<TicketStatus, string> = {
@@ -86,11 +86,12 @@ export function SpamIcon({ className }: { className?: string }) {
   );
 }
 
-export function StatusPill({ status, className }: { status: TicketStatus; className?: string }) {
+/** `label` and `hue` carry the workspace's display overrides (status_labels). */
+export function StatusPill({ status, className, label, hue }: { status: TicketStatus; className?: string; label?: string; hue?: string | null }) {
   return (
-    <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[10.5px] font-medium", tone[statusTone[status]].chip, className)}>
+    <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[10.5px] font-medium", tone[isTone(hue) ? hue : statusTone[status]].chip, className)}>
       <StatusIcon status={status} className="size-3" />
-      {statusLabel[status]}
+      {label || statusLabel[status]}
     </span>
   );
 }
@@ -118,12 +119,13 @@ export function PriorityIcon({ priority, className, muted }: { priority: Priorit
   );
 }
 
-export function PriorityPill({ priority, className }: { priority: Priority; className?: string }) {
-  const hue: Tone = priorityTone[priority];
+/** `label` and `hue` carry the workspace's display overrides (priority_labels). */
+export function PriorityPill({ priority, className, label, hue: override }: { priority: Priority; className?: string; label?: string; hue?: string | null }) {
+  const hue: Tone = isTone(override) ? override : priorityTone[priority];
   return (
     <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[10.5px] font-medium", tone[hue].chip, className)}>
       <PriorityIcon priority={priority} className="size-3" />
-      {priorityLabel[priority]}
+      {label || priorityLabel[priority]}
     </span>
   );
 }
