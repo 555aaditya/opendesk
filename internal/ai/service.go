@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/opendesk/opendesk/internal/ai/decide"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/deps"
 	"github.com/opendesk/opendesk/internal/domain"
@@ -28,6 +29,8 @@ type Service struct {
 	models   struct{ Default, Fast string }
 	// vectors reports whether ai_embeddings exists (pgvector available).
 	vectors bool
+	// decider answers typed decisions (Jev, or the LLM adapter); nil without one.
+	decider decide.Decider
 }
 
 // New builds the service from configuration. It never fails: a missing provider turns
@@ -62,10 +65,29 @@ func New(ctx context.Context, d *deps.Deps) *Service {
 		}
 	}
 	s.vectors = vectorTable(ctx, d.DB.Pool)
+	switch cfg.DecisionsProvider {
+	case "typesafe":
+		if cfg.TypesafeAPIKey != "" {
+			s.decider = decide.NewTypeSafe(cfg.TypesafeAPIURL, cfg.TypesafeAPIKey, cfg.TypesafeModel)
+		}
+	case "llm":
+		if s.provider != nil {
+			s.decider = &llmDecider{s: s}
+		}
+	}
+	if s.decider != nil {
+		d.Log.Info("decisions ready", "engine", s.decider.Name(), "model", s.decider.Model())
+	}
 	if s.provider != nil {
 		d.Log.Info("ai ready", "provider", s.provider.Name(), "model", s.models.Default, "fast_model", s.models.Fast,
 			"embeddings", s.embedder != nil, "vector_store", s.vectors)
 	}
+	return s
+}
+
+// WithDecider replaces the decision engine (tests, alternative backends); nil turns it off.
+func (s *Service) WithDecider(dc decide.Decider) *Service {
+	s.decider = dc
 	return s
 }
 
@@ -87,6 +109,13 @@ func vectorTable(ctx context.Context, q db.Querier) bool {
 // Enabled reports whether an AI provider is configured.
 func (s *Service) Enabled() bool { return s != nil && s.provider != nil }
 
+// canTriage reports whether triage can run: an AI provider or a calibrated decision
+// engine (Jev) is configured.
+func (s *Service) canTriage() bool { return s != nil && (s.provider != nil || s.jev()) }
+
+// jev reports whether decisions run on a calibrated engine.
+func (s *Service) jev() bool { return s.decider != nil && s.decider.Calibrated() }
+
 // semantic reports whether embeddings can be used for retrieval.
 func (s *Service) semantic() bool { return s.embedder != nil && s.vectors }
 
@@ -98,6 +127,12 @@ func (s *Service) workspaceAI(ctx context.Context, wid uuid.UUID) (hd.AISettings
 	if !s.Enabled() {
 		return hd.AISettings{}, errDisabled
 	}
+	return s.workspaceOn(ctx, wid)
+}
+
+// workspaceOn loads the workspace's AI settings and refuses when the workspace turned
+// AI off, whatever engine is configured.
+func (s *Service) workspaceOn(ctx context.Context, wid uuid.UUID) (hd.AISettings, error) {
 	st, err := hd.LoadSettings(ctx, s.d.DB.Pool, wid)
 	if err != nil {
 		return hd.AISettings{}, err
@@ -150,6 +185,40 @@ func (c *call) run(ctx context.Context, req Request, onDelta func(string)) (Resp
 	c.s.d.Log.Debug("ai call", "feature", c.feature, "model", c.resp.Model, "input_tokens", c.resp.InputTokens,
 		"output_tokens", c.resp.OutputTokens, "ms", time.Since(start).Milliseconds(), "ok", err == nil)
 	return c.resp, err
+}
+
+// decide reserves credits and asks the decision engine. Usage is recorded by charge
+// with the engine's name as the model ("jev", counts only).
+func (c *call) decide(ctx context.Context, dc decide.Decider, req decide.Request) (decide.Result, error) {
+	if err := c.reserve(ctx); err != nil {
+		return decide.Result{}, err
+	}
+	start := time.Now()
+	res, err := dc.Decide(ctx, req)
+	c.resp = Response{Model: dc.Name(), InputTokens: res.InputTokens, OutputTokens: res.OutputTokens}
+	if dc.Name() != "jev" {
+		c.resp.Model = res.Model
+	}
+	c.s.d.Log.Debug("ai decision", "feature", c.feature, "engine", dc.Name(), "questions", len(req.Questions),
+		"input_tokens", res.InputTokens, "ms", time.Since(start).Milliseconds(), "ok", err == nil)
+	return res, decisionErr(err)
+}
+
+// decisionErr maps decision engine errors to the AI errors features handle.
+func decisionErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, decide.ErrBusy), errors.Is(err, ErrBusy):
+		return ErrBusy
+	case errors.Is(err, decide.ErrBadOutput), errors.Is(err, ErrBadOutput):
+		return ErrBadOutput
+	case errors.Is(err, ErrRefused):
+		return ErrRefused
+	case isNoCredits(err), errors.Is(err, context.Canceled):
+		return err
+	}
+	return ErrUnavailable
 }
 
 // charge records usage and spends the feature's credits after it succeeded.

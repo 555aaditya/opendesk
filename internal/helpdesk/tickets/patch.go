@@ -47,6 +47,7 @@ type Patch struct {
 	Subject    *string
 	Status     *string
 	Priority   *string
+	Severity   Opt[string] // null or "" clears
 	Assignee   Opt[uuid.UUID]
 	Team       Opt[uuid.UUID]
 	Snooze     Opt[time.Time]
@@ -61,7 +62,7 @@ type Patch struct {
 }
 
 func (p Patch) empty() bool {
-	return p.Subject == nil && p.Status == nil && p.Priority == nil && !p.Assignee.Set && !p.Team.Set && !p.Snooze.Set &&
+	return p.Subject == nil && p.Status == nil && p.Priority == nil && !p.Severity.Set && !p.Assignee.Set && !p.Team.Set && !p.Snooze.Set &&
 		p.Spam == nil && p.Tags == nil && len(p.AddTags) == 0 && len(p.RemoveTags) == 0 && p.Custom == nil && p.Fields == nil
 }
 
@@ -70,6 +71,7 @@ type ticketState struct {
 	Subject  string
 	Status   string
 	Priority string
+	Severity *string
 	Assignee *uuid.UUID
 	Team     *uuid.UUID
 	Snoozed  *time.Time
@@ -80,9 +82,9 @@ type ticketState struct {
 
 func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState, error) {
 	var s ticketState
-	err := tx.QueryRow(ctx, `SELECT number, subject, status, priority, assignee_id, team_id, snoozed_until, spam, custom, fields
+	err := tx.QueryRow(ctx, `SELECT number, subject, status, priority, severity, assignee_id, team_id, snoozed_until, spam, custom, fields
 		FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, wid, tid).
-		Scan(&s.Number, &s.Subject, &s.Status, &s.Priority, &s.Assignee, &s.Team, &s.Snoozed, &s.Spam, &s.Custom, &s.Fields)
+		Scan(&s.Number, &s.Subject, &s.Status, &s.Priority, &s.Severity, &s.Assignee, &s.Team, &s.Snoozed, &s.Spam, &s.Custom, &s.Fields)
 	if err != nil {
 		if db.IsNotFound(err) {
 			return s, httpx.NotFound("Ticket")
@@ -165,6 +167,20 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 			next.Priority = *p.Priority
 			changes = append(changes, "priority")
 			acts = append(acts, act{"priority_changed", map[string]any{"from": cur.Priority, "to": *p.Priority}})
+		}
+	}
+	if p.Severity.Set {
+		var to *string
+		if v := strings.TrimSpace(p.Severity.Value); !p.Severity.Null && v != "" {
+			if !slices.Contains(domain.Severities, v) {
+				return nil, httpx.Validation("severity must be one of " + strings.Join(domain.Severities, ", ") + ", or null")
+			}
+			to = &v
+		}
+		if !sameStr(cur.Severity, to) {
+			next.Severity = to
+			changes = append(changes, "severity")
+			acts = append(acts, act{"severity_changed", map[string]any{"from": strOrNil(cur.Severity), "to": strOrNil(to)}})
 		}
 	}
 	if p.Assignee.Set {
@@ -309,14 +325,21 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 	if len(changes) == 0 {
 		return nil, nil
 	}
+	// A field someone (or something) set no longer needs Ollie's suggestion for it.
+	if pending := dropSuggestions(next.Custom, changes); pending != nil {
+		next.Custom = pending
+		if !slices.Contains(changes, "custom") {
+			changes = append(changes, "custom")
+		}
+	}
 	if len(changes) > 1 || !tagChanged {
 		_, err = tx.Exec(ctx, `UPDATE tickets SET subject = $3, status = $4, priority = $5, assignee_id = $6, team_id = $7,
-			snoozed_until = $8, spam = $9, custom = $10, fields = $11,
+			snoozed_until = $8, spam = $9, custom = $10, fields = $11, severity = $12,
 			solved_at = CASE WHEN $4 IN ('solved', 'closed') THEN COALESCE(solved_at, now()) ELSE NULL END,
 			closed_at = CASE WHEN $4 = 'closed' THEN COALESCE(closed_at, now()) ELSE NULL END,
 			updated_at = now()
 			WHERE workspace_id = $1 AND id = $2`,
-			wid, tid, next.Subject, next.Status, next.Priority, next.Assignee, next.Team, next.Snoozed, next.Spam, next.Custom, next.Fields)
+			wid, tid, next.Subject, next.Status, next.Priority, next.Assignee, next.Team, next.Snoozed, next.Spam, next.Custom, next.Fields, next.Severity)
 	} else {
 		_, err = tx.Exec(ctx, `UPDATE tickets SET updated_at = now() WHERE workspace_id = $1 AND id = $2`, wid, tid)
 	}
@@ -381,4 +404,58 @@ func idOrNil(id *uuid.UUID) any {
 		return nil
 	}
 	return id.String()
+}
+
+func sameStr(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func strOrNil(s *string) any {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
+// suggestionFor maps a changed ticket field to the key of Ollie's pending suggestion
+// for it (custom.ai_suggestions, contracts/ai.md).
+var suggestionFor = map[string]string{"priority": "priority", "severity": "severity", "tags": "labels", "team_id": "team", "spam": "spam"}
+
+// dropSuggestions returns custom without the suggestions of the changed fields, or nil
+// when there is nothing to drop. custom is not modified.
+func dropSuggestions(custom map[string]any, changes []string) map[string]any {
+	sugg, _ := custom[domain.CustomAISuggestions].(map[string]any)
+	if len(sugg) == 0 {
+		return nil
+	}
+	var drop []string
+	for _, c := range changes {
+		if k, ok := suggestionFor[c]; ok {
+			if _, pending := sugg[k]; pending {
+				drop = append(drop, k)
+			}
+		}
+	}
+	if len(drop) == 0 {
+		return nil
+	}
+	rest := map[string]any{}
+	for k, v := range sugg {
+		if !slices.Contains(drop, k) {
+			rest[k] = v
+		}
+	}
+	out := make(map[string]any, len(custom))
+	for k, v := range custom {
+		out[k] = v
+	}
+	if len(rest) == 0 {
+		delete(out, domain.CustomAISuggestions)
+	} else {
+		out[domain.CustomAISuggestions] = rest
+	}
+	return out
 }

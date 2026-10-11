@@ -70,6 +70,13 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 	if len(f.Priority) > 0 {
 		b.add("t.priority = ANY(" + b.arg(f.Priority) + ")")
 	}
+	if len(f.Severity) > 0 {
+		clause := "t.severity = ANY(" + b.arg(f.Severity) + ")"
+		if slices.Contains(f.Severity, "none") {
+			clause = "(" + clause + " OR t.severity IS NULL)"
+		}
+		b.add(clause)
+	}
 	switch f.Assignee {
 	case "":
 	case "none":
@@ -152,6 +159,8 @@ const priorityExpr = `(CASE t.priority WHEN 'urgent' THEN 4 WHEN 'high' THEN 3 W
 
 var priorityRank = map[string]int{"urgent": 4, "high": 3, "normal": 2, "low": 1}
 
+const severityExpr = `(CASE t.severity WHEN 'sev1' THEN 4 WHEN 'sev2' THEN 3 WHEN 'sev3' THEN 2 WHEN 'sev4' THEN 1 ELSE 0 END)`
+
 type sortSpec struct {
 	expr string
 	cast string
@@ -179,6 +188,8 @@ func parseSort(sort, order string, defs domain.FieldDefs, b *sqlBuilder) (sortSp
 			key: func(t domain.Ticket) any { return t.CreatedAt.UTC().Format(time.RFC3339Nano) }}
 	case "priority":
 		s = sortSpec{expr: priorityExpr, cast: "int", desc: true, key: func(t domain.Ticket) any { return priorityRank[t.Priority] }}
+	case "severity":
+		s = sortSpec{expr: severityExpr, cast: "int", desc: true, key: func(t domain.Ticket) any { return domain.SeverityRank(t.Severity) }}
 	case "due":
 		s = sortSpec{expr: dueExpr, cast: "timestamptz", desc: false, key: func(t domain.Ticket) any {
 			if d := ticketDue(t); d != nil {
@@ -187,7 +198,7 @@ func parseSort(sort, order string, defs domain.FieldDefs, b *sqlBuilder) (sortSp
 			return "infinity"
 		}}
 	default:
-		return s, httpx.Validation("sort must be last_message_at, created_at, priority, due or field.<key>")
+		return s, httpx.Validation("sort must be last_message_at, created_at, priority, severity, due or field.<key>")
 	}
 	return s, applyOrder(&s, order)
 }
@@ -356,6 +367,9 @@ func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
 	}
 	if len(req.Priority) > 0 {
 		out.Priority = req.Priority
+	}
+	if len(req.Severity) > 0 {
+		out.Severity = req.Severity
 	}
 	for _, f := range []struct{ dst, src *string }{{&out.Assignee, &req.Assignee}, {&out.TeamID, &req.TeamID},
 		{&out.MailboxID, &req.MailboxID}, {&out.Tag, &req.Tag}, {&out.Channel, &req.Channel}, {&out.Q, &req.Q}} {

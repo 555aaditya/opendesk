@@ -46,7 +46,7 @@ func VerifyAttachmentSig(id uuid.UUID, exp, sig string) bool {
 }
 
 // TicketSelect is the column list ScanTicket reads. Append WHERE/ORDER clauses using alias t.
-var TicketSelect = `SELECT t.id, t.number, t.subject, t.status, t.priority, t.channel, t.mailbox_id, t.team_id,
+var TicketSelect = `SELECT t.id, t.number, t.subject, t.status, t.priority, t.severity, t.channel, t.mailbox_id, t.team_id,
 	t.sla_policy_id, t.first_response_due_at, t.resolution_due_at, t.first_responded_at, t.solved_at, t.snoozed_until,
 	t.last_message_at, t.last_customer_message_at, t.last_message_preview, t.message_count, t.spam,
 	t.csat_score, t.csat_comment, t.custom, t.fields, t.created_at, t.updated_at,
@@ -69,7 +69,7 @@ func ScanTicket(row pgx.Row) (Ticket, error) {
 	var uID *uuid.UUID
 	var uName, uEmail, uAvatar *string
 	var tags []byte
-	err := row.Scan(&t.ID, &t.Number, &t.Subject, &t.Status, &t.Priority, &t.Channel, &t.MailboxID, &t.TeamID,
+	err := row.Scan(&t.ID, &t.Number, &t.Subject, &t.Status, &t.Priority, &t.Severity, &t.Channel, &t.MailboxID, &t.TeamID,
 		&slaID, &frDue, &resDue, &t.FirstRespondedAt, &t.SolvedAt, &t.SnoozedUntil,
 		&t.LastMessageAt, &t.LastCustomerMessageAt, &t.LastMessagePreview, &t.MessageCount, &t.Spam,
 		&csatScore, &csatComment, &t.Custom, &t.Fields, &t.CreatedAt, &t.UpdatedAt,

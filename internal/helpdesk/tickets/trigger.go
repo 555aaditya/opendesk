@@ -140,6 +140,9 @@ type triggerRun struct {
 	tid   uuid.UUID
 	fired map[uuid.UUID]bool
 	defs  map[string]domain.FieldDefs
+	// decided caches ai_decide answers by question for the whole run (one call per run).
+	decided map[string]float64
+	asked   map[string]bool
 }
 
 // automations evaluates the enabled automations for trigger in position order.
@@ -165,6 +168,9 @@ func (r *triggerRun) automations(ctx context.Context, trigger string, messageID 
 	if err != nil || len(list) == 0 {
 		return err
 	}
+	if err := r.decide(ctx, list); err != nil {
+		return err
+	}
 	var changed []string
 	for _, a := range list {
 		if r.fired[a.ID] {
@@ -174,6 +180,7 @@ func (r *triggerRun) automations(ctx context.Context, trigger string, messageID 
 		if err != nil {
 			return err
 		}
+		facts.decided = r.decided
 		if facts.spam || !matchAll(a.Conditions, facts) {
 			continue
 		}
@@ -201,7 +208,8 @@ func (r *triggerRun) automations(ctx context.Context, trigger string, messageID 
 // facts is what conditions are evaluated against.
 type facts struct {
 	subject, body, fromEmail, channel, mailboxID, priority, status string
-	sentiment                                                      string
+	sentiment, severity                                            string
+	decided                                                        map[string]float64
 	tags                                                           []string
 	spam                                                           bool
 	contactEmail                                                   *string
@@ -212,13 +220,13 @@ type facts struct {
 func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, error) {
 	var f facts
 	var mailbox *uuid.UUID
-	err := r.tx.QueryRow(ctx, `SELECT t.subject, t.channel, t.mailbox_id, t.priority, t.status, t.spam, c.email,
+	err := r.tx.QueryRow(ctx, `SELECT t.subject, t.channel, t.mailbox_id, t.priority, COALESCE(t.severity, 'none'), t.status, t.spam, c.email,
 		COALESCE(t.custom->>'ai_sentiment', ''),
 		COALESCE((SELECT array_agg(g.name) FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = t.id), '{}'),
 		t.fields, COALESCE(c.fields, '{}')
 		FROM tickets t LEFT JOIN contacts c ON c.id = t.contact_id AND c.workspace_id = t.workspace_id
 		WHERE t.workspace_id = $1 AND t.id = $2`, r.wid, r.tid).
-		Scan(&f.subject, &f.channel, &mailbox, &f.priority, &f.status, &f.spam, &f.contactEmail, &f.sentiment, &f.tags,
+		Scan(&f.subject, &f.channel, &mailbox, &f.priority, &f.severity, &f.status, &f.spam, &f.contactEmail, &f.sentiment, &f.tags,
 			&f.fields, &f.contactFields)
 	if err != nil {
 		return f, err
@@ -276,6 +284,16 @@ func match(c hd.Condition, f facts) bool {
 		}
 		return domain.MatchField(def, domain.NormalizeOp(c.Op), c.Value, values[key])
 	}
+	if c.Field == "ai_decide" {
+		p, ok := f.decided[c.Question]
+		if !ok {
+			return false // not answered: the automation does not run on a guess
+		}
+		if c.Op == "lt" {
+			return p < c.DecideThreshold()
+		}
+		return p > c.DecideThreshold()
+	}
 	if c.Field == "tag" {
 		if c.Op == "not_contains" || c.Op == "not_equals" {
 			// "tag not_equals x" holds when no tag equals x.
@@ -307,6 +325,8 @@ func match(c hd.Condition, f facts) bool {
 		v = f.mailboxID
 	case "priority":
 		v = f.priority
+	case "severity":
+		v = f.severity
 	case "status":
 		v = f.status
 	case "sentiment":
@@ -346,6 +366,8 @@ func (r *triggerRun) apply(ctx context.Context, a automation, f facts) ([]string
 		case "set_priority":
 			v := act.Value
 			patch.Priority = &v
+		case "set_severity":
+			patch.Severity = Opt[string]{Set: true, Value: act.Value, Null: act.Value == ""}
 		case "assign_user":
 			id, err := uuid.Parse(act.Value)
 			if err != nil {
@@ -624,4 +646,41 @@ func notifyCustomerReplied(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, m
 		data["contact"] = map[string]any{"id": cid.String(), "name": cname}
 	}
 	return hd.Notify(ctx, tx, wid, *assignee, hd.NotifyCustomerReplied, &tid, data)
+}
+
+// decide asks the decision engine every ai_decide question of list not answered yet in
+// this run, in one call. Unanswered questions stay absent, so their conditions fail.
+func (r *triggerRun) decide(ctx context.Context, list []automation) error {
+	var questions []string
+	for _, a := range list {
+		if r.fired[a.ID] {
+			continue
+		}
+		for _, c := range a.Conditions {
+			if c.Field == "ai_decide" && c.Question != "" && !r.asked[c.Question] && !slices.Contains(questions, c.Question) {
+				questions = append(questions, c.Question)
+			}
+		}
+	}
+	if len(questions) == 0 {
+		return nil
+	}
+	if r.asked == nil {
+		r.asked, r.decided = map[string]bool{}, map[string]float64{}
+	}
+	for _, q := range questions {
+		r.asked[q] = true
+	}
+	h := hd.GetAIHooks()
+	if h == nil || h.Decide == nil {
+		return nil
+	}
+	got, err := h.Decide(ctx, r.tx, r.wid, r.tid, questions)
+	if err != nil {
+		return err
+	}
+	for q, p := range got {
+		r.decided[q] = p
+	}
+	return nil
 }

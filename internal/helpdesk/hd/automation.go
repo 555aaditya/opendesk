@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -18,9 +20,9 @@ import (
 // Automation enums (contracts/api.md).
 var (
 	AutomationTriggers = []string{jobs.TriggerTicketCreated, jobs.TriggerCustomerReplied, jobs.TriggerAgentReplied, jobs.TriggerTicketUpdated}
-	ConditionFields    = []string{"subject", "body", "from_email", "channel", "mailbox_id", "priority", "status", "tag", "sentiment"}
+	ConditionFields    = []string{"subject", "body", "from_email", "channel", "mailbox_id", "priority", "severity", "status", "tag", "sentiment", "ai_decide"}
 	ConditionOps       = []string{"contains", "not_contains", "equals", "not_equals"}
-	ActionTypes        = []string{"set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam", "ai_triage", "set_field"}
+	ActionTypes        = []string{"set_status", "set_priority", "set_severity", "assign_user", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam", "ai_triage", "set_field"}
 	// Sentiments are the values triage writes to custom.ai_sentiment (contracts/ai.md).
 	Sentiments = []string{"positive", "neutral", "negative", "frustrated"}
 )
@@ -28,16 +30,20 @@ var (
 const (
 	MaxConditions = 20
 	MaxActions    = 20
+	// MaxAIDecideConditions bounds the ai_decide conditions of one automation.
+	MaxAIDecideConditions = 3
 )
 
 type Condition struct {
-	Field string `json:"field" maxLength:"60" doc:"subject, body, from_email, channel, mailbox_id, priority, status, tag, sentiment, field.<key> (ticket custom field) or contact.field.<key>"`
+	Field string `json:"field" maxLength:"60" doc:"subject, body, from_email, channel, mailbox_id, priority, severity, status, tag, sentiment, ai_decide, field.<key> (ticket custom field) or contact.field.<key>"`
 	Op    string `json:"op" enum:"contains,not_contains,equals,not_equals,eq,ne,gt,gte,lt,lte,any,all,none,set,not_set" doc:"eq is an alias of equals, ne of not_equals; custom fields take the ops of their type"`
 	Value string `json:"value" maxLength:"500"`
+	// Question is the yes/no question of an ai_decide condition (contracts/ai.md "Automations").
+	Question string `json:"question,omitempty" maxLength:"300" doc:"ai_decide only: a yes/no question about the ticket"`
 }
 
 type Action struct {
-	Type  string `json:"type" enum:"set_status,set_priority,assign_user,assign_team,add_tag,remove_tag,send_reply,add_note,mark_spam,ai_triage,set_field"`
+	Type  string `json:"type" enum:"set_status,set_priority,set_severity,assign_user,assign_team,add_tag,remove_tag,send_reply,add_note,mark_spam,ai_triage,set_field"`
 	Value string `json:"value" maxLength:"20000"`
 	// Field is the ticket custom field key of set_field.
 	Field string `json:"field,omitempty" maxLength:"40"`
@@ -61,8 +67,21 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 	}
 	out := make([]Condition, 0, len(cs))
 	defs := map[string]domain.FieldDefs{}
+	decides := 0
 	for _, c := range cs {
 		c.Field, c.Op = strings.TrimSpace(c.Field), strings.TrimSpace(c.Op)
+		if c.Field == "ai_decide" {
+			if decides++; decides > MaxAIDecideConditions {
+				return nil, httpx.Validation("an automation can have at most 3 ai_decide conditions")
+			}
+			v, err := validDecide(c)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, v)
+			continue
+		}
+		c.Question = ""
 		if entity, key, ok := ConditionFieldKey(c.Field); ok {
 			if defs[entity] == nil {
 				d, err := domain.LoadFieldDefs(ctx, q, wid, entity)
@@ -112,6 +131,10 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 			if exact && !slices.Contains(domain.Statuses, c.Value) {
 				return nil, httpx.Validation("status must be one of " + strings.Join(domain.Statuses, ", "))
 			}
+		case "severity":
+			if !exact || (c.Value != "none" && !slices.Contains(domain.Severities, c.Value)) {
+				return nil, httpx.Validation("severity conditions use equals or not_equals with one of " + strings.Join(SeverityFilterValues, ", "))
+			}
 		case "sentiment":
 			if !exact || !slices.Contains(Sentiments, c.Value) {
 				return nil, httpx.Validation("sentiment conditions use equals or not_equals with one of " + strings.Join(Sentiments, ", "))
@@ -152,6 +175,11 @@ func ValidateActions(ctx context.Context, q db.Querier, wid uuid.UUID, as []Acti
 		case "set_priority":
 			if !slices.Contains(domain.Priorities, a.Value) {
 				return nil, httpx.Validation("set_priority value must be one of " + strings.Join(domain.Priorities, ", "))
+			}
+		case "set_severity":
+			a.Value = strings.TrimSpace(a.Value)
+			if a.Value != "" && !slices.Contains(domain.Severities, a.Value) {
+				return nil, httpx.Validation("set_severity value must be one of " + strings.Join(domain.Severities, ", ") + ", or empty to clear")
 			}
 		case "assign_user":
 			id, err := ParseRef(a.Value, "assign_user value")
@@ -239,4 +267,33 @@ func FieldString(v any) string {
 		return strings.Join(parts, ",")
 	}
 	return fmt.Sprint(v)
+}
+
+// validDecide checks an ai_decide condition: gt or lt, a probability strictly between 0
+// and 1, and a plain text yes/no question. The question is data for the decision
+// engine; markup and control characters are refused, whitespace is collapsed.
+func validDecide(c Condition) (Condition, error) {
+	if c.Op != "gt" && c.Op != "lt" {
+		return c, httpx.Validation("ai_decide conditions use gt or lt")
+	}
+	p, err := strconv.ParseFloat(strings.TrimSpace(c.Value), 64)
+	if err != nil || p < 0.01 || p > 0.99 {
+		return c, httpx.Validation("ai_decide value must be a probability between 0.01 and 0.99")
+	}
+	c.Value = strconv.FormatFloat(p, 'f', -1, 64)
+	q := strings.Join(strings.Fields(c.Question), " ")
+	if n := utf8.RuneCountInString(q); n < 3 || n > 300 {
+		return c, httpx.Validation("ai_decide needs a question of 3 to 300 characters")
+	}
+	if strings.ContainsAny(q, "<>`") || strings.IndexFunc(q, unicode.IsControl) >= 0 {
+		return c, httpx.Validation("ai_decide questions are plain text without <, > or `")
+	}
+	c.Question = q
+	return c, nil
+}
+
+// DecideThreshold is the probability an ai_decide condition compares against.
+func (c Condition) DecideThreshold() float64 {
+	p, _ := strconv.ParseFloat(c.Value, 64)
+	return p
 }

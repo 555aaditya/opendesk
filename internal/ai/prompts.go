@@ -66,6 +66,13 @@ const triageSystem = `You triage new customer support tickets in opendesk, a hel
   - "high": the customer is blocked from a key task, a billing or money error, or an angry repeat contact.
   - "normal": a typical question or problem.
   - "low": feedback, feature requests, thank-you notes, general information, no action needed soon.
+- severity: the business impact of the issue:
+  - "sev1": the product is down, data is lost or exposed, or payments fail broadly; the customer's business has stopped.
+  - "sev2": a core feature is broken or badly degraded for the customer or many of their users, with no good workaround.
+  - "sev3": a non-critical feature is impaired, or one user is affected, and a workaround exists.
+  - "sev4": a question, a request or a cosmetic issue; nothing stops working.
+  - "none": not an issue at all (thanks, spam, an empty message).
+- team: the name copied exactly from <teams> of the team that should own this ticket, or "none" when no team clearly fits.
 - sentiment: "positive", "neutral", "negative" or "frustrated" (angry, repeated contact, threatening to leave).
 - language: the BCP 47 tag of the language the customer wrote in, like "en", "de", "es", "pt-BR", "zh-Hans". Use "und" if there is no customer text.
 - category: exactly one of question, problem, bug, billing, account, feature_request, feedback, sales, shipping, refund, cancellation, spam, other.

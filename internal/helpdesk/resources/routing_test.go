@@ -52,7 +52,7 @@ func TestTriageSettings(t *testing.T) {
 	ws := e.NewWorkspace()
 	var ts resources.TriageSettings
 	e.Do("GET", "/v1/triage", ws.Agent.As(ws), nil).Want(t, 200).JSON(t, &ts)
-	if ts.AutoTriage || len(ts.Fields) != 2 || ts.AssignAfterTriage || ts.Available {
+	if ts.AutoTriage || len(ts.Fields) != 3 || ts.AssignAfterTriage || ts.Available || ts.Threshold != 0.7 || ts.Engine.Provider != "none" {
 		t.Fatalf("defaults %+v", ts)
 	}
 	e.Do("PATCH", "/v1/triage", ws.Agent.As(ws), map[string]any{"auto_triage": true}).Want(t, 403)
@@ -70,6 +70,12 @@ func TestTriageSettings(t *testing.T) {
 		t.Fatalf("merge lost keys: tone %q %+v", tone, ts)
 	}
 	e.Do("PATCH", "/v1/triage", ws.Admin.As(ws), map[string]any{"fields": []string{"status"}}).Want(t, 422)
+	e.Do("PATCH", "/v1/triage", ws.Admin.As(ws), map[string]any{"threshold": 0.3}).Want(t, 422)
+	e.Do("PATCH", "/v1/triage", ws.Admin.As(ws), map[string]any{"threshold": 0.856, "fields": []string{"severity", "team"}}).
+		Want(t, 200).JSON(t, &ts)
+	if ts.Threshold != 0.86 || len(ts.Fields) != 2 || ts.Fields[1] != "team" {
+		t.Fatalf("threshold %+v", ts)
+	}
 }
 
 func TestBusinessHoursAPI(t *testing.T) {

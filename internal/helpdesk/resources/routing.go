@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"slices"
 	"time"
@@ -42,16 +43,19 @@ type assignmentPatch struct {
 
 // TriageSettings is GET /v1/triage.
 type TriageSettings struct {
-	AutoTriage        bool     `json:"auto_triage"`
-	Fields            []string `json:"fields" enum:"priority,labels"`
-	AssignAfterTriage bool     `json:"assign_after_triage"`
-	Available         bool     `json:"available" doc:"AI is configured on this instance and on for the workspace"`
+	AutoTriage        bool              `json:"auto_triage"`
+	Fields            []string          `json:"fields" enum:"priority,severity,labels,team"`
+	AssignAfterTriage bool              `json:"assign_after_triage"`
+	Threshold         float64           `json:"threshold" doc:"Confidence at or above which a decision is applied; below it, a suggestion"`
+	Engine            hd.DecisionEngine `json:"engine"`
+	Available         bool              `json:"available" doc:"Triage can run: AI or a decision engine is configured, and AI is on for the workspace"`
 }
 
 type triagePatch struct {
 	AutoTriage        *bool     `json:"auto_triage,omitempty"`
-	Fields            *[]string `json:"fields,omitempty" maxItems:"2" enum:"priority,labels"`
+	Fields            *[]string `json:"fields,omitempty" maxItems:"4" enum:"priority,severity,labels,team"`
 	AssignAfterTriage *bool     `json:"assign_after_triage,omitempty"`
+	Threshold         *float64  `json:"threshold,omitempty" minimum:"0.5" maximum:"0.99"`
 }
 
 // BusinessHoursBody is the contract shape of /v1/business-hours.
@@ -96,7 +100,8 @@ func loadTriage(ctx context.Context, d *deps.Deps, q db.Querier, wid uuid.UUID) 
 	}
 	tc := st.Triage()
 	return TriageSettings{AutoTriage: tc.AutoTriage, Fields: tc.Fields, AssignAfterTriage: tc.AssignAfterTriage,
-		Available: d.Cfg.AIEnabled() && st.AI().Enabled}, nil
+		Threshold: tc.Threshold, Engine: hd.Engine(d.Cfg),
+		Available: (d.Cfg.AIEnabled() || d.Cfg.DecisionsProvider == "typesafe") && st.AI().Enabled}, nil
 }
 
 func loadHours(ctx context.Context, q db.Querier, wid uuid.UUID) (BusinessHoursBody, error) {
@@ -198,11 +203,17 @@ func registerRouting(d *deps.Deps, api huma.API) {
 			if v := in.Body.AssignAfterTriage; v != nil {
 				patch["assign_after_triage"] = *v
 			}
+			if v := in.Body.Threshold; v != nil {
+				if *v < hd.MinTriageThreshold || *v > hd.MaxTriageThreshold {
+					return nil, httpx.Validation("threshold must be between 0.5 and 0.99.")
+				}
+				patch["triage_threshold"] = math.Round(*v*100) / 100
+			}
 			if v := in.Body.Fields; v != nil {
 				fields := []string{}
 				for _, f := range *v {
 					if !slices.Contains(hd.TriageFields, f) {
-						return nil, httpx.Validation("fields may hold priority and labels.")
+						return nil, httpx.Validation("fields may hold priority, severity, labels and team.")
 					}
 					if !slices.Contains(fields, f) {
 						fields = append(fields, f)
@@ -223,7 +234,7 @@ func registerRouting(d *deps.Deps, api huma.API) {
 					return err
 				}
 				return audit.Log(ctx, tx, p, p.WorkspaceID, "triage.updated", "workspace", &p.WorkspaceID,
-					map[string]any{"auto_triage": t.AutoTriage, "fields": t.Fields, "assign_after_triage": t.AssignAfterTriage})
+					map[string]any{"auto_triage": t.AutoTriage, "fields": t.Fields, "assign_after_triage": t.AssignAfterTriage, "threshold": t.Threshold})
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)

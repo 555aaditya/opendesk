@@ -18,6 +18,7 @@ func writeTools() []*tool {
 	changeProps := map[string]any{
 		"status":        enum("New status.", statuses...),
 		"priority":      enum("New priority.", priorities...),
+		"severity":      enum("New severity: sev1 critical, sev2 major, sev3 minor, sev4 minimal, or none to clear.", append(append([]string{}, severities...), "none")...),
 		"assignee":      str(`Assign to "me", "none" to unassign, or a teammate's name, email or user id.`),
 		"add_labels":    arr("Label names to add.", str("")),
 		"remove_labels": arr("Label names to remove.", str("")),
@@ -30,7 +31,7 @@ func writeTools() []*tool {
 	return []*tool{
 		{
 			Name: "update_ticket", Write: true, MinRole: auth.RoleAgent,
-			Description: "Change one ticket: status, priority, assignee, labels or custom fields. Needs the user's approval, which the panel asks for; just call it.",
+			Description: "Change one ticket: status, priority, severity, assignee, labels or custom fields. Needs the user's approval, which the panel asks for; just call it.",
 			Schema:      obj(singleProps, "ticket"),
 			Active:      "Preparing a ticket change", Done: "Updated the ticket",
 			Propose: proposeUpdate, Apply: applyUpdate,
@@ -97,13 +98,13 @@ func writeTools() []*tool {
 				"name":    str("Automation name."),
 				"trigger": enum("When it runs.", "ticket_created", "customer_replied", "agent_replied", "ticket_updated"),
 				"conditions": arr("All must match.", obj(map[string]any{
-					"field": str("subject, body, from_email, channel, mailbox_id, priority, status, tag, sentiment or field.<key>"),
+					"field": str("subject, body, from_email, channel, mailbox_id, priority, severity, status, tag, sentiment or field.<key>"),
 					"op":    enum("", "contains", "not_contains", "equals", "not_equals", "gt", "gte", "lt", "lte", "any", "all", "none", "set", "not_set"),
 					"value": str(""),
 				}, "field", "op", "value")),
 				"actions": arr("What it does.", obj(map[string]any{
-					"type":  enum("", "set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "add_note", "ai_triage", "set_field"),
-					"value": str("The value: a status, priority, user id, team id, label name, note text or field value."),
+					"type":  enum("", "set_status", "set_priority", "set_severity", "assign_user", "assign_team", "add_tag", "remove_tag", "add_note", "ai_triage", "set_field"),
+					"value": str("The value: a status, priority, severity, user id, team id, label name, note text or field value."),
 					"field": str("The custom field key, for set_field."),
 				}, "type", "value")),
 			}, "name", "trigger", "actions"),
@@ -118,6 +119,7 @@ func writeTools() []*tool {
 type ticketChanges struct {
 	Status       string         `json:"status,omitempty"`
 	Priority     string         `json:"priority,omitempty"`
+	Severity     string         `json:"severity,omitempty"`
 	Assignee     string         `json:"assignee,omitempty"`
 	AddLabels    []string       `json:"add_labels,omitempty"`
 	RemoveLabels []string       `json:"remove_labels,omitempty"`
@@ -128,6 +130,7 @@ type ticketChanges struct {
 type patchArgs struct {
 	Status       string         `json:"status,omitempty"`
 	Priority     string         `json:"priority,omitempty"`
+	Severity     string         `json:"severity,omitempty" doc:"sev1..sev4, or none to clear"`
 	AssigneeSet  bool           `json:"assignee_set,omitempty"`
 	AssigneeID   string         `json:"assignee_id,omitempty"`
 	AssigneeName string         `json:"assignee_name,omitempty"`
@@ -143,6 +146,13 @@ func (p patchArgs) body() map[string]any {
 	}
 	if p.Priority != "" {
 		b["priority"] = p.Priority
+	}
+	switch p.Severity {
+	case "":
+	case "none":
+		b["severity"] = nil
+	default:
+		b["severity"] = p.Severity
 	}
 	if p.AssigneeSet {
 		if p.AssigneeID == "" {
@@ -188,6 +198,12 @@ func (rc *runCtx) resolveChanges(ctx context.Context, c ticketChanges, allowFiel
 			return p, err
 		}
 		p.Priority = c.Priority
+	}
+	if c.Severity != "" {
+		if err := validEnum([]string{c.Severity}, append(append([]string{}, severities...), "none"), "severity"); err != nil {
+			return p, err
+		}
+		p.Severity = c.Severity
 	}
 	if strings.TrimSpace(c.Assignee) != "" {
 		id, name, err := rc.resolveAssignee(ctx, c.Assignee)
@@ -247,6 +263,9 @@ func (p patchArgs) diff(t *ticket) []Change {
 	}
 	if p.Priority != "" {
 		out = append(out, Change{Field: "Priority", From: from(func(t ticket) string { return t.Priority }), To: p.Priority})
+	}
+	if p.Severity != "" {
+		out = append(out, Change{Field: "Severity", From: from(func(t ticket) string { return severityText(t.Severity) }), To: p.Severity})
 	}
 	if p.AssigneeSet {
 		out = append(out, Change{Field: "Assignee", From: from(func(t ticket) string {
@@ -310,6 +329,9 @@ func proposeUpdate(ctx context.Context, rc *runCtx, in json.RawMessage) (any, Pr
 	}
 	if p.Priority == t.Priority {
 		p.Priority = ""
+	}
+	if p.Severity == severityText(t.Severity) {
+		p.Severity = ""
 	}
 	if p.AssigneeSet && ((t.Assignee == nil && p.AssigneeID == "") || (t.Assignee != nil && t.Assignee.ID == p.AssigneeID)) {
 		p.AssigneeSet = false

@@ -71,6 +71,8 @@ func feature(system string) string {
 	switch {
 	case strings.Contains(system, "You triage"):
 		return "triage"
+	case strings.Contains(system, "You answer typed questions"):
+		return "decisions"
 	case strings.Contains(system, "You summarize"):
 		return "summary"
 	case strings.Contains(system, "reply-writing assistant"):

@@ -307,10 +307,10 @@ func TestTriageValidationAndApply(t *testing.T) {
 }
 
 func TestValidateTriageUnit(t *testing.T) {
-	got := validateTriage(Triage{Tags: []string{"<b>x</b>"}, SuggestedTags: []string{strings.Repeat("a", 40), "  "},
-		Priority: "", Language: "zz-invalid-??", Category: "", Summary: strings.Repeat("s", 400)}, nil)
+	got := validateTriage(llmTriage{Tags: []string{"<b>x</b>"}, SuggestedTags: []string{strings.Repeat("a", 40), "  "},
+		Priority: "", Severity: "sev9", Team: "Ghosts", Language: "zz-invalid-??", Category: "", Summary: strings.Repeat("s", 400)}, triageOptions{})
 	if len(got.Tags) != 0 || len(got.SuggestedTags) != 0 || got.Priority != "normal" || got.Sentiment != "neutral" ||
-		got.Language != "und" || got.Category != "other" || len([]rune(got.Summary)) > 300 {
+		got.Language != "und" || got.Category != "other" || len([]rune(got.Summary)) > 300 || got.Severity != nil || got.TeamID != nil {
 		t.Fatalf("%+v", got)
 	}
 }

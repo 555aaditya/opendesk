@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"regexp"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/opendesk/opendesk/internal/ai/decide"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
@@ -112,12 +114,33 @@ func (s *Service) WidgetAnswer(ctx context.Context, a jobs.AIWidgetAnswerArgs) e
 			}
 		}
 	}
-	sources, err := s.retrieveKB(ctx, a.WorkspaceID, tc.Workspace.Slug, clip(query, 2000), 3, true)
+	// With Jev, retrieval is loose and Jev judges relevance; otherwise the answer
+	// thresholds of retrieval decide.
+	sources, err := s.retrieveKB(ctx, a.WorkspaceID, tc.Workspace.Slug, clip(query, 2000), 3, !s.jev())
 	if err != nil {
 		return err
 	}
 	if len(sources) == 0 {
 		return s.decline(ctx, a)
+	}
+	if s.jev() {
+		kept, human, err := s.checkKB(ctx, a, tc.Msgs, sources)
+		switch {
+		case err != nil && !skippable(err):
+			return err
+		case err != nil:
+			s.d.Log.Info("widget relevance check skipped", "ticket_id", a.TicketID, "reason", errReason(err))
+			if sources, err = s.retrieveKB(ctx, a.WorkspaceID, tc.Workspace.Slug, clip(query, 2000), 3, true); err != nil {
+				return err
+			}
+		case human:
+			return s.handoff(ctx, a, "model")
+		default:
+			sources = kept
+		}
+		if len(sources) == 0 {
+			return s.decline(ctx, a)
+		}
 	}
 	c := s.newCall(a.WorkspaceID, nil, &a.TicketID, "answer")
 	set := st.AI()
@@ -242,4 +265,57 @@ func sourcesHTML(src []kbSource) string {
 	}
 	b.WriteString("</ul>")
 	return hd.SanitizeRich(b.String())
+}
+
+// Relevance cut-offs of the Jev check (contracts/ai.md "Widget answer bot").
+const (
+	articleRelevantAt = 0.6
+	needsHumanAt      = 0.8
+)
+
+// checkKB asks Jev, in one call, which retrieved articles answer the visitor's latest
+// message and whether the visitor needs a person. It costs no credits.
+func (s *Service) checkKB(ctx context.Context, a jobs.AIWidgetAnswerArgs, msgs []domain.Message, sources []kbSource) ([]kbSource, bool, error) {
+	recent := msgs
+	if len(recent) > 6 {
+		recent = recent[len(recent)-6:]
+	}
+	conv := make([]map[string]string, 0, len(recent))
+	for _, m := range recent {
+		from := "visitor"
+		if m.Direction == "outbound" {
+			from = "help bot"
+		}
+		conv = append(conv, map[string]string{"from": from, "text": clip(strings.ToValidUTF8(messageText(m), ""), 1500)})
+	}
+	articles := make([]map[string]string, 0, len(sources))
+	for _, src := range sources {
+		articles = append(articles, map[string]string{"title": src.Title, "content": clip(src.Passage, passageChars)})
+	}
+	state := map[string]any{"conversation": conv, "latest_message": conv[len(conv)-1]["text"], "articles": articles}
+	qs := map[string]decide.Question{
+		"needs_human": decide.Noul(ask("Does the visitor need a person on the support team to handle `latest_message`, rather than a help article?"),
+			"They ask for a person, need account access, a refund or an exception, or are upset.",
+			"A help article can answer it."),
+	}
+	for i := range sources {
+		qs["a"+strconv.Itoa(i)] = decide.Noul(ask(fmt.Sprintf("Does `articles[%d]` contain the information needed to answer `latest_message`?", i)),
+			"The article answers the question directly.", "The article is about something else, or only mentions the topic.")
+	}
+	c := s.newCall(a.WorkspaceID, nil, &a.TicketID, "answer_check")
+	res, err := c.decide(ctx, s.decider, decide.Request{State: state, Questions: qs})
+	if err != nil {
+		return nil, false, err
+	}
+	c.charge(ctx)
+	if res.Answers["needs_human"].Noul >= needsHumanAt {
+		return nil, true, nil
+	}
+	var kept []kbSource
+	for i, src := range sources {
+		if res.Answers["a"+strconv.Itoa(i)].Noul >= articleRelevantAt {
+			kept = append(kept, src)
+		}
+	}
+	return kept, false, nil
 }

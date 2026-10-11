@@ -35,6 +35,8 @@ type AIConfig struct {
 	// AssistantName is the name AI acts under: the assistant, and the actor of every
 	// change AI makes.
 	AssistantName string `json:"assistant_name"`
+	// Decisions is the decision engine (Jev, the LLM fallback, or none).
+	Decisions hd.DecisionEngine `json:"decisions"`
 }
 
 func (s *Service) register(api huma.API) {
@@ -51,7 +53,8 @@ func (s *Service) register(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			out := AIConfig{Enabled: s.Enabled(), Provider: "none", Features: st.AI(), Costs: map[string]int{}, AssistantName: AssistantName}
+			out := AIConfig{Enabled: s.Enabled(), Provider: "none", Features: st.AI(), Costs: map[string]int{}, AssistantName: AssistantName,
+				Decisions: hd.Engine(s.d.Cfg)}
 			for k, v := range plan.Costs {
 				out.Costs[k] = v
 			}
@@ -166,8 +169,8 @@ func (s *Service) register(api huma.API) {
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "ai-triage-ticket", Method: http.MethodPost, Path: "/v1/tickets/{id}/ai/triage",
-		Summary: "Triage a ticket", Description: "Suggests tags (from the workspace's tags), priority, sentiment, language and category. " +
-			"With apply, sets them, creating suggested tags, attributed to ai.", Tags: tags},
+		Summary: "Triage a ticket", Description: "Decides labels (from the workspace's labels), priority, severity, team, sentiment, language and category, " +
+			"on Jev when configured. With apply, sets them, creating suggested labels, attributed to ai.", Tags: tags},
 		func(ctx context.Context, in *struct {
 			ID   string `path:"id"`
 			Body struct {
@@ -183,6 +186,23 @@ func (s *Service) register(api huma.API) {
 				return nil, apiErr(err)
 			}
 			return &struct{ Body Triage }{*out}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "ai-dismiss-suggestion", Method: http.MethodDelete,
+		Path: "/v1/tickets/{id}/ai/suggestions/{field}", DefaultStatus: http.StatusNoContent,
+		Summary: "Dismiss a triage suggestion", Description: "Removes Ollie's pending suggestion for one field. Accepting is setting the field.", Tags: tags},
+		func(ctx context.Context, in *struct {
+			ID    string `path:"id"`
+			Field string `path:"field" enum:"priority,severity,labels,team,spam"`
+		}) (*struct{}, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeTicketsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := s.DismissSuggestion(ctx, p.WorkspaceID, in.ID, in.Field); err != nil {
+				return nil, apiErr(err)
+			}
+			return nil, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "ai-rewrite", Method: http.MethodPost, Path: "/v1/ai/rewrite",

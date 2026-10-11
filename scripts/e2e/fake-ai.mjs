@@ -38,7 +38,7 @@ function jsonFor(schema, messages) {
       const tags = (user.match(/<available_tags>([\s\S]*?)<\/available_tags>/)?.[1] ?? "")
         .split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 1);
       return {
-        tags, suggested_tags: ["login"], priority: "high", sentiment: "frustrated",
+        tags, suggested_tags: ["login"], priority: "high", severity: "sev3", team: "none", sentiment: "frustrated",
         language: /\bhola\b/i.test(user) ? "es" : "en", category: "account", summary: "Customer cannot sign in after a password reset.",
       };
     }
@@ -59,6 +59,18 @@ function jsonFor(schema, messages) {
         source_ids: [1],
         wants_human: false,
       };
+    case "decisions": {
+      // The LLM decision adapter (DECISIONS_PROVIDER=llm): answer every question id.
+      const qs = JSON.parse(user.match(/<questions>([\s\S]*?)<\/questions>/)?.[1] ?? "[]");
+      return Object.fromEntries(qs.map((q) => {
+        if (q.type === "choice") {
+          const keys = Object.keys(q.criteria ?? {});
+          return [q.id, { choice: keys.find((k) => k !== "(none)") ?? keys[0], probability: 0.8 }];
+        }
+        if (q.type === "score") return [q.id, { level: 1, probability: 0.7 }];
+        return [q.id, { probability: 0.75 }];
+      }));
+    }
     default:
       return {};
   }

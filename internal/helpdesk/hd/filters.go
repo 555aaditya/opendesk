@@ -12,11 +12,15 @@ import (
 	"github.com/opendesk/opendesk/internal/httpx"
 )
 
+// SeverityFilterValues are the severities a filter may name; "none" is no severity.
+var SeverityFilterValues = append(append([]string{}, domain.Severities...), "none")
+
 // TicketFilters is a saved view's filter set (contracts/api.md TicketFilters).
 // Assignee is "me", "none" or a user id.
 type TicketFilters struct {
 	Status    []string `json:"status,omitempty" enum:"open,pending,on_hold,solved,closed"`
 	Priority  []string `json:"priority,omitempty" enum:"low,normal,high,urgent"`
+	Severity  []string `json:"severity,omitempty" enum:"sev1,sev2,sev3,sev4,none" doc:"none: tickets without a severity"`
 	Assignee  string   `json:"assignee,omitempty"`
 	TeamID    string   `json:"team_id,omitempty"`
 	MailboxID string   `json:"mailbox_id,omitempty"`
@@ -35,6 +39,9 @@ func (f *TicketFilters) Normalize(ctx context.Context, q db.Querier, wid uuid.UU
 		return err
 	}
 	if f.Priority, err = enumList(f.Priority, domain.Priorities, "priority"); err != nil {
+		return err
+	}
+	if f.Severity, err = enumList(f.Severity, SeverityFilterValues, "severity"); err != nil {
 		return err
 	}
 	f.Assignee = strings.TrimSpace(f.Assignee)

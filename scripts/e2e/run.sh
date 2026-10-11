@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
 # End-to-end browser run (Playwright) against a running stack. It starts the
-# helpers itself: the fake OpenAI server (:9900), the SMTP sink (:2526) and the
-# widget's customer site (127.0.0.1:8899), then runs every flow.
+# helpers itself: the fake OpenAI server (:9900), the fake TypeSafe server (Jev, :9910),
+# the SMTP sink (:2526) and the widget's customer site (127.0.0.1:8899), then runs every flow.
 #
 # Start the stack first, with the API pointed at the helpers:
 #
 #   APP_URL=http://localhost:5173 API_URL=http://localhost:8080 INBOUND_SECRET=dev \
 #   AI_PROVIDER=openai OPENAI_BASE_URL=http://127.0.0.1:9900/v1 OPENAI_API_KEY=x AI_MODEL=gpt-fake \
+#   TYPESAFE_API_KEY=x TYPESAFE_API_URL=http://127.0.0.1:9910 \
 #   MAIL_DRIVER=smtp SMTP_HOST=127.0.0.1 SMTP_PORT=2526 SMTP_TLS=none make api
 #   CHECK_ORIGINS=http://localhost:5173 make realtime
 #   VITE_API_URL=http://localhost:8080 VITE_GATEWAY_URL=ws://localhost:4000/socket make web
@@ -35,6 +36,7 @@ npx playwright install chromium >/dev/null
 [[ -f "$root/web/dist/widget/v1.js" ]] || (cd "$root/web" && pnpm build:widget)
 
 node fake-ai.mjs 9900 >"$work/ai.log" 2>&1 & pids+=($!)
+node fake-typesafe.mjs 9910 >"$work/typesafe.log" 2>&1 & pids+=($!)
 node smtp-sink.mjs "$work/mail.jsonl" 2526 >"$work/smtp.log" 2>&1 & pids+=($!)
 node widget-host.mjs 8899 >"$work/widget.log" 2>&1 & pids+=($!)
 sleep 1

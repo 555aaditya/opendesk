@@ -98,6 +98,16 @@ func integer(desc string, lo, hi int) map[string]any {
 var statuses = []string{"open", "pending", "on_hold", "solved", "closed"}
 var priorities = []string{"low", "normal", "high", "urgent"}
 
+var severities = []string{"sev1", "sev2", "sev3", "sev4"}
+
+// severityText is a severity, or "none".
+func severityText(s *string) string {
+	if s == nil {
+		return "none"
+	}
+	return *s
+}
+
 func ticketFilterProps() map[string]any {
 	return map[string]any{
 		"query":          str("Full-text search over subjects and messages, or #number."),
@@ -132,12 +142,13 @@ type tagRef struct {
 }
 
 type ticket struct {
-	ID       string `json:"id"`
-	Number   int64  `json:"number"`
-	Subject  string `json:"subject"`
-	Status   string `json:"status"`
-	Priority string `json:"priority"`
-	Channel  string `json:"channel"`
+	ID       string  `json:"id"`
+	Number   int64   `json:"number"`
+	Subject  string  `json:"subject"`
+	Status   string  `json:"status"`
+	Priority string  `json:"priority"`
+	Severity *string `json:"severity"`
+	Channel  string  `json:"channel"`
 	Contact  *struct {
 		ID    string  `json:"id"`
 		Name  string  `json:"name"`
@@ -187,6 +198,9 @@ func (t ticket) nextDue() (*time.Time, bool) {
 func (t ticket) line() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "#%d [%s, %s, %s] %q", t.Number, t.Status, t.Priority, t.Channel, t.Subject)
+	if t.Severity != nil {
+		fmt.Fprintf(&b, "; severity: %s", *t.Severity)
+	}
 	if t.Contact != nil {
 		fmt.Fprintf(&b, "; customer: %s", t.Contact.Name)
 		if t.Contact.Email != nil && *t.Contact.Email != "" {

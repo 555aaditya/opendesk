@@ -147,6 +147,11 @@ type AIHooks struct {
 	// returns the ticket fields it changed. It returns (nil, nil) when it skips (AI off,
 	// no credits, provider unavailable); an error means tx failed.
 	Triage func(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) ([]string, error)
+	// Decide answers ai_decide conditions: the probability of yes for each question, in
+	// one decision call inside the trigger transaction. A question it could not answer
+	// (no decision engine, AI off, no credits, provider failure) is absent from the map;
+	// an error means tx failed.
+	Decide func(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, questions []string) (map[string]float64, error)
 }
 
 var aiHooks atomic.Pointer[AIHooks]

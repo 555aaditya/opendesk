@@ -3,11 +3,13 @@ package ai
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
+	"github.com/opendesk/opendesk/internal/ai/decide"
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
@@ -17,7 +19,7 @@ import (
 // TriageTicket is POST /v1/tickets/{id}/ai/triage. With apply, the result is written
 // (suggested tags are created) and the ticket_updated trigger runs, as for any edit.
 func (s *Service) TriageTicket(ctx context.Context, p *auth.Principal, rawID string, apply bool) (*Triage, error) {
-	if !s.Enabled() {
+	if !s.canTriage() {
 		return nil, errDisabled
 	}
 	tid, err := resolveTicket(ctx, s.d.DB.Pool, p.WorkspaceID, rawID)
@@ -57,7 +59,7 @@ func skippable(err error) bool {
 // autoTriage is the hd.AIHooks.AutoTriage hook: triage a new ticket when the
 // workspace turned it on, once.
 func (s *Service) autoTriage(ctx context.Context, wid, tid uuid.UUID) error {
-	if !s.Enabled() {
+	if !s.canTriage() {
 		return nil
 	}
 	st, err := hd.LoadSettings(ctx, s.d.DB.Pool, wid)
@@ -94,7 +96,7 @@ func (s *Service) autoTriage(ctx context.Context, wid, tid uuid.UUID) error {
 // triageAction is the hd.AIHooks.Triage hook for the ai_triage automation action. It
 // reads and writes through the trigger's transaction.
 func (s *Service) triageAction(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) ([]string, error) {
-	if !s.Enabled() {
+	if !s.canTriage() {
 		return nil, nil
 	}
 	res, c, err := s.triage(ctx, tx, wid, nil, tid)
@@ -111,6 +113,46 @@ func (s *Service) triageAction(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUI
 	}
 	c.charge(ctx)
 	return changes, nil
+}
+
+// decideConditions is the hd.AIHooks.Decide hook for ai_decide automation conditions:
+// every question in one decision call about the ticket, inside the trigger's
+// transaction. A skipped call answers nothing, so those conditions do not hold.
+func (s *Service) decideConditions(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, questions []string) (map[string]float64, error) {
+	if s.decider == nil || len(questions) == 0 {
+		return nil, nil
+	}
+	if _, err := s.workspaceOn(ctx, wid); err != nil {
+		return nil, nil
+	}
+	tc, err := s.loadTicketCtx(ctx, tx, wid, tid, true)
+	if err != nil {
+		if isNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	qs := make(map[string]decide.Question, len(questions))
+	for i, q := range questions {
+		qs["q"+strconv.Itoa(i)] = decide.Noul(map[string]string{"question": q, "about": "the ticket in `ticket`", "rule": dataRule}, "", "")
+	}
+	c := s.newCall(wid, nil, &tid, "decide")
+	res, err := c.decide(ctx, s.decider, decide.Request{State: decisionState(tc), Questions: qs})
+	if err != nil {
+		if skippable(err) {
+			s.d.Log.Info("ai_decide skipped", "ticket_id", tid, "reason", errReason(err))
+			return nil, nil
+		}
+		return nil, err
+	}
+	c.charge(ctx)
+	out := make(map[string]float64, len(questions))
+	for i, q := range questions {
+		if a, ok := res.Answers["q"+strconv.Itoa(i)]; ok {
+			out[q] = a.Noul
+		}
+	}
+	return out, nil
 }
 
 // errReason is a log-safe label for an AI error.

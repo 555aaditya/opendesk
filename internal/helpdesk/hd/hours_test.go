@@ -87,7 +87,8 @@ func TestValidateBusinessHours(t *testing.T) {
 }
 
 func TestTriageConfig(t *testing.T) {
-	if c := hd.ParseSettings(nil).Triage(); len(c.Fields) != 2 || c.AssignAfterTriage || c.AutoTriage {
+	if c := hd.ParseSettings(nil).Triage(); len(c.Fields) != 3 || !c.Sets("severity") || c.Sets("team") || c.AssignAfterTriage ||
+		c.AutoTriage || c.Threshold != hd.DefaultTriageThreshold {
 		t.Fatalf("defaults %+v", c)
 	}
 	raw := []byte(`{"ai":{"auto_triage":true,"triage_fields":["labels","bogus"],"assign_after_triage":true}}`)
@@ -97,5 +98,12 @@ func TestTriageConfig(t *testing.T) {
 	}
 	if c := hd.ParseSettings([]byte(`{"ai":{"triage_fields":[]}}`)).Triage(); len(c.Fields) != 0 {
 		t.Fatalf("empty fields %+v", c)
+	}
+	if c := hd.ParseSettings([]byte(`{"ai":{"triage_threshold":0.85}}`)).Triage(); c.Threshold != 0.85 {
+		t.Fatalf("threshold %+v", c)
+	}
+	// Out of range values fall back to the default.
+	if c := hd.ParseSettings([]byte(`{"ai":{"triage_threshold":0.2}}`)).Triage(); c.Threshold != hd.DefaultTriageThreshold {
+		t.Fatalf("threshold %+v", c)
 	}
 }

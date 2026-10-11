@@ -54,6 +54,7 @@ type NewTicket struct {
 	Channel     string
 	Status      string // default open
 	Priority    string // default normal
+	Severity    *string
 	MailboxID   *uuid.UUID
 	ContactID   *uuid.UUID
 	AssigneeID  *uuid.UUID
@@ -85,8 +86,8 @@ func CreateTicket(ctx context.Context, tx pgx.Tx, nt NewTicket) (Ticket, error) 
 	}
 	id := ids.New()
 	_, err := tx.Exec(ctx, `INSERT INTO tickets (id, workspace_id, number, subject, status, priority, channel,
-		mailbox_id, contact_id, assignee_id, team_id, custom, fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-		id, nt.WorkspaceID, number, subject, nt.Status, nt.Priority, nt.Channel, nt.MailboxID, nt.ContactID, nt.AssigneeID, nt.TeamID, nt.Custom, nt.Fields)
+		mailbox_id, contact_id, assignee_id, team_id, custom, fields, severity) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+		id, nt.WorkspaceID, number, subject, nt.Status, nt.Priority, nt.Channel, nt.MailboxID, nt.ContactID, nt.AssigneeID, nt.TeamID, nt.Custom, nt.Fields, nt.Severity)
 	if err != nil {
 		return Ticket{}, fmt.Errorf("insert ticket: %w", err)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/opendesk/opendesk/internal/ai/decide"
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/deps"
 	"github.com/opendesk/opendesk/internal/domain"
@@ -41,6 +42,7 @@ type env struct {
 	*hdtest.Env
 	S    *Service
 	F    *fakeLLM
+	TS   *fakeTypeSafe
 	WS   hdtest.WS
 	Base string
 }
@@ -50,6 +52,9 @@ type opts struct {
 	disabled bool
 	openai   bool
 	noEmbed  bool
+	// jev decides on a fake TypeSafe server; llmDecide uses the LLM adapter.
+	jev       bool
+	llmDecide bool
 }
 
 // newEnv starts the helpdesk and AI routes against a fake model server.
@@ -77,6 +82,19 @@ func newEnv(t *testing.T, o opts) *env {
 	if o.disabled {
 		s.provider = nil
 	}
+	var ts *fakeTypeSafe
+	switch {
+	case o.jev:
+		ts = newFakeTypeSafe(t)
+		cfg.DecisionsProvider, cfg.TypesafeAPIKey, cfg.TypesafeModel = "typesafe", "ts-test-key", "jev-latest"
+		s.WithDecider(decide.NewTypeSafe(ts.srv.URL, "ts-test-key", "jev-latest"))
+	case o.llmDecide:
+		cfg.DecisionsProvider = "llm"
+		s.WithDecider(&llmDecider{s: s})
+	default:
+		cfg.DecisionsProvider = "llm"
+		s.WithDecider(nil)
+	}
 	mu.Lock()
 	services[&d] = s
 	mu.Unlock()
@@ -93,7 +111,7 @@ func newEnv(t *testing.T, o opts) *env {
 	Register(&d, api, r)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	e := &env{Env: &hdtest.Env{T: t, D: &d, Srv: srv, Ctx: context.Background()}, S: s, F: f}
+	e := &env{Env: &hdtest.Env{T: t, D: &d, Srv: srv, Ctx: context.Background()}, S: s, F: f, TS: ts}
 	e.WS = e.NewWorkspace()
 	return e
 }

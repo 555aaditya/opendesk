@@ -38,15 +38,17 @@ const (
 
 // Credit cost of each AI feature. contracts/billing.md lists the same table.
 var Costs = map[string]int{
-	"summarize":   1,
-	"rewrite":     1,
-	"translate":   1,
-	"triage":      1,
-	"draft_reply": 3,
-	"answer":      3, // widget AI answer from the knowledge base
-	"kb_draft":    5, // knowledge base article draft from tickets
-	"copilot":     2, // free-form question about a ticket
-	"assistant":   2, // one model turn of the assistant (Ollie)
+	"summarize":    1,
+	"rewrite":      1,
+	"translate":    1,
+	"triage":       1, // every triage decision in one call (Jev, or the AI model)
+	"decide":       1, // the ai_decide automation conditions of one trigger run, in one call
+	"answer_check": 0, // the widget answer bot's relevance check on Jev; the answer itself is "answer"
+	"draft_reply":  3,
+	"answer":       3, // widget AI answer from the knowledge base
+	"kb_draft":     5, // knowledge base article draft from tickets
+	"copilot":      2, // free-form question about a ticket
+	"assistant":    2, // one model turn of the assistant (Ollie)
 }
 
 var (

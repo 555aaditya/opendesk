@@ -110,6 +110,8 @@ const (
 var (
 	Statuses   = []string{StatusOpen, StatusPending, StatusOnHold, StatusSolved, StatusClosed}
 	Priorities = []string{"low", "normal", "high", "urgent"}
+	// Severities are ordered most severe first; a ticket may have none (nil).
+	Severities = []string{"sev1", "sev2", "sev3", "sev4"}
 	Channels   = []string{ChannelEmail, ChannelChat, ChannelAPI, ChannelPortal}
 )
 
@@ -119,6 +121,7 @@ type Ticket struct {
 	Subject               string         `json:"subject"`
 	Status                string         `json:"status" enum:"open,pending,on_hold,solved,closed"`
 	Priority              string         `json:"priority" enum:"low,normal,high,urgent"`
+	Severity              *string        `json:"severity" enum:"sev1,sev2,sev3,sev4" nullable:"true"`
 	Channel               string         `json:"channel" enum:"email,chat,api,portal"`
 	MailboxID             *uuid.UUID     `json:"mailbox_id"`
 	Contact               *ContactRef    `json:"contact"`
@@ -192,3 +195,27 @@ type Activity struct {
 	Data      map[string]any `json:"data"`
 	CreatedAt time.Time      `json:"created_at"`
 }
+
+// SeverityRank orders severities for comparison: sev1 is 4, sev4 is 1, none is 0.
+func SeverityRank(s *string) int {
+	if s == nil {
+		return 0
+	}
+	switch *s {
+	case "sev1":
+		return 4
+	case "sev2":
+		return 3
+	case "sev3":
+		return 2
+	case "sev4":
+		return 1
+	}
+	return 0
+}
+
+// Keys of Ticket.Custom written by AI decisions (contracts/ai.md "Decisions").
+const (
+	CustomAIDecisions   = "ai_decisions"
+	CustomAISuggestions = "ai_suggestions"
+)

@@ -36,11 +36,18 @@ func For(d *deps.Deps) *Service {
 }
 
 func (s *Service) installHooks() {
-	if !s.Enabled() {
+	if !s.canTriage() && s.decider == nil {
 		hd.SetAIHooks(nil)
 		return
 	}
-	hd.SetAIHooks(&hd.AIHooks{AutoTriage: s.autoTriage, Triage: s.triageAction})
+	h := &hd.AIHooks{}
+	if s.canTriage() {
+		h.AutoTriage, h.Triage = s.autoTriage, s.triageAction
+	}
+	if s.decider != nil {
+		h.Decide = s.decideConditions
+	}
+	hd.SetAIHooks(h)
 }
 
 // Register adds this area's routes. Streaming variants are served by an operation

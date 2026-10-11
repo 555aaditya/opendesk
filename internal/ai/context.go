@@ -198,7 +198,7 @@ func renderTicket(t domain.Ticket) string {
 		body += "\ntags: " + untrusted(strings.Join(tags, ", "))
 	}
 	return block("ticket", []string{"number", strconv.FormatInt(t.Number, 10), "channel", t.Channel, "status", t.Status,
-		"priority", t.Priority, "created", t.CreatedAt.UTC().Format(time.DateOnly)}, body)
+		"priority", t.Priority, "severity", severityAttr(t.Severity), "created", t.CreatedAt.UTC().Format(time.DateOnly)}, body)
 }
 
 // renderContact renders what the reply may use about the customer.
@@ -326,4 +326,11 @@ func inlineMD(s string) string {
 // plainFromMarkdown is the text version of a markdown draft.
 func plainFromMarkdown(md string) string {
 	return hd.HTMLToText(markdownToHTML(md))
+}
+
+func severityAttr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

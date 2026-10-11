@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type listIn struct {
 	httpx.ListParams
 	Status    string `query:"status" doc:"Comma separated statuses"`
 	Priority  string `query:"priority" doc:"Comma separated priorities"`
+	Severity  string `query:"severity" doc:"Comma separated severities (sev1..sev4), none for tickets without one"`
 	Assignee  string `query:"assignee" doc:"me, none or a user id"`
 	TeamID    string `query:"team_id"`
 	MailboxID string `query:"mailbox_id"`
@@ -39,7 +41,7 @@ type listIn struct {
 	ViewID    string `query:"view_id" doc:"Apply a saved view's filters; explicit filters override it"`
 	Q         string `query:"q" maxLength:"200" doc:"Full text over subjects and messages, or #number"`
 	Spam      string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
-	Sort      string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, due or field.<key>"`
+	Sort      string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, severity, due or field.<key>"`
 	Order     string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
 
 	fields    []hd.FieldFilter
@@ -66,6 +68,7 @@ type ticketCreateBody struct {
 	BodyHTML      string              `json:"body_html,omitempty" maxLength:"500000"`
 	Kind          string              `json:"kind,omitempty" enum:"reply,note" doc:"Default reply"`
 	Priority      string              `json:"priority,omitempty" enum:"low,normal,high,urgent"`
+	Severity      string              `json:"severity,omitempty" enum:"sev1,sev2,sev3,sev4"`
 	AssigneeID    string              `json:"assignee_id,omitempty"`
 	TeamID        string              `json:"team_id,omitempty"`
 	Tags          []string            `json:"tags,omitempty" maxItems:"50"`
@@ -81,6 +84,7 @@ type ticketPatchBody struct {
 	Subject      *string        `json:"subject,omitempty" maxLength:"500"`
 	Status       *string        `json:"status,omitempty" enum:"open,pending,on_hold,solved,closed"`
 	Priority     *string        `json:"priority,omitempty" enum:"low,normal,high,urgent"`
+	Severity     Opt[string]    `json:"severity,omitempty" doc:"sev1, sev2, sev3, sev4, or null to clear"`
 	AssigneeID   Opt[string]    `json:"assignee_id,omitempty" doc:"User id, or null to unassign"`
 	TeamID       Opt[string]    `json:"team_id,omitempty" doc:"Team id, or null"`
 	SnoozedUntil Opt[time.Time] `json:"snoozed_until,omitempty" doc:"Snooze until, or null to wake"`
@@ -93,7 +97,7 @@ type ticketPatchBody struct {
 }
 
 func (b ticketPatchBody) toPatch() (Patch, error) {
-	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
+	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Severity: b.Severity, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
 		RemoveTags: b.RemoveTags, Custom: b.Custom, Fields: b.Fields, Snooze: b.SnoozedUntil}
 	var err error
 	if p.Assignee, err = optID(b.AssigneeID, "assignee_id"); err != nil {
@@ -165,7 +169,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			if in.fieldsErr != nil {
 				return nil, in.fieldsErr
 			}
-			req := hd.TicketFilters{Status: hd.SplitCSV(in.Status), Priority: hd.SplitCSV(in.Priority), Assignee: in.Assignee,
+			req := hd.TicketFilters{Status: hd.SplitCSV(in.Status), Priority: hd.SplitCSV(in.Priority), Severity: hd.SplitCSV(in.Severity), Assignee: in.Assignee,
 				TeamID: in.TeamID, MailboxID: in.MailboxID, Tag: in.Tag, Channel: in.Channel, Q: in.Q, Fields: in.fields}
 			f := req
 			if in.ViewID != "" {
@@ -179,6 +183,9 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				return nil, err
 			}
 			if f.Priority, err = validEnum(f.Priority, domain.Priorities, "priority"); err != nil {
+				return nil, err
+			}
+			if f.Severity, err = validEnum(f.Severity, hd.SeverityFilterValues, "severity"); err != nil {
 				return nil, err
 			}
 			page, err := listTickets(ctx, d.DB.Pool, p.WorkspaceID, p.ActorUserID(), listQuery{TicketFilters: f, ContactID: in.ContactID, Spam: in.Spam},
@@ -425,6 +432,13 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 	wid := p.WorkspaceID
 	actor := actorOf(p)
 	nt := domain.NewTicket{WorkspaceID: wid, Subject: b.Subject, Status: b.Status, Priority: b.Priority, Custom: b.Custom}
+	if b.Severity != "" {
+		if !slices.Contains(domain.Severities, b.Severity) {
+			return domain.Ticket{}, httpx.Validation("severity must be one of " + strings.Join(domain.Severities, ", "))
+		}
+		sev := b.Severity
+		nt.Severity = &sev
+	}
 	if strings.TrimSpace(b.Subject) == "" {
 		return domain.Ticket{}, httpx.Validation("subject is required")
 	}

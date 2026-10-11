@@ -110,6 +110,17 @@ type Config struct {
 	EmbeddingsDriver string // voyage | openai | none
 	VoyageAPIKey     string
 	EmbeddingsModel  string
+
+	// Decisions (contracts/ai.md "Decisions"). DecisionsProvider: typesafe (Jev) | llm | none.
+	DecisionsProvider string
+	TypesafeAPIKey    string
+	TypesafeAPIURL    string // base URL; the API path is /v1/systemone
+	TypesafeModel     string
+}
+
+// DecisionsEnabled reports whether a decision engine is configured.
+func (c *Config) DecisionsEnabled() bool {
+	return c.DecisionsProvider == "typesafe" || (c.DecisionsProvider == "llm" && c.AIEnabled())
 }
 
 // BillingEnabled reports whether plans, limits and credits are enforced.
@@ -195,6 +206,11 @@ func Load() (*Config, error) {
 		EmbeddingsDriver: env("EMBEDDINGS_DRIVER", ""),
 		VoyageAPIKey:     env("VOYAGE_API_KEY", ""),
 		EmbeddingsModel:  env("EMBEDDINGS_MODEL", ""),
+
+		DecisionsProvider: strings.ToLower(env("DECISIONS_PROVIDER", "")),
+		TypesafeAPIKey:    env("TYPESAFE_API_KEY", ""),
+		TypesafeAPIURL:    strings.TrimRight(env("TYPESAFE_API_URL", "https://api.typesafe.ai"), "/"),
+		TypesafeModel:     env("TYPESAFE_MODEL", "jev-latest"),
 	}
 	if c.AIProvider == "" {
 		switch {
@@ -214,6 +230,28 @@ func Load() (*Config, error) {
 	}
 	if c.AIFastModel == "" {
 		c.AIFastModel = c.AIModel
+	}
+	switch c.DecisionsProvider {
+	case "":
+		switch {
+		case c.TypesafeAPIKey != "":
+			c.DecisionsProvider = "typesafe"
+		case c.AIEnabled():
+			c.DecisionsProvider = "llm"
+		default:
+			c.DecisionsProvider = "none"
+		}
+	case "typesafe":
+		if c.TypesafeAPIKey == "" {
+			// Without a key the LLM path keeps every feature working.
+			c.DecisionsProvider = "llm"
+			if !c.AIEnabled() {
+				c.DecisionsProvider = "none"
+			}
+		}
+	case "llm", "none":
+	default:
+		return nil, fmt.Errorf("DECISIONS_PROVIDER must be typesafe, llm or none")
 	}
 	if c.EmbeddingsDriver == "" {
 		switch {

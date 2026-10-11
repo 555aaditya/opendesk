@@ -23,17 +23,20 @@ type TipList struct {
 
 // tips are plain counts over the caller's workspace, most pressing first. No AI.
 func (s *Service) tips(ctx context.Context, p *auth.Principal) ([]Tip, error) {
-	var soon, breached, staleUnassigned, mineWaiting int
+	var soon, atRisk, breached, staleUnassigned, mineWaiting int
 	err := s.d.DB.Pool.QueryRow(ctx, `SELECT
 		count(*) FILTER (WHERE due > now() AND due <= now() + interval '1 hour'),
+		count(*) FILTER (WHERE due > now() + interval '1 hour' AND due <= now() + interval '4 hours' AND sla_risk >= 0.6),
 		count(*) FILTER (WHERE due <= now()),
 		count(*) FILTER (WHERE assignee_id IS NULL AND status = 'open' AND created_at < now() - interval '1 day'),
 		count(*) FILTER (WHERE assignee_id = $2 AND status = 'open' AND last_customer_message_at IS NOT NULL
 			AND last_customer_message_at >= last_message_at AND last_customer_message_at < now() - interval '4 hours')
 		FROM (SELECT assignee_id, status, created_at, last_message_at, last_customer_message_at,
+				CASE WHEN jsonb_typeof(custom #> '{ai_decisions,fields,sla_risk,value}') = 'number'
+					THEN (custom #>> '{ai_decisions,fields,sla_risk,value}')::float8 END AS sla_risk,
 				LEAST(CASE WHEN first_responded_at IS NULL THEN first_response_due_at END, resolution_due_at) AS due
 			 FROM tickets WHERE workspace_id = $1 AND deleted_at IS NULL AND NOT spam AND status IN ('open', 'pending', 'on_hold')) t`,
-		p.WorkspaceID, p.UserID).Scan(&soon, &breached, &staleUnassigned, &mineWaiting)
+		p.WorkspaceID, p.UserID).Scan(&soon, &atRisk, &breached, &staleUnassigned, &mineWaiting)
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +45,12 @@ func (s *Service) tips(ctx context.Context, p *auth.Principal) ([]Tip, error) {
 		tips = append(tips, Tip{Key: "sla_due_soon", Severity: "high", Count: soon,
 			Text:   fmt.Sprintf("%s in the next hour. Triage %s?", pluralVerb(soon, "ticket breaches", "tickets breach")+" SLA", them(soon)),
 			Prompt: "Which open tickets breach SLA in the next hour? Help me triage them: who should take each, and what priority."})
+	}
+	if atRisk > 0 {
+		// sla_risk is Ollie's triage estimate of the work left (contracts/ai.md "Decisions").
+		tips = append(tips, Tip{Key: "sla_at_risk", Severity: "medium", Count: atRisk,
+			Text:   fmt.Sprintf("%s due within 4 hours and %s hard to finish in time.", pluralVerb(atRisk, "ticket is", "tickets are"), lookText(atRisk)),
+			Prompt: "Which open tickets are due within 4 hours but look like a lot of work? Suggest who should take each and what to do first."})
 	}
 	if breached > 0 {
 		tips = append(tips, Tip{Key: "sla_breached", Severity: "high", Count: breached,
@@ -73,4 +82,11 @@ func them(n int) string {
 		return "it"
 	}
 	return "them"
+}
+
+func lookText(n int) string {
+	if n == 1 {
+		return "looks"
+	}
+	return "look"
 }

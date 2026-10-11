@@ -44,6 +44,7 @@ type ReportOverview struct {
 	SLABreached             int            `json:"sla_breached"`
 	ByDay                   []ReportDay    `json:"by_day"`
 	ByChannel               map[string]int `json:"by_channel"`
+	BySeverity              map[string]int `json:"by_severity" doc:"Tickets created in the range by severity; none counts tickets without one"`
 	ByAgent                 []ReportAgent  `json:"by_agent"`
 }
 
@@ -75,7 +76,7 @@ func round1(v *float64) *float64 {
 }
 
 func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS string) (ReportOverview, error) {
-	o := ReportOverview{ByDay: []ReportDay{}, ByAgent: []ReportAgent{}, ByChannel: map[string]int{}}
+	o := ReportOverview{ByDay: []ReportDay{}, ByAgent: []ReportAgent{}, ByChannel: map[string]int{}, BySeverity: map[string]int{}}
 	s, err := hd.LoadSettings(ctx, q, wid)
 	if err != nil {
 		return o, err
@@ -161,6 +162,27 @@ func overview(ctx context.Context, q db.Querier, wid uuid.UUID, fromS, toS strin
 			return o, err
 		}
 		o.ByChannel[ch] = n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return o, err
+	}
+
+	for _, s := range hd.SeverityFilterValues {
+		o.BySeverity[s] = 0
+	}
+	rows, err = q.Query(ctx, `SELECT COALESCE(t.severity, 'none'), count(*) `+base+` AND t.created_at >= $2 AND t.created_at < $3 GROUP BY 1`, wid, from, to)
+	if err != nil {
+		return o, err
+	}
+	for rows.Next() {
+		var sev string
+		var n int
+		if err := rows.Scan(&sev, &n); err != nil {
+			rows.Close()
+			return o, err
+		}
+		o.BySeverity[sev] = n
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
