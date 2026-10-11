@@ -473,6 +473,7 @@
     letter-spacing: -0.01em;
   }
   /* Small tracked-uppercase eyebrow: section labels, stat labels, menu groups. */
+  .heading { font-weight: 600; letter-spacing: -0.025em; color: var(--fg); }
   .label-caps {
     font-size: 10px;
     line-height: 14px;
