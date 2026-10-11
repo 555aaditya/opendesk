@@ -13,11 +13,13 @@ defmodule RealtimeWeb.LimitsTest do
   end
 
   test "token bucket: burst, then refuse, then refill" do
+    # 10 per second: one token every 100 ms, so a slow machine cannot refill
+    # the bucket between the burst and the refusal.
     key = {:test, make_ref()}
-    for _ <- 1..5, do: assert(RateLimiter.check(key, {1000, 5}) == :ok)
-    assert RateLimiter.check(key, {1000, 5}) == {:error, :rate_limited}
-    Process.sleep(5)
-    assert RateLimiter.check(key, {1000, 5}) == :ok
+    for _ <- 1..5, do: assert(RateLimiter.check(key, {10, 5}) == :ok)
+    assert RateLimiter.check(key, {10, 5}) == {:error, :rate_limited}
+    Process.sleep(150)
+    assert RateLimiter.check(key, {10, 5}) == :ok
   end
 
   test "at most 20 concurrent sockets per subject" do
