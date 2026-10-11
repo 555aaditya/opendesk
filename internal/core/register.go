@@ -26,6 +26,9 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	s.registerTOTP(api)
 	s.registerPasskeys(api)
 	s.registerMe(api)
+	s.registerAvatars(api)
+	s.registerOnboarding(api)
+	installImageHooks()
 	s.registerWorkspaces(api)
 	s.registerMembers(api)
 	s.registerInvitations(api)
@@ -38,6 +41,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 // RegisterWorkers adds this area's River workers.
 func RegisterWorkers(d *deps.Deps, w *river.Workers) {
 	s := newSvc(d)
+	installImageHooks()
 	river.AddWorker(w, &systemEmailWorker{s: s})
 	river.AddWorker(w, &forgotWorker{s: s})
 	river.AddWorker(w, &dispatchWorker{s: s})

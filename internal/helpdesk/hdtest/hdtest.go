@@ -273,6 +273,12 @@ func (e *Env) Do(method, path string, a Auth, body any) *Resp {
 // Upload posts a multipart form with one file field "file".
 func (e *Env) Upload(path string, a Auth, filename string, content []byte) *Resp {
 	e.T.Helper()
+	return e.UploadWith(http.MethodPost, path, a, filename, content)
+}
+
+// UploadWith sends a multipart "file" with method.
+func (e *Env) UploadWith(method, path string, a Auth, filename string, content []byte) *Resp {
+	e.T.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("file", filename)
@@ -281,7 +287,7 @@ func (e *Env) Upload(path string, a Auth, filename string, content []byte) *Resp
 	}
 	_, _ = fw.Write(content)
 	_ = mw.Close()
-	req, err := http.NewRequest(http.MethodPost, e.Srv.URL+path, &buf)
+	req, err := http.NewRequest(method, e.Srv.URL+path, &buf)
 	if err != nil {
 		e.T.Fatal(err)
 	}

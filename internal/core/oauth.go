@@ -457,6 +457,9 @@ func (s *svc) resolveIdentity(ctx context.Context, id *fedIdentity, redirectTo s
 			return err
 		}
 		if err == nil {
+			if err := s.providerPicture(ctx, tx, uid, id.AvatarURL); err != nil {
+				return err
+			}
 			code, err = createOneTime(ctx, tx, ottOAuthLogin, &uid, "", data, oauthCodeTTL)
 			return err
 		}
@@ -494,12 +497,8 @@ func (s *svc) resolveIdentity(ctx context.Context, id *fedIdentity, redirectTo s
 			}
 			uid = ids.New()
 			name := displayname.CleanOr(id.Name, displayname.Person, displayname.FromEmail(id.Email))
-			avatar := ""
-			if a, err := url.Parse(id.AvatarURL); err == nil && a.Scheme == "https" && len(id.AvatarURL) <= 500 {
-				avatar = id.AvatarURL
-			}
-			if _, err := tx.Exec(ctx, `INSERT INTO users (id, email, name, avatar_url, email_verified_at) VALUES ($1, $2, $3, $4, now())`,
-				uid, id.Email, name, avatar); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO users (id, email, name, email_verified_at) VALUES ($1, $2, $3, now())`,
+				uid, id.Email, name); err != nil {
 				return err
 			}
 			if err := insertIdentity(ctx, tx, uid, id); err != nil {
@@ -507,6 +506,9 @@ func (s *svc) resolveIdentity(ctx context.Context, id *fedIdentity, redirectTo s
 			}
 			newUser = uid
 		default:
+			return err
+		}
+		if err := s.providerPicture(ctx, tx, uid, id.AvatarURL); err != nil {
 			return err
 		}
 		code, err = createOneTime(ctx, tx, ottOAuthLogin, &uid, "", data, oauthCodeTTL)

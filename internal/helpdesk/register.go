@@ -20,6 +20,7 @@ import (
 	"github.com/opendesk/opendesk/internal/helpdesk/resources"
 	"github.com/opendesk/opendesk/internal/helpdesk/tickets"
 	"github.com/opendesk/opendesk/internal/helpdesk/widget"
+	"github.com/opendesk/opendesk/internal/images"
 )
 
 // Register adds this area's routes. Prefer huma operations; use r only for raw HTTP
@@ -30,13 +31,20 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	resources.Register(d, api, r)
 	kb.Register(d, api, r)
 	widget.Register(d, api, r)
+	images.Register(d, r)
 }
 
 // RegisterWorkers adds this area's River workers.
-func RegisterWorkers(d *deps.Deps, w *river.Workers) { tickets.RegisterWorkers(d, w) }
+func RegisterWorkers(d *deps.Deps, w *river.Workers) {
+	tickets.RegisterWorkers(d, w)
+	images.RegisterWorkers(d, w)
+	contacts.InstallImageHooks()
+}
 
 // Periodic returns this area's scheduled jobs.
-func Periodic(d *deps.Deps) []*river.PeriodicJob { return tickets.Periodic(d) }
+func Periodic(d *deps.Deps) []*river.PeriodicJob {
+	return append(tickets.Periodic(d), images.Periodic()...)
+}
 
 // Background runs until ctx is done, in the worker role only. The helpdesk has no
 // long-running loops; its scheduled work runs as River periodic jobs.

@@ -50,7 +50,7 @@ func scanAPIKey(r pgx.Row) (CoreAPIKey, error) {
 		return k, err
 	}
 	if uid != nil {
-		k.CreatedBy = &domain.UserRef{ID: *uid, Name: *name, Email: *email, AvatarURL: *avatar}
+		k.CreatedBy = &domain.UserRef{ID: *uid, Name: *name, Email: *email, AvatarURL: domain.Avatar(*avatar)}
 	}
 	if k.Scopes == nil {
 		k.Scopes = []string{}

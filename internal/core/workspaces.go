@@ -38,7 +38,9 @@ type CoreWorkspaceSettings struct {
 	HelpCenterEnabled *bool   `json:"help_center_enabled,omitempty"`
 	HelpCenterTitle   *string `json:"help_center_title,omitempty" maxLength:"100"`
 	CSATEnabled       *bool   `json:"csat_enabled,omitempty"`
-	AutoAssign        *string `json:"auto_assign,omitempty" enum:"none,round_robin"`
+	AutoAssign        *string `json:"auto_assign,omitempty" enum:"none,round_robin,load_balanced" doc:"Default auto-assignment mode (see /v1/assignment)"`
+	Gravatar          *bool   `json:"gravatar,omitempty" doc:"Look up contact pictures on Gravatar (sends a hash of each contact's email to Gravatar). Default false"`
+	DomainLogos       *bool   `json:"domain_logos,omitempty" doc:"Fetch company logos from the company's website. Default true"`
 	Locale            *string `json:"locale,omitempty" maxLength:"35" doc:"Default language (BCP 47) of customer-facing pages: help center, CSAT, widget"`
 	LabelCreation     *string `json:"label_creation,omitempty" enum:"anyone,admins" doc:"Who may create labels by applying a new name"`
 	// StatusLabels and PriorityLabels rename and recolour the fixed values for display only.
@@ -81,12 +83,23 @@ func validOverrides(field string, in map[string]DisplayOverride, allowed []strin
 }
 
 type CoreWorkspace struct {
-	ID        uuid.UUID             `json:"id"`
-	Name      string                `json:"name"`
-	Slug      string                `json:"slug"`
-	WidgetKey string                `json:"widget_key"`
-	Settings  CoreWorkspaceSettings `json:"settings"`
-	CreatedAt time.Time             `json:"created_at"`
+	ID           uuid.UUID             `json:"id"`
+	Name         string                `json:"name"`
+	Slug         string                `json:"slug"`
+	WidgetKey    string                `json:"widget_key"`
+	Settings     CoreWorkspaceSettings `json:"settings"`
+	AvatarURL    domain.Avatar         `json:"avatar_url" doc:"Workspace logo"`
+	AvatarSource *string               `json:"avatar_source" enum:"upload"`
+	Images       WorkspaceImages       `json:"images"`
+	CreatedAt    time.Time             `json:"created_at"`
+}
+
+// WorkspaceImages are the brand pictures besides the logo.
+type WorkspaceImages struct {
+	HelpCenterLogo    domain.Avatar `json:"help_center_logo"`
+	HelpCenterFavicon domain.Avatar `json:"help_center_favicon"`
+	WidgetAvatar      domain.Avatar `json:"widget_avatar"`
+	WidgetLauncher    domain.Avatar `json:"widget_launcher"`
 }
 
 type CoreMembership struct {
@@ -94,16 +107,22 @@ type CoreMembership struct {
 	Role      string        `json:"role" enum:"owner,admin,agent,viewer"`
 }
 
-const workspaceCols = `w.id, w.name, w.slug, w.widget_key, w.settings, w.created_at`
+const workspaceCols = `w.id, w.name, w.slug, w.widget_key, w.settings, w.avatar_url, w.brand_images, w.created_at`
 
 func scanWorkspace(row pgx.Row, extra ...any) (CoreWorkspace, error) {
 	var w CoreWorkspace
 	var raw []byte
-	err := row.Scan(append([]any{&w.ID, &w.Name, &w.Slug, &w.WidgetKey, &raw, &w.CreatedAt}, extra...)...)
+	var brand map[string]string
+	err := row.Scan(append([]any{&w.ID, &w.Name, &w.Slug, &w.WidgetKey, &raw, &w.AvatarURL, &brand, &w.CreatedAt}, extra...)...)
 	if err != nil {
 		return w, err
 	}
 	_ = json.Unmarshal(raw, &w.Settings)
+	if w.AvatarURL != "" {
+		w.AvatarSource = ptr("upload")
+	}
+	w.Images = WorkspaceImages{HelpCenterLogo: domain.Avatar(brand["help_center_logo"]), HelpCenterFavicon: domain.Avatar(brand["help_center_favicon"]),
+		WidgetAvatar: domain.Avatar(brand["widget_avatar"]), WidgetLauncher: domain.Avatar(brand["widget_launcher"])}
 	return w, nil
 }
 
@@ -191,10 +210,16 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 		out["priority_labels"] = m
 	}
 	if s.AutoAssign != nil {
-		if *s.AutoAssign != "none" && *s.AutoAssign != "round_robin" {
-			return nil, httpx.Validation("auto_assign must be none or round_robin.")
+		if !slices.Contains([]string{"none", "round_robin", "load_balanced"}, *s.AutoAssign) {
+			return nil, httpx.Validation("auto_assign must be none, round_robin or load_balanced.")
 		}
 		out["auto_assign"] = *s.AutoAssign
+	}
+	if s.Gravatar != nil {
+		out["gravatar"] = *s.Gravatar
+	}
+	if s.DomainLogos != nil {
+		out["domain_logos"] = *s.DomainLogos
 	}
 	return out, nil
 }
@@ -321,7 +346,9 @@ func (s *svc) createWorkspace(ctx context.Context, tx pgx.Tx, p *auth.Principal,
 // fileKeys lists the stored objects of a workspace, removed after the rows are.
 func fileKeys(ctx context.Context, q db.Querier, wid uuid.UUID) ([]string, error) {
 	rows, err := q.Query(ctx, `SELECT storage_key FROM attachments WHERE workspace_id = $1
-		UNION ALL SELECT raw_storage_key FROM inbound_emails WHERE workspace_id = $1`, wid)
+		UNION ALL SELECT raw_storage_key FROM inbound_emails WHERE workspace_id = $1
+		UNION ALL SELECT storage_key || '/256.png' FROM images WHERE workspace_id = $1
+		UNION ALL SELECT storage_key || '/64.png' FROM images WHERE workspace_id = $1`, wid)
 	if err != nil {
 		return nil, err
 	}
@@ -467,8 +494,16 @@ func (s *svc) registerWorkspaces(api huma.API) {
 						return err
 					}
 				}
-				w, err = loadWorkspace(ctx, tx, p.WorkspaceID)
-				return err
+				if err := requeuePictures(ctx, tx, p.WorkspaceID, patch); err != nil {
+					return err
+				}
+				if w, err = loadWorkspace(ctx, tx, p.WorkspaceID); err != nil {
+					return err
+				}
+				if len(changed) == 0 {
+					return nil
+				}
+				return publishWorkspace(ctx, tx, w)
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)
@@ -615,4 +650,35 @@ func (s *svc) registerWorkspaces(api huma.API) {
 			out.Body.Secret = secret
 			return out, nil
 		})
+}
+
+// publishWorkspace sends workspace.updated.
+func publishWorkspace(ctx context.Context, tx pgx.Tx, w CoreWorkspace) error {
+	_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: w.ID, Type: "workspace.updated", Data: map[string]any{"workspace": w}})
+	return err
+}
+
+// requeuePictures schedules picture lookups when the automatic sources were switched:
+// on looks up every record without a picture, off lets the refresh job remove the
+// pictures that source provided.
+func requeuePictures(ctx context.Context, tx pgx.Tx, wid uuid.UUID, patch map[string]any) error {
+	if v, ok := patch["gravatar"].(bool); ok {
+		q := `UPDATE contacts SET avatar_retry_at = now(), avatar_failures = 0 WHERE workspace_id = $1 AND avatar_source = 'gravatar'`
+		if v {
+			q = `UPDATE contacts SET avatar_retry_at = now(), avatar_failures = 0 WHERE workspace_id = $1 AND avatar_url = '' AND email IS NOT NULL`
+		}
+		if _, err := tx.Exec(ctx, q, wid); err != nil {
+			return err
+		}
+	}
+	if v, ok := patch["domain_logos"].(bool); ok {
+		q := `UPDATE companies SET avatar_retry_at = now(), avatar_failures = 0 WHERE workspace_id = $1 AND avatar_source = 'domain'`
+		if v {
+			q = `UPDATE companies SET avatar_retry_at = now(), avatar_failures = 0 WHERE workspace_id = $1 AND avatar_url = '' AND domain <> ''`
+		}
+		if _, err := tx.Exec(ctx, q, wid); err != nil {
+			return err
+		}
+	}
+	return nil
 }

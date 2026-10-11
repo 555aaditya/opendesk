@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,12 +15,15 @@ import (
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/crypto"
 	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/deps"
 	"github.com/opendesk/opendesk/internal/displayname"
 	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/events"
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
 	"github.com/opendesk/opendesk/internal/httpx"
 	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/opendesk/opendesk/internal/images"
+	"github.com/opendesk/opendesk/internal/jobs"
 )
 
 type widgetWorkspace struct {
@@ -28,6 +32,8 @@ type widgetWorkspace struct {
 	Slug      string
 	SecretEnc []byte
 	Settings  hd.Settings
+	Logo      domain.Avatar
+	Brand     map[string]string
 }
 
 // loadByKey finds the workspace for a widget key, refusing unknown keys and disabled widgets alike.
@@ -38,8 +44,8 @@ func loadByKey(ctx context.Context, q db.Querier, key string) (widgetWorkspace, 
 	if key == "" || len(key) > 200 {
 		return w, httpx.NotFound("Widget")
 	}
-	err := q.QueryRow(ctx, `SELECT id, name, slug, widget_secret_enc, settings FROM workspaces WHERE widget_key = $1`, key).
-		Scan(&w.ID, &w.Name, &w.Slug, &w.SecretEnc, &raw)
+	err := q.QueryRow(ctx, `SELECT id, name, slug, widget_secret_enc, settings, avatar_url, brand_images FROM workspaces WHERE widget_key = $1`, key).
+		Scan(&w.ID, &w.Name, &w.Slug, &w.SecretEnc, &raw, &w.Logo, &w.Brand)
 	if db.IsNotFound(err) {
 		return w, httpx.NotFound("Widget")
 	}
@@ -55,12 +61,14 @@ func loadByKey(ctx context.Context, q db.Querier, key string) (widgetWorkspace, 
 
 type widgetConfig struct {
 	Body struct {
-		WorkspaceName string `json:"workspace_name"`
-		BrandColor    string `json:"brand_color"`
-		Greeting      string `json:"greeting"`
-		HelpCenterURL string `json:"help_center_url"`
-		RequireEmail  bool   `json:"require_email"`
-		Locale        string `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
+		WorkspaceName   string        `json:"workspace_name"`
+		BrandColor      string        `json:"brand_color"`
+		Greeting        string        `json:"greeting"`
+		HelpCenterURL   string        `json:"help_center_url"`
+		RequireEmail    bool          `json:"require_email"`
+		Locale          string        `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
+		AvatarURL       domain.Avatar `json:"avatar_url" doc:"The widget brand avatar, else the workspace logo"`
+		LauncherIconURL domain.Avatar `json:"launcher_icon_url"`
 	}
 }
 
@@ -74,6 +82,7 @@ type widgetSessionInput struct {
 		Name         string `json:"name,omitempty" maxLength:"200"`
 		UserID       string `json:"user_id,omitempty" maxLength:"200"`
 		UserHash     string `json:"user_hash,omitempty" maxLength:"128"`
+		AvatarURL    string `json:"avatar_url,omitempty" maxLength:"2000" doc:"https picture of the signed-in user; used only with a valid user_hash"`
 	}
 }
 
@@ -107,6 +116,11 @@ func (h *handler) registerPublic(api huma.API) {
 			out.Body.Greeting = ws.Greeting
 			out.Body.RequireEmail = ws.RequireEmail
 			out.Body.Locale = w.Settings.Locale
+			out.Body.AvatarURL = domain.Avatar(w.Brand["widget_avatar"])
+			if out.Body.AvatarURL == "" {
+				out.Body.AvatarURL = w.Logo
+			}
+			out.Body.LauncherIconURL = domain.Avatar(w.Brand["widget_launcher"])
 			if w.Settings.HelpCenterEnabled {
 				out.Body.HelpCenterURL = h.d.Cfg.AppURL + "/help/" + w.Slug
 			}
@@ -230,6 +244,11 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 			}
 		}
 
+		if verified {
+			if err := widgetPicture(ctx, h.d, tx, w.ID, contactID, strings.TrimSpace(b.AvatarURL)); err != nil {
+				return err
+			}
+		}
 		c, err := domain.LoadContact(ctx, tx, w.ID, contactID)
 		if err != nil {
 			return err
@@ -244,6 +263,9 @@ func (h *handler) session(ctx context.Context, in *widgetSessionInput) (*widgetS
 			token = "od_vis_" + crypto.RandomToken(32)
 			if _, err := tx.Exec(ctx, `INSERT INTO widget_sessions (id, workspace_id, contact_id, token_hash, verified, user_agent)
 				VALUES ($1,$2,$3,$4,$5,$6)`, ids.New(), w.ID, contactID, crypto.HashToken(token), verified, hd.Truncate(in.UserAgent, 400)); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE workspaces SET widget_seen_at = now() WHERE id = $1 AND widget_seen_at IS NULL`, w.ID); err != nil {
 				return err
 			}
 		}
@@ -375,4 +397,27 @@ func publishContact(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, typ strin
 	}
 	_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: typ, Data: map[string]any{"contact": c}})
 	return err
+}
+
+// widgetPicture records a verified visitor's picture URL and queues its copy, unless an
+// agent uploaded one. Only https URLs without credentials are kept.
+func widgetPicture(ctx context.Context, d *deps.Deps, tx pgx.Tx, wid, cid uuid.UUID, raw string) error {
+	if raw == "" || len(raw) > 2000 {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+		return nil
+	}
+	var changed bool
+	err = tx.QueryRow(ctx, `UPDATE contacts SET avatar_remote_url = $3, avatar_source = 'widget'
+		WHERE workspace_id = $1 AND id = $2 AND avatar_source IS DISTINCT FROM 'upload' AND avatar_remote_url IS DISTINCT FROM $3
+		RETURNING true`, wid, cid, raw).Scan(&changed)
+	if db.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return images.Enqueue(ctx, tx, d.Jobs, jobs.AvatarFetchArgs{Owner: images.OwnerContact, ID: cid, WorkspaceID: wid})
 }

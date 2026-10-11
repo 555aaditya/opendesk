@@ -80,7 +80,7 @@ func scanArticle(row pgx.Row) (KbArticle, error) {
 		return a, err
 	}
 	if uID != nil {
-		a.Author = &domain.UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: deref(uAvatar)}
+		a.Author = &domain.UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: domain.Avatar(deref(uAvatar))}
 	}
 	return a, nil
 }

@@ -12,38 +12,40 @@ type UserRef struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
-	AvatarURL string    `json:"avatar_url"`
+	AvatarURL Avatar    `json:"avatar_url"`
 }
 
 type ContactRef struct {
 	ID        uuid.UUID `json:"id"`
 	Email     *string   `json:"email"`
 	Name      string    `json:"name"`
-	AvatarURL string    `json:"avatar_url"`
+	AvatarURL Avatar    `json:"avatar_url"`
 }
 
 type CompanyRef struct {
-	ID     uuid.UUID `json:"id"`
-	Name   string    `json:"name"`
-	Domain string    `json:"domain"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Domain    string    `json:"domain"`
+	AvatarURL Avatar    `json:"avatar_url"`
 }
 
 type Contact struct {
-	ID          uuid.UUID      `json:"id"`
-	Email       *string        `json:"email"`
-	Name        string         `json:"name"`
-	Phone       string         `json:"phone"`
-	AvatarURL   string         `json:"avatar_url"`
-	Company     *CompanyRef    `json:"company"`
-	ExternalID  *string        `json:"external_id"`
-	Notes       string         `json:"notes"`
-	Custom      map[string]any `json:"custom"`
-	Tags        []TagRef       `json:"tags"`
-	Fields      map[string]any `json:"fields"`
-	Blocked     bool           `json:"blocked"`
-	TicketCount int            `json:"ticket_count"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID           uuid.UUID      `json:"id"`
+	Email        *string        `json:"email"`
+	Name         string         `json:"name"`
+	Phone        string         `json:"phone"`
+	AvatarURL    Avatar         `json:"avatar_url"`
+	AvatarSource *string        `json:"avatar_source" enum:"upload,gravatar,widget"`
+	Company      *CompanyRef    `json:"company"`
+	ExternalID   *string        `json:"external_id"`
+	Notes        string         `json:"notes"`
+	Custom       map[string]any `json:"custom"`
+	Tags         []TagRef       `json:"tags"`
+	Fields       map[string]any `json:"fields"`
+	Blocked      bool           `json:"blocked"`
+	TicketCount  int            `json:"ticket_count"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 // Tag is a label definition (contracts/api.md Tag).

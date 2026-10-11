@@ -40,7 +40,7 @@ func scanInvitation(r pgx.Row) (CoreInvitation, error) {
 		return i, err
 	}
 	if uid != nil {
-		i.InvitedBy = &domain.UserRef{ID: *uid, Name: *name, Email: *email, AvatarURL: *avatar}
+		i.InvitedBy = &domain.UserRef{ID: *uid, Name: *name, Email: *email, AvatarURL: domain.Avatar(*avatar)}
 	}
 	return i, nil
 }

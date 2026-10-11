@@ -12,6 +12,8 @@ import (
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerContacts(d, api)
 	registerCompanies(d, api)
+	registerAvatars(d, api)
+	InstallImageHooks()
 }
 
 func op(id, method, path, summary, tag string, status int) huma.Operation {

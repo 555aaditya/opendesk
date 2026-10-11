@@ -22,6 +22,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerViews(d, api)
 	registerSLA(d, api)
 	registerAutomations(d, api)
+	registerRouting(d, api)
 }
 
 func op(id, method, path, summary, tag string, status int) huma.Operation {

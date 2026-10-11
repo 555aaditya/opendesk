@@ -28,8 +28,10 @@ import (
 	"github.com/opendesk/opendesk/internal/crypto"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/httpx"
 	"github.com/opendesk/opendesk/internal/natsx"
+	"github.com/opendesk/opendesk/internal/storage"
 )
 
 // testEnv is a core API backed by a real Postgres (OPENDESK_TEST_DATABASE_URL).
@@ -69,6 +71,10 @@ func newEnv(t *testing.T) *testEnv {
 	d := &deps.Deps{Cfg: cfg, Log: log, DB: database, NATS: nc, Mailer: nil, Analytics: analytics.New("", "", log), Box: box,
 		Tokens: auth.NewTokens(cfg.AuthSecret), Captcha: captcha.NewTurnstileFromConfig(captcha.TurnstileConfig{Disabled: true}),
 		Limiter: httpx.NewLimiter()}
+	if d.Storage, err = storage.New(ctx, storage.Options{Driver: "local", Dir: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	domain.Configure(cfg.APIURL, cfg.AuthSecret)
 	d.Jobs, err = river.NewClient[pgx.Tx](riverpgxv5.New(database.Pool), &river.Config{})
 	if err != nil {
 		t.Fatal(err)

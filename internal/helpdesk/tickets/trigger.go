@@ -34,7 +34,7 @@ func (w *TriggerWorker) Work(ctx context.Context, job *river.Job[jobs.TicketTrig
 	return RunTrigger(ctx, w.D, job.Args)
 }
 
-// RunTrigger applies SLA policies, automations, round-robin assignment and reply
+// RunTrigger applies SLA policies, automations, auto-assignment and reply
 // notifications for one ticket change, in one transaction.
 func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) error {
 	// Auto-triage runs first, outside the trigger transaction (it calls a model), so the
@@ -65,7 +65,7 @@ func RunTrigger(ctx context.Context, d *deps.Deps, a jobs.TicketTriggerArgs) err
 			}
 		}
 		if a.Trigger == jobs.TriggerTicketCreated || a.Trigger == jobs.TriggerCustomerReplied {
-			if err := roundRobin(ctx, tx, d, a.WorkspaceID, a.TicketID); err != nil {
+			if err := autoAssign(ctx, tx, d, a.WorkspaceID, a.TicketID, a.Trigger); err != nil {
 				return err
 			}
 		}
@@ -90,9 +90,10 @@ func applySLA(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, created bool) 
 	}
 	var policyID *uuid.UUID
 	var frMin, resMin int
-	err := tx.QueryRow(ctx, `SELECT id, first_response_minutes, resolution_minutes FROM sla_policies
+	var inHours bool
+	err := tx.QueryRow(ctx, `SELECT id, first_response_minutes, resolution_minutes, business_hours FROM sla_policies
 		WHERE workspace_id = $1 AND enabled AND (priority = $2 OR priority IS NULL)
-		ORDER BY position, (priority IS NULL), created_at LIMIT 1`, wid, priority).Scan(&policyID, &frMin, &resMin)
+		ORDER BY position, (priority IS NULL), created_at LIMIT 1`, wid, priority).Scan(&policyID, &frMin, &resMin, &inHours)
 	if err != nil && !db.IsNotFound(err) {
 		return err
 	}
@@ -106,6 +107,14 @@ func applySLA(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, created bool) 
 	} else {
 		fr := createdAt.Add(time.Duration(frMin) * time.Minute)
 		res := createdAt.Add(time.Duration(resMin) * time.Minute)
+		if inHours {
+			st, err := hd.LoadSettings(ctx, tx, wid)
+			if err != nil {
+				return err
+			}
+			bh, loc := st.Hours(), st.Location()
+			fr, res = bh.AddBusinessMinutes(createdAt, frMin, loc), bh.AddBusinessMinutes(createdAt, resMin, loc)
+		}
 		_, err = tx.Exec(ctx, `UPDATE tickets SET sla_policy_id = $3, first_response_due_at = $4, resolution_due_at = $5,
 			sla_first_response_breached_at = CASE WHEN $4 > now() THEN NULL ELSE sla_first_response_breached_at END,
 			sla_resolution_breached_at = CASE WHEN $5 > now() THEN NULL ELSE sla_resolution_breached_at END,
@@ -435,64 +444,161 @@ func (r *triggerRun) addMessage(ctx context.Context, act hd.Action, f facts) err
 	return err
 }
 
-// roundRobin assigns an unassigned open ticket to the next agent in rotation when the
-// workspace has settings.auto_assign = "round_robin". With a team, it rotates among
-// that team's members.
-func roundRobin(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID) error {
+// Assignment modes (settings.auto_assign and assignment_rules.mode).
+const (
+	AssignNone         = "none"
+	AssignRoundRobin   = "round_robin"
+	AssignLoadBalanced = "load_balanced"
+)
+
+// resolveAssignMode picks the mode for a ticket: its team's rule, else its mailbox's
+// rule, else the workspace default.
+func resolveAssignMode(ctx context.Context, q pgx.Tx, wid uuid.UUID, team, mailbox *uuid.UUID, def string) (string, error) {
+	if team != nil || mailbox != nil {
+		var mode string
+		err := q.QueryRow(ctx, `SELECT mode FROM assignment_rules WHERE workspace_id = $1 AND (team_id = $2 OR mailbox_id = $3)
+			ORDER BY (team_id IS NULL) LIMIT 1`, wid, team, mailbox).Scan(&mode)
+		if err == nil {
+			return mode, nil
+		}
+		if !db.IsNotFound(err) {
+			return "", err
+		}
+	}
+	if def == AssignRoundRobin || def == AssignLoadBalanced {
+		return def, nil
+	}
+	return AssignNone, nil
+}
+
+// autoAssign assigns an unassigned open ticket by the mode that applies to it
+// (contracts/api.md "Assignment"). After Jev triaged a new ticket and the workspace
+// turned assign_after_triage on, the assignment is attributed to ai.
+func autoAssign(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID, trigger string) error {
 	s, err := hd.LoadSettings(ctx, tx, wid)
-	if err != nil || s.AutoAssign != "round_robin" {
+	if err != nil {
 		return err
 	}
-	var assignee, team *uuid.UUID
+	var assignee, team, mailbox *uuid.UUID
 	var status string
 	var spam bool
-	if err := tx.QueryRow(ctx, `SELECT assignee_id, team_id, status, spam FROM tickets WHERE workspace_id = $1 AND id = $2`, wid, tid).
-		Scan(&assignee, &team, &status, &spam); err != nil {
+	var custom map[string]any
+	if err := tx.QueryRow(ctx, `SELECT assignee_id, team_id, mailbox_id, status, spam, custom FROM tickets
+		WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, wid, tid).
+		Scan(&assignee, &team, &mailbox, &status, &spam, &custom); err != nil {
+		if db.IsNotFound(err) {
+			return nil
+		}
 		return err
 	}
 	if assignee != nil || spam || status == domain.StatusSolved || status == domain.StatusClosed {
 		return nil
 	}
-	pool := "workspace"
-	q := `SELECT m.user_id FROM members m WHERE m.workspace_id = $1 AND m.role IN ('owner','admin','agent') ORDER BY m.user_id`
-	args := []any{wid}
-	if team != nil {
-		pool = "team:" + team.String()
-		q = `SELECT m.user_id FROM members m JOIN team_members tm ON tm.user_id = m.user_id JOIN teams tt ON tt.id = tm.team_id
-			WHERE m.workspace_id = $1 AND tt.workspace_id = $1 AND tm.team_id = $2 AND m.role IN ('owner','admin','agent') ORDER BY m.user_id`
-		args = append(args, *team)
-	}
-	rows, err := tx.Query(ctx, q, args...)
+	mode, err := resolveAssignMode(ctx, tx, wid, team, mailbox, s.AutoAssign)
 	if err != nil {
 		return err
 	}
-	agents, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
-	if err != nil || len(agents) == 0 {
+	actor := Actor{Type: "system", Meta: map[string]any{"via": mode}}
+	if tc := s.Triage(); trigger == jobs.TriggerTicketCreated && tc.AutoTriage && tc.AssignAfterTriage && s.AI().Enabled {
+		if _, triaged := custom["ai_triaged_at"]; triaged {
+			if mode == AssignNone {
+				mode = AssignLoadBalanced
+			}
+			actor = Actor{Type: "ai", Meta: map[string]any{"via": "triage", "mode": mode}}
+		}
+	}
+	if mode == AssignNone {
+		return nil
+	}
+	pool := team
+	if pool == nil && mailbox != nil {
+		var mbTeam *uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT team_id FROM mailboxes WHERE workspace_id = $1 AND id = $2`, wid, *mailbox).Scan(&mbTeam); err != nil && !db.IsNotFound(err) {
+			return err
+		}
+		pool = mbTeam
+	}
+	next, err := PickAssignee(ctx, tx, wid, pool, mode)
+	if err != nil || next == nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO round_robin_cursors (workspace_id, pool) VALUES ($1, $2) ON CONFLICT DO NOTHING`, wid, pool); err != nil {
-		return err
+	_, err = applyPatch(ctx, tx, d, wid, tid, actor, Patch{Assignee: Opt[uuid.UUID]{Set: true, Value: *next}}, applyOpts{})
+	return err
+}
+
+type candidate struct {
+	ID   uuid.UUID
+	Open int
+}
+
+// PickAssignee chooses the next agent of a pool (a team, or the whole workspace) and
+// moves the pool's cursor. Eligible: owners, admins and agents whose presence is
+// online and who are under their open ticket cap. nil when nobody is eligible.
+func PickAssignee(ctx context.Context, tx pgx.Tx, wid uuid.UUID, team *uuid.UUID, mode string) (*uuid.UUID, error) {
+	key := "workspace"
+	q := `SELECT m.user_id, ` + domain.OpenTicketsSQL + ` FROM members m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id
+		WHERE m.workspace_id = $1 AND m.role IN ('owner','admin','agent') AND ` + domain.PresenceSQL + ` = 'online'
+		AND (m.max_open_tickets IS NULL OR ` + domain.OpenTicketsSQL + ` < m.max_open_tickets)`
+	args := []any{wid}
+	if team != nil {
+		key = "team:" + team.String()
+		q += ` AND EXISTS (SELECT 1 FROM team_members tm JOIN teams tt ON tt.id = tm.team_id
+			WHERE tm.user_id = m.user_id AND tm.team_id = $2 AND tt.workspace_id = $1)`
+		args = append(args, *team)
+	}
+	rows, err := tx.Query(ctx, q+` ORDER BY m.user_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	cands, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (candidate, error) {
+		var c candidate
+		return c, r.Scan(&c.ID, &c.Open)
+	})
+	if err != nil || len(cands) == 0 {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO round_robin_cursors (workspace_id, pool) VALUES ($1, $2) ON CONFLICT DO NOTHING`, wid, key); err != nil {
+		return nil, err
 	}
 	var last *uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT last_user_id FROM round_robin_cursors WHERE workspace_id = $1 AND pool = $2 FOR UPDATE`, wid, pool).Scan(&last); err != nil {
-		return err
+	if err := tx.QueryRow(ctx, `SELECT last_user_id FROM round_robin_cursors WHERE workspace_id = $1 AND pool = $2 FOR UPDATE`, wid, key).Scan(&last); err != nil {
+		return nil, err
 	}
-	next := agents[0]
+	next := chooseCandidate(cands, last, mode)
+	if _, err := tx.Exec(ctx, `UPDATE round_robin_cursors SET last_user_id = $3, updated_at = now() WHERE workspace_id = $1 AND pool = $2`,
+		wid, key, next); err != nil {
+		return nil, err
+	}
+	return &next, nil
+}
+
+// chooseCandidate applies a mode to candidates sorted by id: round robin takes the
+// first after last; load balanced takes the fewest open tickets, ties in round robin
+// order.
+func chooseCandidate(cands []candidate, last *uuid.UUID, mode string) uuid.UUID {
+	start := 0
 	if last != nil {
-		for _, a := range agents {
-			if a.String() > last.String() {
-				next = a
+		for i, c := range cands {
+			if c.ID.String() > last.String() {
+				start = i
 				break
+			}
+			if i == len(cands)-1 {
+				start = 0
 			}
 		}
 	}
-	if _, err := tx.Exec(ctx, `UPDATE round_robin_cursors SET last_user_id = $3, updated_at = now() WHERE workspace_id = $1 AND pool = $2`,
-		wid, pool, next); err != nil {
-		return err
+	order := append(append([]candidate{}, cands[start:]...), cands[:start]...)
+	if mode != AssignLoadBalanced {
+		return order[0].ID
 	}
-	_, err = applyPatch(ctx, tx, d, wid, tid, Actor{Type: "system", Meta: map[string]any{"via": "round_robin"}},
-		Patch{Assignee: Opt[uuid.UUID]{Set: true, Value: next}}, applyOpts{})
-	return err
+	best := order[0]
+	for _, c := range order[1:] {
+		if c.Open < best.Open {
+			best = c
+		}
+	}
+	return best.ID
 }
 
 func notifyCustomerReplied(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, messageID *uuid.UUID) error {

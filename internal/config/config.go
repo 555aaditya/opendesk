@@ -81,6 +81,9 @@ type Config struct {
 
 	TurnstileSiteKey string
 	TurnstileSecret  string
+	// LogoDevToken turns on logo.dev as the first source of company logos (sends the
+	// company's domain to logo.dev).
+	LogoDevToken string
 
 	PosthogKey  string
 	PosthogHost string
@@ -170,6 +173,7 @@ func Load() (*Config, error) {
 
 		TurnstileSiteKey: env("TURNSTILE_SITE_KEY", ""),
 		TurnstileSecret:  env("TURNSTILE_SECRET", ""),
+		LogoDevToken:     env("LOGO_DEV_TOKEN", ""),
 		PosthogKey:       env("POSTHOG_KEY", ""),
 		PosthogHost:      env("POSTHOG_HOST", "https://us.i.posthog.com"),
 		EventRetention:   envDuration("EVENT_RETENTION", 7*24*time.Hour),

@@ -10,24 +10,26 @@ import (
 	"github.com/opendesk/opendesk/internal/audit"
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/domain"
 )
 
 // CoreUser is the signed-in person's own record (contracts/api.md User).
 type CoreUser struct {
-	ID            uuid.UUID `json:"id"`
-	Email         string    `json:"email"`
-	Name          string    `json:"name"`
-	AvatarURL     string    `json:"avatar_url"`
-	EmailVerified bool      `json:"email_verified"`
-	TOTPEnabled   bool      `json:"totp_enabled"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            uuid.UUID     `json:"id"`
+	Email         string        `json:"email"`
+	Name          string        `json:"name"`
+	AvatarURL     domain.Avatar `json:"avatar_url"`
+	AvatarSource  *string       `json:"avatar_source" enum:"upload,oauth"`
+	EmailVerified bool          `json:"email_verified"`
+	TOTPEnabled   bool          `json:"totp_enabled"`
+	CreatedAt     time.Time     `json:"created_at"`
 }
 
-const userCols = `id, email, name, avatar_url, email_verified_at IS NOT NULL, totp_enabled, created_at`
+const userCols = `id, email, name, avatar_url, avatar_source, email_verified_at IS NOT NULL, totp_enabled, created_at`
 
 func scanUser(row pgx.Row) (CoreUser, error) {
 	var u CoreUser
-	err := row.Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.EmailVerified, &u.TOTPEnabled, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.Email, &u.Name, &u.AvatarURL, &u.AvatarSource, &u.EmailVerified, &u.TOTPEnabled, &u.CreatedAt)
 	return u, err
 }
 

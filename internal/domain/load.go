@@ -78,10 +78,10 @@ func ScanTicket(row pgx.Row) (Ticket, error) {
 		return t, err
 	}
 	if cID != nil {
-		t.Contact = &ContactRef{ID: *cID, Email: cEmail, Name: deref(cName), AvatarURL: deref(cAvatar)}
+		t.Contact = &ContactRef{ID: *cID, Email: cEmail, Name: deref(cName), AvatarURL: Avatar(deref(cAvatar))}
 	}
 	if uID != nil {
-		t.Assignee = &UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: deref(uAvatar)}
+		t.Assignee = &UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: Avatar(deref(uAvatar))}
 	}
 	if slaID != nil {
 		now := time.Now()
@@ -137,10 +137,10 @@ func ScanMessage(row pgx.Row) (Message, error) {
 		return m, err
 	}
 	if uID != nil {
-		m.Author.User = &UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: deref(uAvatar)}
+		m.Author.User = &UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: Avatar(deref(uAvatar))}
 	}
 	if cID != nil {
-		m.Author.Contact = &ContactRef{ID: *cID, Email: cEmail, Name: deref(cName), AvatarURL: deref(cAvatar)}
+		m.Author.Contact = &ContactRef{ID: *cID, Email: cEmail, Name: deref(cName), AvatarURL: Avatar(deref(cAvatar))}
 	}
 	m.Attachments = []Attachment{}
 	if err := json.Unmarshal(atts, &m.Attachments); err != nil {
@@ -176,8 +176,8 @@ func ListMessages(ctx context.Context, q db.Querier, wid, ticketID uuid.UUID, pu
 	return out, err
 }
 
-var ContactSelect = `SELECT ct.id, ct.email, ct.name, ct.phone, ct.avatar_url, ct.external_id, ct.notes, ct.custom,
-	ct.blocked, ct.created_at, ct.updated_at, co.id, co.name, co.domain,
+var ContactSelect = `SELECT ct.id, ct.email, ct.name, ct.phone, ct.avatar_url, ct.avatar_source, ct.external_id, ct.notes, ct.custom,
+	ct.blocked, ct.created_at, ct.updated_at, co.id, co.name, co.domain, co.avatar_url,
 	(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL),
 	ct.fields, ` + TagRefsSQL("contact_tags", "lt.contact_id = ct.id") + `
 FROM contacts ct LEFT JOIN companies co ON co.id = ct.company_id`
@@ -185,10 +185,10 @@ FROM contacts ct LEFT JOIN companies co ON co.id = ct.company_id`
 func ScanContact(row pgx.Row) (Contact, error) {
 	var c Contact
 	var coID *uuid.UUID
-	var coName, coDomain *string
+	var coName, coDomain, coAvatar *string
 	var tags []byte
-	err := row.Scan(&c.ID, &c.Email, &c.Name, &c.Phone, &c.AvatarURL, &c.ExternalID, &c.Notes, &c.Custom,
-		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &c.TicketCount, &c.Fields, &tags)
+	err := row.Scan(&c.ID, &c.Email, &c.Name, &c.Phone, &c.AvatarURL, &c.AvatarSource, &c.ExternalID, &c.Notes, &c.Custom,
+		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &coAvatar, &c.TicketCount, &c.Fields, &tags)
 	if err != nil {
 		return c, err
 	}
@@ -200,7 +200,7 @@ func ScanContact(row pgx.Row) (Contact, error) {
 		return c, err
 	}
 	if coID != nil {
-		c.Company = &CompanyRef{ID: *coID, Name: deref(coName), Domain: deref(coDomain)}
+		c.Company = &CompanyRef{ID: *coID, Name: deref(coName), Domain: deref(coDomain), AvatarURL: Avatar(deref(coAvatar))}
 	}
 	if c.Custom == nil {
 		c.Custom = map[string]any{}

@@ -40,7 +40,7 @@ func scanActivity(row pgx.Row) (domain.Activity, error) {
 		return a, err
 	}
 	if uID != nil {
-		a.Actor.User = &domain.UserRef{ID: *uID, Name: str(uName), Email: str(uEmail), AvatarURL: str(uAvatar)}
+		a.Actor.User = &domain.UserRef{ID: *uID, Name: str(uName), Email: str(uEmail), AvatarURL: domain.Avatar(str(uAvatar))}
 	}
 	if a.Data == nil {
 		a.Data = map[string]any{}

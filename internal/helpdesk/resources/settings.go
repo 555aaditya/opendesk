@@ -31,6 +31,7 @@ type SlaPolicy struct {
 	Priority             *string   `json:"priority" enum:"low,normal,high,urgent"`
 	FirstResponseMinutes int       `json:"first_response_minutes"`
 	ResolutionMinutes    int       `json:"resolution_minutes"`
+	BusinessHours        bool      `json:"business_hours" doc:"Count only open business hours (GET /v1/business-hours)"`
 	Enabled              bool      `json:"enabled"`
 	Position             int       `json:"position"`
 }
@@ -40,6 +41,7 @@ type slaPolicyWriteBody struct {
 	Priority             Nullable[string] `json:"priority,omitempty" doc:"low, normal, high, urgent, or null for any priority"`
 	FirstResponseMinutes *int             `json:"first_response_minutes,omitempty" minimum:"1" maximum:"525600"`
 	ResolutionMinutes    *int             `json:"resolution_minutes,omitempty" minimum:"1" maximum:"525600"`
+	BusinessHours        *bool            `json:"business_hours,omitempty"`
 	Enabled              *bool            `json:"enabled,omitempty"`
 	Position             *int             `json:"position,omitempty" minimum:"0" maximum:"100000"`
 }
@@ -75,6 +77,9 @@ func (b *slaPolicyWriteBody) apply(s *SlaPolicy) error {
 			return httpx.Validation("first_response_minutes and resolution_minutes must be between 1 and 525600")
 		}
 	}
+	if b.BusinessHours != nil {
+		s.BusinessHours = *b.BusinessHours
+	}
 	if b.Enabled != nil {
 		s.Enabled = *b.Enabled
 	}
@@ -84,11 +89,11 @@ func (b *slaPolicyWriteBody) apply(s *SlaPolicy) error {
 	return nil
 }
 
-const slaSelect = `SELECT id, name, priority, first_response_minutes, resolution_minutes, enabled, position FROM sla_policies`
+const slaSelect = `SELECT id, name, priority, first_response_minutes, resolution_minutes, business_hours, enabled, position FROM sla_policies`
 
 func scanSLA(r pgx.Row) (SlaPolicy, error) {
 	var s SlaPolicy
-	err := r.Scan(&s.ID, &s.Name, &s.Priority, &s.FirstResponseMinutes, &s.ResolutionMinutes, &s.Enabled, &s.Position)
+	err := r.Scan(&s.ID, &s.Name, &s.Priority, &s.FirstResponseMinutes, &s.ResolutionMinutes, &s.BusinessHours, &s.Enabled, &s.Position)
 	return s, err
 }
 
@@ -208,8 +213,8 @@ func registerSLA(d *deps.Deps, api huma.API) {
 					}
 				}
 				if _, err := tx.Exec(ctx, `INSERT INTO sla_policies (id, workspace_id, name, priority, first_response_minutes,
-					resolution_minutes, enabled, position) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, s.ID, p.WorkspaceID, s.Name, s.Priority,
-					s.FirstResponseMinutes, s.ResolutionMinutes, s.Enabled, s.Position); err != nil {
+					resolution_minutes, enabled, position, business_hours) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, s.ID, p.WorkspaceID, s.Name, s.Priority,
+					s.FirstResponseMinutes, s.ResolutionMinutes, s.Enabled, s.Position, s.BusinessHours); err != nil {
 					return err
 				}
 				return settingsChanged(ctx, tx, p, "sla_policy", "created", s.ID, map[string]any{"sla_policy": s}, slaAudit(s))
@@ -267,8 +272,8 @@ func registerSLA(d *deps.Deps, api huma.API) {
 					return err
 				}
 				if _, err := tx.Exec(ctx, `UPDATE sla_policies SET name = $3, priority = $4, first_response_minutes = $5,
-					resolution_minutes = $6, enabled = $7, position = $8, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, id, s.Name, s.Priority, s.FirstResponseMinutes, s.ResolutionMinutes, s.Enabled, s.Position); err != nil {
+					resolution_minutes = $6, enabled = $7, position = $8, business_hours = $9, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, id, s.Name, s.Priority, s.FirstResponseMinutes, s.ResolutionMinutes, s.Enabled, s.Position, s.BusinessHours); err != nil {
 					return err
 				}
 				return settingsChanged(ctx, tx, p, "sla_policy", "updated", s.ID, map[string]any{"sla_policy": s}, slaAudit(s))

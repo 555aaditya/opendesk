@@ -326,7 +326,7 @@ func usageReport(ctx context.Context, q db.Querier, wid uuid.UUID, from, to time
 			return m, err
 		}
 		if id != nil {
-			m.User = &domain.UserRef{ID: *id, Name: *name, Email: *email, AvatarURL: *avatar}
+			m.User = &domain.UserRef{ID: *id, Name: *name, Email: *email, AvatarURL: domain.Avatar(*avatar)}
 		}
 		return m, nil
 	})

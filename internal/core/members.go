@@ -18,18 +18,31 @@ import (
 	"github.com/opendesk/opendesk/internal/httpx"
 )
 
-type CoreMember struct {
-	User      domain.UserRef `json:"user"`
-	Role      string         `json:"role" enum:"owner,admin,agent,viewer"`
-	CreatedAt time.Time      `json:"created_at"`
+// MemberUser is a member's user with the source of their picture.
+type MemberUser struct {
+	domain.UserRef
+	AvatarSource *string `json:"avatar_source" enum:"upload,oauth"`
 }
 
-const memberSelect = `SELECT u.id, u.name, u.email, u.avatar_url, m.role, m.created_at
-	FROM members m JOIN users u ON u.id = m.user_id`
+type CoreMember struct {
+	User           MemberUser `json:"user"`
+	Role           string     `json:"role" enum:"owner,admin,agent,viewer"`
+	Availability   string     `json:"availability" enum:"online,away,offline"`
+	Presence       string     `json:"presence" enum:"online,away,offline" doc:"availability, or away when auto-away applies"`
+	MaxOpenTickets *int       `json:"max_open_tickets" doc:"Auto-assignment cap on open and pending tickets; null = no cap"`
+	OpenTickets    int        `json:"open_tickets"`
+	LastSeenAt     *time.Time `json:"last_seen_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+const memberSelect = `SELECT u.id, u.name, u.email, u.avatar_url, u.avatar_source, m.role, m.availability, ` + domain.PresenceSQL + `,
+	m.max_open_tickets, ` + domain.OpenTicketsSQL + `, u.last_seen_at, m.created_at
+	FROM members m JOIN users u ON u.id = m.user_id JOIN workspaces w ON w.id = m.workspace_id`
 
 func scanMember(r pgx.Row) (CoreMember, error) {
 	var m CoreMember
-	err := r.Scan(&m.User.ID, &m.User.Name, &m.User.Email, &m.User.AvatarURL, &m.Role, &m.CreatedAt)
+	err := r.Scan(&m.User.ID, &m.User.Name, &m.User.Email, &m.User.AvatarURL, &m.User.AvatarSource, &m.Role, &m.Availability,
+		&m.Presence, &m.MaxOpenTickets, &m.OpenTickets, &m.LastSeenAt, &m.CreatedAt)
 	return m, err
 }
 

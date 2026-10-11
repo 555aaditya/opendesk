@@ -19,13 +19,14 @@ import (
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
 	"github.com/opendesk/opendesk/internal/httpx"
 	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/opendesk/opendesk/internal/images"
 )
 
 type contactWriteBody struct {
 	Email      Nullable[string] `json:"email,omitempty" doc:"Email address; null clears it"`
 	Name       *string          `json:"name,omitempty" maxLength:"200"`
 	Phone      *string          `json:"phone,omitempty" maxLength:"50"`
-	AvatarURL  *string          `json:"avatar_url,omitempty" maxLength:"2000"`
+	AvatarURL  *string          `json:"avatar_url,omitempty" maxLength:"2000" doc:"An https picture URL to copy (fetched and processed server-side, counts as an upload), or empty to remove the uploaded picture"`
 	CompanyID  Nullable[string] `json:"company_id,omitempty" doc:"Company id; null clears it"`
 	ExternalID Nullable[string] `json:"external_id,omitempty" doc:"Your system's id; null clears it"`
 	Notes      *string          `json:"notes,omitempty" maxLength:"10000"`
@@ -54,7 +55,7 @@ type contactRow struct {
 	Email      *string
 	Name       string
 	Phone      string
-	AvatarURL  string
+	PictureURL *string // set: copy this picture ("" removes the manual one)
 	CompanyID  *uuid.UUID
 	ExternalID *string
 	Notes      string
@@ -102,7 +103,7 @@ func (b *contactWriteBody) apply(ctx context.Context, q db.Querier, wid uuid.UUI
 		if err != nil {
 			return err
 		}
-		row.AvatarURL = s
+		row.PictureURL = &s
 	}
 	if b.CompanyID.Set {
 		if b.CompanyID.Null || strings.TrimSpace(b.CompanyID.Value) == "" {
@@ -228,11 +229,14 @@ func registerContacts(d *deps.Deps, api huma.API) {
 					return err
 				}
 				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, email, name, phone, avatar_url, company_id,
-					external_id, notes, custom, blocked, fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-					id, p.WorkspaceID, row.Email, row.Name, row.Phone, row.AvatarURL, row.CompanyID, row.ExternalID,
+				if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, email, name, phone, company_id,
+					external_id, notes, custom, blocked, fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+					id, p.WorkspaceID, row.Email, row.Name, row.Phone, row.CompanyID, row.ExternalID,
 					row.Notes, row.Custom, row.Blocked, row.Fields); err != nil {
 					return uniqueErr(err)
+				}
+				if _, err := pictureFromURL(ctx, d, tx, p.WorkspaceID, id, row.PictureURL); err != nil {
+					return err
 				}
 				if err := applyLabels(ctx, tx, p, domain.ContactLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
 					return err
@@ -287,9 +291,11 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			var c domain.Contact
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				var row contactRow
-				err := tx.QueryRow(ctx, `SELECT email, name, phone, avatar_url, company_id, external_id, notes, custom, blocked, fields
+				var oldEmail *string
+				err := tx.QueryRow(ctx, `SELECT email, name, phone, company_id, external_id, notes, custom, blocked, fields
 					FROM contacts WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).
-					Scan(&row.Email, &row.Name, &row.Phone, &row.AvatarURL, &row.CompanyID, &row.ExternalID, &row.Notes, &row.Custom, &row.Blocked, &row.Fields)
+					Scan(&row.Email, &row.Name, &row.Phone, &row.CompanyID, &row.ExternalID, &row.Notes, &row.Custom, &row.Blocked, &row.Fields)
+				oldEmail = row.Email
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Contact")
 				}
@@ -305,11 +311,23 @@ func registerContacts(d *deps.Deps, api huma.API) {
 				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityContact, &row.Fields, in.Body.Fields); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `UPDATE contacts SET email = $3, name = $4, phone = $5, avatar_url = $6, company_id = $7,
-					external_id = $8, notes = $9, custom = $10, blocked = $11, fields = $12, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
-					p.WorkspaceID, id, row.Email, row.Name, row.Phone, row.AvatarURL, row.CompanyID, row.ExternalID,
+				if _, err := tx.Exec(ctx, `UPDATE contacts SET email = $3, name = $4, phone = $5, company_id = $6,
+					external_id = $7, notes = $8, custom = $9, blocked = $10, fields = $11, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, id, row.Email, row.Name, row.Phone, row.CompanyID, row.ExternalID,
 					row.Notes, row.Custom, row.Blocked, row.Fields); err != nil {
 					return uniqueErr(err)
+				}
+				if prefix, err := pictureFromURL(ctx, d, tx, p.WorkspaceID, id, row.PictureURL); err != nil {
+					return err
+				} else if prefix != "" {
+					defer images.Discard(d.Storage, prefix)
+				}
+				if !sameEmail(oldEmail, row.Email) {
+					// A new address may have a different Gravatar picture.
+					if _, err := tx.Exec(ctx, `UPDATE contacts SET avatar_retry_at = now(), avatar_failures = 0
+						WHERE workspace_id = $1 AND id = $2 AND avatar_source IS DISTINCT FROM 'upload'`, p.WorkspaceID, id); err != nil {
+						return err
+					}
 				}
 				if err := applyLabels(ctx, tx, p, domain.ContactLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
 					return err

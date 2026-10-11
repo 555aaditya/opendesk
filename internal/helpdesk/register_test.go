@@ -63,6 +63,13 @@ func TestRegisterAll(t *testing.T) {
 		"/v1/widget/conversations/{id}/messages":              {"get", "post"},
 		"/v1/widget/attachments":                              {"post"},
 		"/v1/widget/settings":                                 {"get", "patch"},
+		"/v1/contacts/{id}/avatar":                            {"put", "delete"},
+		"/v1/contacts/{id}/avatar/refresh":                    {"post"},
+		"/v1/companies/{id}/avatar":                           {"put", "delete"},
+		"/v1/companies/{id}/avatar/refresh":                   {"post"},
+		"/v1/assignment":                                      {"get", "patch"},
+		"/v1/triage":                                          {"get", "patch"},
+		"/v1/business-hours":                                  {"get", "put"},
 	}
 	for path, methods := range want {
 		for _, m := range methods {
@@ -73,10 +80,11 @@ func TestRegisterAll(t *testing.T) {
 	}
 	// The download route is raw chi (redirect or stream), outside the spec.
 	e.Do("GET", "/v1/attachments/00000000-0000-0000-0000-000000000000", hdtest.Auth{}, nil).Want(t, 404)
+	e.Do("GET", "/v1/images/00000000-0000-0000-0000-000000000000", hdtest.Auth{}, nil).Want(t, 404)
 
 	w := river.NewWorkers()
 	helpdesk.RegisterWorkers(e.D, w)
-	if n := len(helpdesk.Periodic(e.D)); n != 4 {
+	if n := len(helpdesk.Periodic(e.D)); n != 5 {
 		t.Fatalf("periodic jobs %d", n)
 	}
 }

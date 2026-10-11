@@ -81,6 +81,9 @@ func (s *svc) tokenResponse(ctx context.Context, q db.Querier, uid, sid uuid.UUI
 	if err != nil {
 		return nil, err
 	}
+	if _, err := q.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, uid); err != nil {
+		return nil, err
+	}
 	u, err := loadUser(ctx, q, uid)
 	if err != nil {
 		return nil, err

@@ -145,3 +145,23 @@ type AISummarizeArgs struct {
 }
 
 func (AISummarizeArgs) Kind() string { return "ai.summarize" }
+
+// AvatarFetchArgs looks up (or downloads) the picture of a user, contact or company and
+// stores it processed. URL, when set, is the picture to copy (provider picture, widget
+// avatar_url, an avatar_url given through the API); otherwise the automatic sources
+// are tried. Owner: helpdesk (internal/images).
+type AvatarFetchArgs struct {
+	Owner       string    `json:"owner"` // user | contact | company
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id,omitempty"`
+	URL         string    `json:"url,omitempty"`
+	Source      string    `json:"source,omitempty"` // upload | oauth | widget
+}
+
+func (AvatarFetchArgs) Kind() string { return "images.fetch_avatar" }
+
+// AvatarSweepArgs enqueues the pictures due for a lookup and removes unreferenced
+// images. Owner: helpdesk (internal/images).
+type AvatarSweepArgs struct{}
+
+func (AvatarSweepArgs) Kind() string { return "images.sweep" }

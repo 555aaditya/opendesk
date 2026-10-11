@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -13,23 +12,13 @@ import (
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/displayname"
 	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/opendesk/opendesk/internal/images"
+	"github.com/opendesk/opendesk/internal/jobs"
 )
 
 type coreMeResponse struct {
 	User        CoreUser         `json:"user"`
 	Memberships []CoreMembership `json:"memberships"`
-}
-
-// validAvatarURL accepts an empty value or an https URL without credentials.
-func validAvatarURL(s string) bool {
-	if s == "" {
-		return true
-	}
-	if len(s) > 500 {
-		return false
-	}
-	u, err := url.Parse(s)
-	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil
 }
 
 func (s *svc) registerMe(api huma.API) {
@@ -58,7 +47,7 @@ func (s *svc) registerMe(api huma.API) {
 		func(ctx context.Context, in *struct {
 			Body struct {
 				Name      *string `json:"name,omitempty" maxLength:"200"`
-				AvatarURL *string `json:"avatar_url,omitempty" maxLength:"500"`
+				AvatarURL *string `json:"avatar_url,omitempty" maxLength:"2000" doc:"An https picture URL to copy (fetched and processed server-side), or empty to remove the picture"`
 			}
 		}) (*struct{ Body CoreUser }, error) {
 			p, err := auth.RequireUser(ctx)
@@ -73,13 +62,47 @@ func (s *svc) registerMe(api huma.API) {
 				}
 				name = &n
 			}
-			if in.Body.AvatarURL != nil && !validAvatarURL(*in.Body.AvatarURL) {
+			if in.Body.AvatarURL != nil && *in.Body.AvatarURL != "" && !validPictureURL(*in.Body.AvatarURL) {
 				return nil, httpx.Validation("avatar_url must be an https URL.")
 			}
-			u, err := scanUser(s.d.DB.Pool.QueryRow(ctx, `UPDATE users SET name = COALESCE($2, name), avatar_url = COALESCE($3, avatar_url),
-				updated_at = now() WHERE id = $1 RETURNING `+userCols, p.UserID, name, in.Body.AvatarURL))
+			var oldPrefix string
+			var u CoreUser
+			err = s.tx(ctx, func(tx pgx.Tx) error {
+				if _, err := tx.Exec(ctx, `UPDATE users SET name = COALESCE($2, name), updated_at = now() WHERE id = $1`, p.UserID, name); err != nil {
+					return err
+				}
+				if a := in.Body.AvatarURL; a != nil {
+					if *a == "" {
+						o := images.Owner{Type: images.OwnerUser, ID: p.UserID}
+						if oldPrefix, err = images.ClearTx(ctx, tx, o, false, images.SetOptions{}); err != nil {
+							return err
+						}
+						if _, err := tx.Exec(ctx, `UPDATE users SET avatar_remote_url = '' WHERE id = $1`, p.UserID); err != nil {
+							return err
+						}
+					} else {
+						if _, err := tx.Exec(ctx, `UPDATE users SET avatar_remote_url = $2 WHERE id = $1`, p.UserID, *a); err != nil {
+							return err
+						}
+						if err := images.Enqueue(ctx, tx, s.d.Jobs, jobs.AvatarFetchArgs{Owner: images.OwnerUser, ID: p.UserID,
+							URL: *a, Source: "upload"}); err != nil {
+							return err
+						}
+					}
+				}
+				if name != nil && (in.Body.AvatarURL == nil || *in.Body.AvatarURL != "") {
+					if err := images.Changed(ctx, tx, images.Owner{Type: images.OwnerUser, ID: p.UserID}); err != nil {
+						return err
+					}
+				}
+				u, err = loadUser(ctx, tx, p.UserID)
+				return err
+			})
 			if err != nil {
 				return nil, httpx.Wrap(err)
+			}
+			if oldPrefix != "" {
+				images.Discard(s.d.Storage, oldPrefix)
 			}
 			return &struct{ Body CoreUser }{u}, nil
 		})

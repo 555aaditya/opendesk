@@ -35,6 +35,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/stripe/stripe-go/v87 v87.0.0
 	golang.org/x/crypto v0.58.0
+	golang.org/x/image v0.47.0
 	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.24.0

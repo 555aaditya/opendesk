@@ -26,6 +26,8 @@ type Company struct {
 	ID           uuid.UUID       `json:"id"`
 	Name         string          `json:"name"`
 	Domain       string          `json:"domain"`
+	AvatarURL    domain.Avatar   `json:"avatar_url" doc:"Logo"`
+	AvatarSource *string         `json:"avatar_source" enum:"upload,domain"`
 	Notes        string          `json:"notes"`
 	Custom       map[string]any  `json:"custom"`
 	Tags         []domain.TagRef `json:"tags"`
@@ -35,7 +37,7 @@ type Company struct {
 	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-var companySelect = `SELECT co.id, co.name, co.domain, co.notes, co.custom,
+var companySelect = `SELECT co.id, co.name, co.domain, co.avatar_url, co.avatar_source, co.notes, co.custom,
 	(SELECT count(*) FROM contacts c WHERE c.workspace_id = co.workspace_id AND c.company_id = co.id), co.created_at, co.updated_at,
 	co.fields, ` + domain.TagRefsSQL("company_tags", "lt.company_id = co.id") + `
 FROM companies co`
@@ -43,7 +45,7 @@ FROM companies co`
 func scanCompany(r pgx.Row) (Company, error) {
 	var c Company
 	var tags []byte
-	err := r.Scan(&c.ID, &c.Name, &c.Domain, &c.Notes, &c.Custom, &c.ContactCount, &c.CreatedAt, &c.UpdatedAt, &c.Fields, &tags)
+	err := r.Scan(&c.ID, &c.Name, &c.Domain, &c.AvatarURL, &c.AvatarSource, &c.Notes, &c.Custom, &c.ContactCount, &c.CreatedAt, &c.UpdatedAt, &c.Fields, &tags)
 	if c.Custom == nil {
 		c.Custom = map[string]any{}
 	}
@@ -242,6 +244,7 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 				var row companyRow
 				err := tx.QueryRow(ctx, `SELECT name, domain, notes, custom, fields FROM companies WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
 					p.WorkspaceID, id).Scan(&row.Name, &row.Domain, &row.Notes, &row.Custom, &row.Fields)
+				oldDomain := row.Domain
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Company")
 				}
@@ -257,6 +260,13 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 				if _, err := tx.Exec(ctx, `UPDATE companies SET name = $3, domain = $4, notes = $5, custom = $6, fields = $7, updated_at = now()
 					WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, row.Name, row.Domain, row.Notes, row.Custom, row.Fields); err != nil {
 					return companyUniqueErr(err)
+				}
+				if !strings.EqualFold(oldDomain, row.Domain) {
+					// Look the logo up again for the new domain.
+					if _, err := tx.Exec(ctx, `UPDATE companies SET avatar_retry_at = now(), avatar_failures = 0
+						WHERE workspace_id = $1 AND id = $2 AND avatar_source IS DISTINCT FROM 'upload'`, p.WorkspaceID, id); err != nil {
+						return err
+					}
 				}
 				if err := applyLabels(ctx, tx, p, domain.CompanyLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
 					return err

@@ -27,6 +27,10 @@ type Settings struct {
 	HelpCenterTitle   string `json:"help_center_title"`
 	CSATEnabled       bool   `json:"csat_enabled"`
 	AutoAssign        string `json:"auto_assign"`
+	// AutoAwayMinutes marks an online member away after this long unseen; 0 = off.
+	AutoAwayMinutes int `json:"auto_away_minutes"`
+	// BusinessHoursRaw is settings.business_hours; read it with Hours().
+	BusinessHoursRaw json.RawMessage `json:"business_hours"`
 	// Locale is the default language (BCP 47) of customer-facing pages; "" = the visitor's browser.
 	Locale string `json:"locale"`
 	// AutoCloseDays closes solved tickets after this many days; nil = 7, 0 = never.
@@ -98,6 +102,8 @@ func ParseSettings(raw []byte) Settings {
 	field("help_center_title", &s.HelpCenterTitle)
 	field("csat_enabled", &s.CSATEnabled)
 	field("auto_assign", &s.AutoAssign)
+	field("auto_away_minutes", &s.AutoAwayMinutes)
+	field("business_hours", &s.BusinessHoursRaw)
 	field("auto_close_days", &s.AutoCloseDays)
 	field("ai", &s.AIRaw)
 	var w WidgetSettings

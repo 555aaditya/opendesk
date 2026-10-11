@@ -107,7 +107,7 @@ func (s *svc) registerPlatform(api huma.API) {
 				switch {
 				case uid != nil && name != nil:
 					a.Actor.Type = "user"
-					a.Actor.User = &domain.UserRef{ID: *uid, Name: *name, Email: *email, AvatarURL: *avatar}
+					a.Actor.User = &domain.UserRef{ID: *uid, Name: *name, Email: *email, AvatarURL: domain.Avatar(*avatar)}
 				case a.Actor.APIKeyID != nil:
 					a.Actor.Type = "api_key"
 				default:
@@ -238,7 +238,7 @@ func (s *svc) registerPlatform(api huma.API) {
 				if err := s.d.DB.Pool.QueryRow(ctx, `SELECT name, avatar_url FROM users WHERE id = $1`, p.UserID).Scan(&name, &avatar); err != nil {
 					return nil, httpx.Wrap(err)
 				}
-				sub, c.Kind, c.Role, c.Name, c.Avatar = p.UserID.String(), string(auth.KindUser), string(p.Role), name, avatar
+				sub, c.Kind, c.Role, c.Name, c.Avatar = p.UserID.String(), string(auth.KindUser), string(p.Role), name, domain.Avatar(avatar).URL()
 			case auth.KindAPIKey:
 				var name string
 				if err := s.d.DB.Pool.QueryRow(ctx, `SELECT name FROM api_keys WHERE id = $1 AND workspace_id = $2`, p.APIKeyID, p.WorkspaceID).Scan(&name); err != nil {

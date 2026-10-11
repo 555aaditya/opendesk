@@ -13,6 +13,7 @@ import (
 
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
 	"github.com/opendesk/opendesk/internal/httpx"
 )
@@ -29,6 +30,8 @@ type helpCenterHome struct {
 	Collections []KbCollection `json:"collections"`
 	Featured    []KbArticle    `json:"featured"`
 	Locale      string         `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
+	LogoURL     domain.Avatar  `json:"logo_url" doc:"Help center logo, else the workspace logo"`
+	FaviconURL  domain.Avatar  `json:"favicon_url"`
 }
 
 type helpCenterCollection struct {
@@ -110,7 +113,17 @@ func registerPublic(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			return &struct{ Body helpCenterHome }{helpCenterHome{Title: title, Collections: cols, Featured: publicList(featured), Locale: st.Locale}}, nil
+			home := helpCenterHome{Title: title, Collections: cols, Featured: publicList(featured), Locale: st.Locale}
+			var logo string
+			var brand map[string]string
+			if err := d.DB.Pool.QueryRow(ctx, `SELECT avatar_url, brand_images FROM workspaces WHERE id = $1`, wid).Scan(&logo, &brand); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			home.LogoURL, home.FaviconURL = domain.Avatar(brand["help_center_logo"]), domain.Avatar(brand["help_center_favicon"])
+			if home.LogoURL == "" {
+				home.LogoURL = domain.Avatar(logo)
+			}
+			return &struct{ Body helpCenterHome }{home}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "public-help-collection", Method: http.MethodGet,

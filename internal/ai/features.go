@@ -476,6 +476,17 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 		}
 		return nil, err
 	}
+	// Automatic triage changes only the fields the workspace allows (settings.ai.triage_fields);
+	// an agent's explicit apply sets what they asked for.
+	setPriority, setLabels := true, true
+	if via != "ai_triage" {
+		st, err := hd.LoadSettings(ctx, tx, wid)
+		if err != nil {
+			return nil, err
+		}
+		tc := st.Triage()
+		setPriority, setLabels = tc.Sets("priority"), tc.Sets("labels")
+	}
 	meta := map[string]any{"via": via}
 	with := func(m map[string]any) map[string]any {
 		for k, v := range meta {
@@ -484,7 +495,7 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 		return m
 	}
 	var changes []string
-	if priorityRank[t.Priority] > priorityRank[priority] {
+	if setPriority && priorityRank[t.Priority] > priorityRank[priority] {
 		if _, err := tx.Exec(ctx, `UPDATE tickets SET priority = $3 WHERE workspace_id = $1 AND id = $2`, wid, tid, t.Priority); err != nil {
 			return nil, err
 		}
@@ -494,6 +505,9 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 		changes = append(changes, "priority")
 	}
 	names := slices.Clone(t.Tags)
+	if !setLabels {
+		names, createSuggested = nil, false
+	}
 	if createSuggested {
 		open, err := domain.LabelCreationOpen(ctx, tx, wid)
 		if err != nil {

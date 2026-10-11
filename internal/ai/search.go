@@ -220,7 +220,7 @@ func loadSearchArticle(ctx context.Context, q db.Querier, wid, id uuid.UUID) (AI
 		Scan(&a.ID, &a.CollectionID, &a.Title, &a.Slug, &a.Excerpt, &a.BodyHTML, &a.Status, &a.Views, &a.PublishedAt, &a.UpdatedAt,
 			&uID, &uName, &uEmail, &uAvatar)
 	if err == nil && uID != nil {
-		a.Author = &domain.UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: deref(uAvatar)}
+		a.Author = &domain.UserRef{ID: *uID, Name: deref(uName), Email: deref(uEmail), AvatarURL: domain.Avatar(deref(uAvatar))}
 	}
 	return a, err
 }
