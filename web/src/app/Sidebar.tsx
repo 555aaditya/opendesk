@@ -57,7 +57,9 @@ const rowBase =
   "group relative flex items-center rounded-md text-left text-[12.5px] outline-none transition-[width,background-color,color] duration-200 ease-out focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:transition-colors";
 const rowShape = (rail: boolean) => (rail ? "mx-3 h-8 w-8 justify-center" : "mx-2.5 h-7 w-[calc(100%-1.25rem)] gap-2.5 px-2");
 const rowIdle = "text-fg-2 hover:bg-chrome-hover hover:text-fg [&>svg]:text-fg-3 hover:[&>svg]:text-fg-2";
-const rowActive = "bg-chrome-active text-fg font-medium [&>svg]:text-fg";
+// The module dot: a small ink circle in the gutter beside the current row.
+const rowActive =
+  "bg-chrome-active text-fg font-medium [&>svg]:text-fg before:absolute before:-left-[7px] before:top-1/2 before:size-[5px] before:-translate-y-1/2 before:rounded-full before:bg-fg before:content-[''] before:animate-pop-in";
 
 function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
   if (!rail) return children;
