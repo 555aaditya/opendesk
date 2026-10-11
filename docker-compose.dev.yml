@@ -1,0 +1,16 @@
+# Local development dependencies. `make dev-db` starts them.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: opendesk
+      POSTGRES_PASSWORD: opendesk
+      POSTGRES_DB: opendesk
+    ports: ["55432:5432"]
+    volumes: [opendesk-dev-pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opendesk"]
+      interval: 2s
+      retries: 30
+volumes:
+  opendesk-dev-pg:

@@ -1,0 +1,96 @@
+package auth
+
+import (
+	"context"
+	"slices"
+
+	"github.com/google/uuid"
+)
+
+type Role string
+
+const (
+	RoleOwner  Role = "owner"
+	RoleAdmin  Role = "admin"
+	RoleAgent  Role = "agent"
+	RoleViewer Role = "viewer"
+)
+
+var roleRank = map[Role]int{RoleViewer: 1, RoleAgent: 2, RoleAdmin: 3, RoleOwner: 4}
+
+// AtLeast reports whether r is min or higher.
+func (r Role) AtLeast(min Role) bool { return roleRank[r] >= roleRank[min] }
+
+// Valid reports a known role.
+func (r Role) Valid() bool { _, ok := roleRank[r]; return ok }
+
+// API key scopes.
+const (
+	ScopeTicketsRead   = "tickets:read"
+	ScopeTicketsWrite  = "tickets:write"
+	ScopeContactsRead  = "contacts:read"
+	ScopeContactsWrite = "contacts:write"
+	ScopeKBRead        = "kb:read"
+	ScopeKBWrite       = "kb:write"
+	ScopeSettingsRead  = "settings:read"
+	ScopeSettingsWrite = "settings:write"
+	ScopeRealtime      = "realtime"
+)
+
+var AllScopes = []string{ScopeTicketsRead, ScopeTicketsWrite, ScopeContactsRead, ScopeContactsWrite,
+	ScopeKBRead, ScopeKBWrite, ScopeSettingsRead, ScopeSettingsWrite, ScopeRealtime}
+
+type Kind string
+
+const (
+	KindUser    Kind = "user"
+	KindAPIKey  Kind = "api_key"
+	KindVisitor Kind = "visitor"
+)
+
+// Principal is the authenticated caller of a request.
+type Principal struct {
+	Kind        Kind
+	UserID      uuid.UUID // users
+	SessionID   uuid.UUID // users
+	MFAVerified bool
+	APIKeyID    uuid.UUID // api keys
+	Scopes      []string  // api keys
+	ContactID   uuid.UUID // visitors
+	VisitorID   uuid.UUID // visitors: widget_sessions.id
+	WorkspaceID uuid.UUID // zero until resolved from OD-Workspace or the credential
+	Role        Role      // users, once the workspace is resolved
+	Verified    bool      // visitors: identity signed by the customer's backend
+	IP          string
+	UserAgent   string
+}
+
+func (p *Principal) HasScope(s string) bool { return slices.Contains(p.Scopes, s) }
+
+// ActorUserID returns the user id for attribution, or nil for non-users.
+func (p *Principal) ActorUserID() *uuid.UUID {
+	if p.Kind == KindUser {
+		return &p.UserID
+	}
+	return nil
+}
+
+// ActorAPIKeyID returns the API key id for attribution, or nil.
+func (p *Principal) ActorAPIKeyID() *uuid.UUID {
+	if p.Kind == KindAPIKey {
+		return &p.APIKeyID
+	}
+	return nil
+}
+
+type ctxKey struct{}
+
+func WithPrincipal(ctx context.Context, p *Principal) context.Context {
+	return context.WithValue(ctx, ctxKey{}, p)
+}
+
+// FromContext returns the caller, or nil when the request is anonymous.
+func FromContext(ctx context.Context) *Principal {
+	p, _ := ctx.Value(ctxKey{}).(*Principal)
+	return p
+}
