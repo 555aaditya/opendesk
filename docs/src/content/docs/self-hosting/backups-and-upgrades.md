@@ -5,7 +5,7 @@ description: Back up and restore a self-hosted opendesk, and move between releas
 
 ## What to back up
 
-| what | why |
+| What | Why |
 | --- | --- |
 | The Postgres database | Everything except files. |
 | The data volume (`/data`) | Attachments and raw email with the `local` storage driver. |

@@ -5,7 +5,7 @@ description: Create, test and connect mailboxes, and post raw inbound email.
 
 Mailboxes are settings: an `admin` user, or an API key with `settings:read` and `settings:write`.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET`, `POST` | `/v1/mailboxes` | List or create mailboxes |
 | `GET`, `PATCH`, `DELETE` | `/v1/mailboxes/{id}` | |
@@ -18,18 +18,33 @@ Mailboxes are settings: an `admin` user, or an API key with `settings:read` and 
 
 ```ts
 type Mailbox = {
-  id: string; name: string; email: string; display_name: string;
+  id: string;
+  name: string;
+  email: string;
+  display_name: string;
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft";
   outbound_kind: "smtp" | "google" | "microsoft" | "system";
   forwarding_address: string;
   config: {
-    imap_host?: string; imap_port?: number; imap_username?: string; imap_tls?: "tls" | "starttls" | "none";
-    smtp_host?: string; smtp_port?: number; smtp_username?: string; smtp_tls?: "tls" | "starttls" | "none";
+    imap_host?: string;
+    imap_port?: number;
+    imap_username?: string;
+    imap_tls?: "tls" | "starttls" | "none";
+    smtp_host?: string;
+    smtp_port?: number;
+    smtp_username?: string;
+    smtp_tls?: "tls" | "starttls" | "none";
     oauth_email?: string;
   };
-  team_id: string | null; signature_html: string;
-  auto_reply_enabled: boolean; auto_reply_subject: string; auto_reply_html: string;
-  status: "active" | "error" | "disabled"; last_error: string; last_synced_at: string | null; created_at: string;
+  team_id: string | null;
+  signature_html: string;
+  auto_reply_enabled: boolean;
+  auto_reply_subject: string;
+  auto_reply_html: string;
+  status: "active" | "error" | "disabled";
+  last_error: string;
+  last_synced_at: string | null;
+  created_at: string;
 };
 ```
 

@@ -15,7 +15,7 @@ Some organizations require an administrator to approve new apps. If you see "Nee
 
 ## What opendesk asks for
 
-| scope | why |
+| Scope | Why |
 | --- | --- |
 | `openid`, `email` | Identify which Microsoft account was connected. |
 | `offline_access` | Keep the connection working after you close the browser. |

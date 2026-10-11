@@ -3,7 +3,7 @@ title: Search and reports
 description: Search across tickets, contacts and articles, and read the reports overview.
 ---
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/search?q=` | Top tickets, contacts and articles |
 | `GET` | `/v1/reports/overview?from=&to=` | Metrics for a date range |

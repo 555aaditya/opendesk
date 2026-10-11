@@ -7,7 +7,7 @@ An **automation** is a rule: when a trigger fires and every condition matches, i
 
 ## Triggers
 
-| trigger | fires when |
+| Trigger | Fires when |
 | --- | --- |
 | `ticket_created` | A new ticket arrives on any channel. |
 | `customer_replied` | The customer sends a new message on a ticket. |
@@ -18,7 +18,7 @@ An **automation** is a rule: when a trigger fires and every condition matches, i
 
 All conditions must match. Each condition compares a field with a value.
 
-| field | examples |
+| Field | Examples |
 | --- | --- |
 | `subject`, `body` | text of the ticket or message |
 | `from_email` | the sender's address |
@@ -33,7 +33,7 @@ Operators are `contains`, `not_contains`, `equals` and `not_equals`. When AI tri
 
 Actions apply in order:
 
-| action | value |
+| Action | Value |
 | --- | --- |
 | `set_status` | a status |
 | `set_priority` | a priority |

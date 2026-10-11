@@ -5,7 +5,7 @@ description: The endpoints the chat widget uses, and the admin settings behind i
 
 The widget endpoints are called by the visitor's browser. Apart from config and session, they use the visitor token: `Authorization: Visitor od_vis_...`. The workspace comes from the session.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/widget/config?key=<widget_key>` | Public config for the widget |
 | `POST` | `/v1/widget/session` | Start or resume a visitor session |
@@ -39,7 +39,7 @@ curl https://api.opendesk.sh/v1/widget/session \
 { "visitor_token": "od_vis_...", "contact": { "id": "...", "email": "ana@example.com", "name": "Ana", "avatar_url": "" }, "ws_token": "<jwt>", "gateway_url": "wss://gateway.opendesk.sh/socket/widget" }
 ```
 
-| field | |
+| Field | Notes |
 | --- | --- |
 | `key` | the workspace's public widget key, required |
 | `visitor_token` | resume an existing session |

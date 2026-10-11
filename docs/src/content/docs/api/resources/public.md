@@ -9,7 +9,7 @@ These endpoints need no credentials. They are what the help center and the CSAT 
 
 Only published articles are returned.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/public/help/{workspace_slug}` | `{ title, collections, featured }` |
 | `GET` | `/v1/public/help/{workspace_slug}/collections/{slug}` | `{ collection, articles }` |
@@ -22,7 +22,7 @@ curl https://api.opendesk.sh/v1/public/help/example/search?q=password
 
 ## CSAT
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/public/csat/{token}` | The rating request |
 | `POST` | `/v1/public/csat/{token}` | `{ score, comment? }` |

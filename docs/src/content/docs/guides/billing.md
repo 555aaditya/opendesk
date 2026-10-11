@@ -9,7 +9,7 @@ Billing applies only to opendesk Cloud. Self-hosted opendesk has no plans, no li
 
 ## Plans
 
-| plan | price | mailboxes | members | AI credits per month |
+| Plan | Price | Mailboxes | Members | AI credits per month |
 | --- | --- | --- | --- | --- |
 | Free | $0 per workspace, forever | 1 | 1 | 50 per workspace |
 | Pro | $19 per seat per month | unlimited | unlimited | 1,000 per paid seat, pooled |

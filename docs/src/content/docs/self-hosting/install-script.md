@@ -32,7 +32,7 @@ curl -fsSL https://opendesk.sh/install.sh | sh -s -- --domain desk.example.com -
 
 Each flag also has an environment variable.
 
-| flag | variable | default | meaning |
+| Flag | Variable | Default | Meaning |
 | --- | --- | --- | --- |
 | `--domain HOST` | `OPENDESK_DOMAIN` | asked, or `localhost` | Public hostname |
 | `--email ADDRESS` | `OPENDESK_EMAIL` | | ACME account email for the certificate |
@@ -55,7 +55,7 @@ Each flag also has an environment variable.
 
 ### Domain values
 
-| `--domain` | result |
+| `--domain` | Result |
 | --- | --- |
 | `desk.example.com` | A Let's Encrypt (or ZeroSSL) certificate as soon as DNS points at the server and ports 80 and 443 are open. |
 | `localhost` | A certificate from Caddy's local certificate authority, for trying it out. |
@@ -75,7 +75,7 @@ Each flag also has an environment variable.
 
 AI is optional. Choose one:
 
-| you pass | result |
+| You pass | Result |
 | --- | --- |
 | `--ai-key` alone | Anthropic, with its default models. |
 | `--ai-url` (and `--ai-key` if the endpoint needs one) | Any OpenAI-compatible endpoint. Set `--ai-model` to a model it serves. |

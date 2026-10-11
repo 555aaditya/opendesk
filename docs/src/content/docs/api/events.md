@@ -27,7 +27,7 @@ Every state change that someone else should see is written as an event, in the s
 
 ## Catalog
 
-| type | visibility | extra topics | data |
+| Type | Visibility | Extra topics | Data |
 | --- | --- | --- | --- |
 | `ticket.created` | agents | | `{ ticket }` |
 | `ticket.updated` | agents | `user:<assignee>` when the assignee changes | `{ ticket, changes: ["status", "assignee_id", ...] }` |
@@ -52,7 +52,7 @@ Every state change that someone else should see is written as an event, in the s
 
 ### message.created visibility
 
-| message | visibility |
+| Message | Visibility |
 | --- | --- |
 | A note | `agents` |
 | A reply on a chat ticket | `public`, also sent to the contact's topic |

@@ -7,7 +7,7 @@ The reports page shows how your support is going for a date range you choose.
 
 ## Metrics
 
-| metric | meaning |
+| Metric | Meaning |
 | --- | --- |
 | Created | Tickets created in the range. |
 | Solved | Tickets solved in the range. |

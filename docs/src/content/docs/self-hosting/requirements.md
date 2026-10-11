@@ -18,7 +18,7 @@ description: What you need to run opendesk on your own server.
 
 ## Optional services
 
-| for | you need |
+| For | You need |
 | --- | --- |
 | Password resets, invitations, verification email | An SMTP server, or Amazon SES. See [Email setup](/self-hosting/email/). |
 | One-click Google or Microsoft mailboxes and sign-in | Your own OAuth apps. See [Google and Microsoft OAuth](/self-hosting/oauth-apps/). |

@@ -52,7 +52,7 @@ When `AI_FAST_MODEL` is empty, `AI_MODEL` is used for everything.
 
 Embeddings power semantic search and the chat answer bot's article retrieval.
 
-| `EMBEDDINGS_DRIVER` | when |
+| `EMBEDDINGS_DRIVER` | When |
 | --- | --- |
 | `voyage` | Chosen automatically when `VOYAGE_API_KEY` is set. |
 | `openai` | Chosen automatically with the `openai` provider. Uses the same endpoint. |

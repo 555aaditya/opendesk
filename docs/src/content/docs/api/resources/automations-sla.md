@@ -5,7 +5,7 @@ description: Manage automation rules and SLA policies through the API.
 
 Both are settings: they need an `admin` user, or an API key with `settings:read` and `settings:write`.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET`, `POST` | `/v1/automations` | List or create automations |
 | `GET`, `PATCH`, `DELETE` | `/v1/automations/{id}` | |
@@ -16,18 +16,28 @@ Both are settings: they need an `admin` user, or an API key with `settings:read`
 
 ```ts
 type Automation = {
-  id: string; name: string;
+  id: string;
+  name: string;
   trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
   conditions: { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag";
-                op: "contains" | "not_contains" | "equals" | "not_equals"; value: string }[];
+                op: "contains" | "not_contains" | "equals" | "not_equals";
+                value: string }[];
   actions: { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag"
-                 | "send_reply" | "add_note" | "mark_spam"; value: string }[];
-  enabled: boolean; position: number; run_count: number;
+                 | "send_reply" | "add_note" | "mark_spam";
+                 value: string }[];
+  enabled: boolean;
+  position: number;
+  run_count: number;
 };
 
 type SlaPolicy = {
-  id: string; name: string; priority: Priority | null;
-  first_response_minutes: number; resolution_minutes: number; enabled: boolean; position: number;
+  id: string;
+  name: string;
+  priority: Priority | null;
+  first_response_minutes: number;
+  resolution_minutes: number;
+  enabled: boolean;
+  position: number;
 };
 ```
 

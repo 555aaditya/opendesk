@@ -9,7 +9,7 @@ The self-host bundle includes a `postgres` container. You can point opendesk at 
 
 ## Two connection strings
 
-| variable | used by |
+| Variable | Used by |
 | --- | --- |
 | `DATABASE_URL` | Request handlers. Can go through a connection pooler. |
 | `DATABASE_URL_DIRECT` | Migrations, background jobs and the event relay. Must be a **direct** connection, because they use session features such as `LISTEN`/`NOTIFY`. |

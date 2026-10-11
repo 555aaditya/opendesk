@@ -20,7 +20,7 @@ A ticket has:
 
 ### Statuses
 
-| status | meaning |
+| Status | Meaning |
 | --- | --- |
 | `open` | Waiting on your team. |
 | `pending` | Waiting on the customer. |

@@ -3,7 +3,7 @@ title: Workspace and members
 description: The workspace, its members, invitations, teams, audit logs and notifications.
 ---
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/v1/workspaces` | Create a workspace; you become its owner |
 | `GET`, `PATCH` | `/v1/workspace` | The current workspace (`OD-Workspace`) |
@@ -27,15 +27,25 @@ description: The workspace, its members, invitations, teams, audit logs and noti
 ```ts
 type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; created_at: string };
 type WorkspaceSettings = {
-  brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string;
-  csat_enabled?: boolean; auto_assign?: "none" | "round_robin";
+  brand_color?: string;
+  timezone?: string;
+  help_center_enabled?: boolean;
+  help_center_title?: string;
+  csat_enabled?: boolean;
+  auto_assign?: "none" | "round_robin";
 };
 type Member = { user: UserRef; role: "owner" | "admin" | "agent" | "viewer"; created_at: string };
 type Invitation = { id: string; email: string; role: Role; expires_at: string; created_at: string; invited_by: UserRef | null };
 type Team = { id: string; name: string; member_ids: string[]; created_at: string };
 type AuditLog = {
-  id: string; actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null };
-  action: string; entity_type: string; entity_id: string | null; data: Record<string, unknown>; ip: string; created_at: string;
+  id: string;
+  actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null };
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  data: Record<string, unknown>;
+  ip: string;
+  created_at: string;
 };
 ```
 
@@ -77,9 +87,12 @@ Requires the owner, with two-factor authentication and a recent sign-in. All wor
 
 ```ts
 type Notification = {
-  id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached";
+  id: string;
+  type: "assigned" | "mentioned" | "customer_replied" | "sla_breached";
   ticket: { id: string; number: number; subject: string } | null;
-  data: Record<string, unknown>; read_at: string | null; created_at: string;
+  data: Record<string, unknown>;
+  read_at: string | null;
+  created_at: string;
 };
 ```
 

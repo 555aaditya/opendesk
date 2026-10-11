@@ -3,7 +3,7 @@ title: Tags, views and saved replies
 description: The resources that organize the inbox.
 ---
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET`, `POST` | `/v1/tags` | List or create tags |
 | `GET`, `PATCH`, `DELETE` | `/v1/tags/{id}` | |
@@ -18,11 +18,19 @@ description: The resources that organize the inbox.
 type Tag = { id: string; name: string };
 
 type View = {
-  id: string; name: string; shared: boolean; position: number;
+  id: string;
+  name: string;
+  shared: boolean;
+  position: number;
   filters: {
-    status?: TicketStatus[]; priority?: Priority[];
-    assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string;
-    tag?: string; channel?: Channel; q?: string;
+    status?: TicketStatus[];
+    priority?: Priority[];
+    assignee?: "me" | "none" | string;
+    team_id?: string;
+    mailbox_id?: string;
+    tag?: string;
+    channel?: Channel;
+    q?: string;
   };
 };
 

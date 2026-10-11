@@ -18,7 +18,7 @@ opendesk is an open-source helpdesk. It brings your support email, live chat and
 
 ## How it is built
 
-| part | what it does | hosted at |
+| Part | What it does | Hosted at |
 | --- | --- | --- |
 | API and workers | One Go binary. Serves the REST API, runs background jobs, relays events. `OPENDESK_ROLE` selects `all`, `api` or `worker`. | `api.opendesk.sh` |
 | Realtime gateway | An Elixir and Phoenix service that pushes events, presence and typing over WebSockets. It holds no database connection. | `gateway.opendesk.sh` |

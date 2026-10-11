@@ -15,7 +15,7 @@ curl -fsSL https://opendesk.sh/install.sh | sh
 
 A self-hosted install is four containers on one machine, behind one domain:
 
-| service | role |
+| Service | Role |
 | --- | --- |
 | `caddy` | HTTPS with automatic certificates. Routes `/socket` to the realtime gateway and everything else to opendesk. |
 | `opendesk` | The Go API, background workers, the web app (`SERVE_WEB=true`), and NATS, embedded. |

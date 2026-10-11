@@ -5,7 +5,7 @@ description: Draft, summarize, ask, triage, rewrite, translate and search with t
 
 When no AI provider is configured, `GET /v1/ai/config` reports `enabled: false` and every other AI route returns `404 ai_disabled`. On Cloud, routes that cost credits return `402 no_credits` when the workspace has none left.
 
-| method | path | min role | credits | |
+| Method | Path | Min role | Credits | Description |
 | --- | --- | --- | --- | --- |
 | `GET` | `/v1/ai/config` | viewer | 0 | Provider, models and settings |
 | `PATCH` | `/v1/ai/settings` | admin | 0 | Update workspace AI settings |

@@ -5,7 +5,7 @@ description: Manage help center collections and articles.
 
 Scopes: `kb:read` to read (including drafts), `kb:write` to change.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET`, `POST` | `/v1/kb/collections` | List or create collections |
 | `GET`, `PATCH`, `DELETE` | `/v1/kb/collections/{id}` | |
@@ -20,9 +20,17 @@ For the public, unauthenticated help center endpoints, see [Public help center a
 type KbCollection = { id: string; name: string; slug: string; description: string; position: number; article_count: number };
 
 type KbArticle = {
-  id: string; collection_id: string | null; title: string; slug: string; excerpt: string; body_html: string;
-  status: "draft" | "published"; author: UserRef | null; views: number;
-  published_at: string | null; updated_at: string;
+  id: string;
+  collection_id: string | null;
+  title: string;
+  slug: string;
+  excerpt: string;
+  body_html: string;
+  status: "draft" | "published";
+  author: UserRef | null;
+  views: number;
+  published_at: string | null;
+  updated_at: string;
 };
 ```
 

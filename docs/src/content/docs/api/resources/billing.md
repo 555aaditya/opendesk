@@ -5,7 +5,7 @@ description: Plans, seats, AI credits and Stripe checkout on opendesk Cloud.
 
 **Cloud only.** Billing exists only on opendesk Cloud. See [Cloud plans and billing](/guides/billing/). On an instance without Stripe configured, every route below returns `404 billing_disabled`, except `GET /v1/billing`, which returns the self-hosted entitlements: plan `self_hosted`, no limits and unlimited AI.
 
-| method | path | who | |
+| Method | Path | Who | Description |
 | --- | --- | --- | --- |
 | `GET` | `/v1/billing` | member | The workspace's plan, limits, usage and credits |
 | `POST` | `/v1/billing/checkout` | owner, admin | `{ interval: "month" \| "year" }` → `{ url }` to Stripe Checkout |

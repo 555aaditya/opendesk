@@ -7,7 +7,7 @@ opendesk's AI features help agents write and understand faster. They are optiona
 
 ## Features
 
-| feature | what it does |
+| Feature | What it does |
 | --- | --- |
 | Draft a reply | Writes a reply from the conversation, the contact, your saved replies and the most relevant help articles, citing its sources. You edit it before sending. |
 | Summarize | Summarizes a ticket with key points and the customer's sentiment, and keeps it on the ticket. |
@@ -55,7 +55,7 @@ The AI never sends a message to a customer on its own, except these opt-in chat 
 
 On opendesk Cloud, AI features use credits from a monthly allowance, with optional credit packs. A failed request costs nothing.
 
-| feature | credits |
+| Feature | Credits |
 | --- | --- |
 | Summarize, rewrite, translate, triage | 1 |
 | Ask about a ticket | 2 |

@@ -1,0 +1,49 @@
+---
+import { LinkButton } from '@astrojs/starlight/components';
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, actions = [] } = data.hero || {};
+---
+
+<div class="od-hero">
+  <h1 id="_top" data-page-title set:html={title} />
+  {tagline && <p class="od-hero-tagline" set:html={tagline} />}
+  {
+    actions.length > 0 && (
+      <div class="od-hero-actions">
+        {actions.map(({ attrs: { class: className, ...attrs } = {}, icon, link: href, text, variant }) => (
+          <LinkButton {href} {variant} icon={icon?.name} class:list={[className]} {...attrs}>
+            {text}
+          </LinkButton>
+        ))}
+      </div>
+    )
+  }
+</div>
+
+<style>
+  .od-hero {
+    padding-block: clamp(2rem, 6vw, 4.5rem) 1rem;
+    max-width: 44rem;
+  }
+  .od-hero h1 {
+    margin: 0;
+    font-size: clamp(2.25rem, 5vw, 3.25rem);
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+    color: var(--od-heading);
+  }
+  .od-hero-tagline {
+    margin: 1.125rem 0 0;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--od-muted);
+  }
+  .od-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    margin-top: 1.75rem;
+  }
+</style>

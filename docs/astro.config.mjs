@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { opendeskDark, opendeskLight } from './src/lib/code-themes.mjs';
 
 export default defineConfig({
   site: 'https://docs.opendesk.sh',
@@ -21,7 +22,6 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://docs.opendesk.sh/og.png' } },
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
       ],
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/opendesk/opendesk' }],
       editLink: { baseUrl: 'https://github.com/opendesk/opendesk/edit/main/docs/' },
       lastUpdated: false,
       disable404Route: true,
@@ -33,17 +33,55 @@ export default defineConfig({
         '@fontsource/geist-mono/500.css',
         './src/styles/theme.css',
       ],
+      routeMiddleware: './src/routeData.ts',
       components: {
-        SocialIcons: './src/components/SocialIcons.astro',
+        Header: './src/components/Header.astro',
+        Sidebar: './src/components/Sidebar.astro',
+        MobileMenuFooter: './src/components/MobileMenuFooter.astro',
+        ThemeProvider: './src/components/ThemeProvider.astro',
+        ThemeSelect: './src/components/ThemeSelect.astro',
+        PageTitle: './src/components/PageTitle.astro',
+        Hero: './src/components/Hero.astro',
+        Footer: './src/components/Footer.astro',
       },
       expressiveCode: {
-        themes: ['min-dark', 'min-light'],
+        themes: [opendeskDark, opendeskLight],
+        useStarlightUiThemeColors: false,
         styleOverrides: {
           borderRadius: '10px',
-          borderColor: 'var(--sl-color-hairline)',
+          borderColor: 'var(--od-line)',
+          borderWidth: '1px',
+          codeBackground: 'var(--od-soft)',
           codeFontFamily: 'var(--__sl-font-mono)',
+          codeFontSize: '13.5px',
+          codeLineHeight: '1.7',
+          codePaddingBlock: '0.875rem',
+          codePaddingInline: '1.125rem',
           uiFontFamily: 'var(--__sl-font)',
-          frames: { shadowColor: 'transparent' },
+          uiFontSize: '12.5px',
+          frames: {
+            shadowColor: 'transparent',
+            editorBackground: 'var(--od-soft)',
+            terminalBackground: 'var(--od-soft)',
+            editorTabBarBackground: 'var(--od-soft)',
+            editorActiveTabBackground: 'var(--od-soft)',
+            editorActiveTabForeground: 'var(--od-muted)',
+            editorActiveTabIndicatorTopColor: 'transparent',
+            editorActiveTabIndicatorBottomColor: 'transparent',
+            editorTabBarBorderBottomColor: 'var(--od-line)',
+            terminalTitlebarBackground: 'var(--od-soft)',
+            terminalTitlebarForeground: 'var(--od-muted)',
+            terminalTitlebarBorderBottomColor: 'var(--od-line)',
+            terminalTitlebarDotsOpacity: '0',
+            inlineButtonBackground: 'var(--od-bg)',
+            inlineButtonForeground: 'var(--od-muted)',
+            inlineButtonBorder: 'var(--od-line)',
+            inlineButtonBorderOpacity: '1',
+            inlineButtonBackgroundIdleOpacity: '1',
+            inlineButtonBackgroundHoverOrFocusOpacity: '1',
+            tooltipSuccessBackground: 'var(--od-ink)',
+            tooltipSuccessForeground: 'var(--od-ink-fg)',
+          },
         },
       },
       sidebar: [
@@ -100,6 +138,7 @@ export default defineConfig({
             { label: 'Idempotency', slug: 'api/idempotency' },
             {
               label: 'Resources',
+              collapsed: true,
               items: [
                 { label: 'Tickets', slug: 'api/resources/tickets' },
                 { label: 'Messages and attachments', slug: 'api/resources/messages' },

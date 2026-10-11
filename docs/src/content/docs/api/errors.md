@@ -18,7 +18,7 @@ Errors use [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details wi
 }
 ```
 
-| field | meaning |
+| Field | Meaning |
 | --- | --- |
 | `status` | The HTTP status code. |
 | `title` | The standard text for that status. |
@@ -31,7 +31,7 @@ Errors use [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details wi
 
 The common codes:
 
-| code | status | meaning |
+| Code | Status | Meaning |
 | --- | --- | --- |
 | `bad_request` | 400 | The request is malformed. |
 | `validation_failed` | 400, 422 | One or more fields are invalid. See `errors`. |

@@ -7,7 +7,7 @@ opendesk is open source under the Apache-2.0 license at [github.com/opendesk/ope
 
 ## The repository
 
-| path | what |
+| Path | What |
 | --- | --- |
 | `cmd/opendesk`, `internal/` | The Go API and workers, one binary |
 | `realtime/` | The Elixir and Phoenix realtime gateway |

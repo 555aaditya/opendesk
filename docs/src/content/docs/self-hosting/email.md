@@ -5,7 +5,7 @@ description: Inbound forwarding, outbound replies and platform email on a self-h
 
 opendesk handles three kinds of email, each configured separately.
 
-| kind | what | configured by |
+| Kind | What | Configured by |
 | --- | --- | --- |
 | Inbound, mailbox connections | IMAP, Google and Microsoft mailboxes are read directly | each mailbox (nothing to set on the server, except [OAuth apps](/self-hosting/oauth-apps/)) |
 | Inbound, forwarding | Mail forwarded to `<token>@INBOUND_DOMAIN` | `INBOUND_DOMAIN`, plus a receiver below |
@@ -65,7 +65,7 @@ The `system` outbound option sends replies through platform email instead. Use i
 
 Verification, password reset and invitation emails come from `MAIL_FROM` through `MAIL_DRIVER`:
 
-| driver | use |
+| Driver | Use |
 | --- | --- |
 | `log` | Default. Prints emails to the opendesk log. Fine for trying it out; read reset links with `opendesk-ctl logs opendesk`. |
 | `smtp` | Any SMTP provider: set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_TLS`. |

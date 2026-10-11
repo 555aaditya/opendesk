@@ -5,7 +5,7 @@ description: Create API keys and webhook endpoints, inspect deliveries and send 
 
 Both are settings: an `admin` user, or an API key with `settings:read` and `settings:write`. Creating, changing and deleting either is audit-logged.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET`, `POST` | `/v1/api-keys` | List or create API keys |
 | `GET`, `PATCH`, `DELETE` | `/v1/api-keys/{id}` | |
@@ -18,8 +18,14 @@ Both are settings: an `admin` user, or an API key with `settings:read` and `sett
 
 ```ts
 type ApiKey = {
-  id: string; name: string; prefix: string; scopes: string[];
-  last_used_at: string | null; expires_at: string | null; created_at: string; created_by: UserRef | null;
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  last_used_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  created_by: UserRef | null;
 };
 ```
 
@@ -38,8 +44,14 @@ The response is the key plus `secret`, shown only this once. See [scopes](/api/a
 ```ts
 type Webhook = { id: string; url: string; description: string; events: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = {
-  id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed";
-  attempts: number; response_code: number | null; duration_ms: number | null; created_at: string;
+  id: string;
+  event_id: string;
+  event_type: string;
+  status: "pending" | "succeeded" | "failed";
+  attempts: number;
+  response_code: number | null;
+  duration_ms: number | null;
+  created_at: string;
 };
 ```
 

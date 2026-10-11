@@ -17,7 +17,7 @@ curl "https://api.opendesk.sh/v1/contacts?limit=100" \
 }
 ```
 
-| parameter | default | notes |
+| Parameter | Default | Notes |
 | --- | --- | --- |
 | `limit` | 50 | 1 to 100 |
 | `cursor` | none | The `next_cursor` from the previous page |

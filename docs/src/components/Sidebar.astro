@@ -1,0 +1,62 @@
+---
+import MobileMenuFooter from './MobileMenuFooter.astro';
+import SidebarPersister from '@astrojs/starlight/components/SidebarPersister.astro';
+import SidebarList from './SidebarList.astro';
+import OdIcon from './OdIcon.astro';
+import { SECTIONS, sectionFor } from '../lib/sections';
+
+const { sidebar } = Astro.locals.starlightRoute;
+const current = sectionFor(Astro.url.pathname);
+---
+
+<div class="od-mobile-sections">
+  {
+    SECTIONS.map((s) => (
+      <a href={s.href} aria-current={s === current ? 'true' : undefined}>
+        <OdIcon name={s.icon} size={15} />
+        {s.label}
+      </a>
+    ))
+  }
+</div>
+
+<SidebarPersister>
+  <SidebarList entries={sidebar} />
+</SidebarPersister>
+
+<div class="md:sl-hidden">
+  <MobileMenuFooter />
+</div>
+
+<style>
+  .od-mobile-sections {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.375rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--od-line);
+  }
+  .od-mobile-sections a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    border: 1px solid var(--od-line);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--od-muted);
+    text-decoration: none;
+  }
+  @media (min-width: 50em) {
+    .od-mobile-sections {
+      display: none;
+    }
+  }
+  .od-mobile-sections a[aria-current='true'] {
+    color: var(--od-heading);
+    font-weight: 500;
+    background: var(--od-hover);
+    border-color: transparent;
+  }
+</style>

@@ -21,7 +21,7 @@ The realtime gateway also refuses to start with an `AUTH_SECRET` under 32 bytes.
 
 ## Core
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `OPENDESK_ENV` | `development` | `development` or `production`. Production enforces the checks above. |
 | `OPENDESK_ROLE` | `all` | `all` (API and workers), `api` or `worker`. See [Scaling](/self-hosting/scaling/). |
@@ -34,7 +34,7 @@ The realtime gateway also refuses to start with an `AUTH_SECRET` under 32 bytes.
 
 ## URLs
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `API_URL` | `http://localhost:8080` | Public URL of the API. OAuth redirect URIs are built from it. |
 | `APP_URL` | `http://localhost:5173` | Public URL of the web app. Links in email point here. |
@@ -48,7 +48,7 @@ On a self-hosted single domain, `API_URL` and `APP_URL` are both `https://desk.e
 
 ## Database
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://opendesk:opendesk@localhost:5432/opendesk?sslmode=disable` | Pooled connection used by request handlers. On Neon, the `-pooler` host. |
 | `DATABASE_URL_DIRECT` | `DATABASE_URL` | Direct connection for migrations, background jobs and the event relay, which need session features such as `LISTEN`/`NOTIFY`. |
@@ -57,7 +57,7 @@ See [Postgres and Neon](/self-hosting/postgres/).
 
 ## Secrets
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `AUTH_SECRET` | none in production | At least 32 bytes. Signs every JWT. **Must be identical** in opendesk and the realtime gateway. |
 | `CREDENTIALS_KEY` | none in production | 32 bytes, hex or base64. Encrypts mailbox credentials, OAuth tokens, webhook secrets and TOTP secrets with AES-256-GCM. **Never change it**: existing credentials become unreadable. |
@@ -66,7 +66,7 @@ Generate them with `openssl rand -hex 32`.
 
 ## NATS
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `NATS_URL` | empty | Empty runs NATS **embedded** in this process. Set it to use an external NATS cluster. |
 | `NATS_TOKEN` | empty | Token for the embedded server, or for the external cluster. Required in production when embedded NATS listens beyond localhost. |
@@ -75,7 +75,7 @@ Generate them with `openssl rand -hex 32`.
 
 ## Storage
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `STORAGE_DRIVER` | `local` | `local` (under `DATA_DIR`) or `s3` (any S3-compatible store). |
 | `S3_BUCKET` | | Bucket name. |
@@ -91,7 +91,7 @@ See [Storage](/self-hosting/storage/).
 
 Verification, password reset and invitation emails. Replies to customers go through each mailbox, not this.
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `MAIL_DRIVER` | `log` | `log` (print to the log), `smtp` or `ses`. |
 | `MAIL_FROM` | `opendesk <notifications@localhost>` | From address. |
@@ -104,7 +104,7 @@ Verification, password reset and invitation emails. Replies to customers go thro
 
 ## Inbound email
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `INBOUND_DOMAIN` | `in.localhost` | Forwarding addresses are `<token>@INBOUND_DOMAIN`. |
 | `INBOUND_SECRET` | | Shared secret for `POST /v1/inbound/email` (the `OD-Inbound-Secret` header). Empty turns the endpoint off. |
@@ -114,7 +114,7 @@ See [Email setup](/self-hosting/email/).
 
 ## Sign-in providers and mailbox OAuth
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | | Google sign-in and Gmail mailbox connections. |
 | `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` | | Microsoft sign-in and Outlook mailbox connections. |
@@ -127,7 +127,7 @@ See [Google and Microsoft OAuth](/self-hosting/oauth-apps/). A sign-in provider 
 
 ## Bot protection and analytics
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET` | | Cloudflare Turnstile on login, registration and password reset. |
 | `POSTHOG_KEY` | | Product analytics. Empty sends nothing. |
@@ -137,7 +137,7 @@ See [Google and Microsoft OAuth](/self-hosting/oauth-apps/). A sign-in provider 
 
 AI features are on when a provider is configured. See [AI features](/guides/ai/).
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `AI_PROVIDER` | detected | `anthropic`, `openai` (any OpenAI-compatible endpoint) or `none`. When empty: `anthropic` if `ANTHROPIC_API_KEY` is set, else `openai` if `OPENAI_API_KEY` is set, else `none`. |
 | `ANTHROPIC_API_KEY` | | Anthropic API key. |
@@ -155,7 +155,7 @@ Semantic search needs the Postgres `vector` extension (pgvector). Without it, op
 
 Leave these empty on a self-hosted instance. Without `STRIPE_SECRET_KEY`, every workspace is on the `self_hosted` plan with no limits and unlimited AI.
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `STRIPE_SECRET_KEY` | | Turns billing on. |
 | `STRIPE_WEBHOOK_SECRET` | | Verifies Stripe webhooks. Required with billing. |
@@ -169,7 +169,7 @@ Leave these empty on a self-hosted instance. Without `STRIPE_SECRET_KEY`, every 
 
 The `realtime` container reads its own variables:
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `PORT` | `4000` | Listen port. |
 | `AUTH_SECRET` | | **The same value** as opendesk. Verifies socket tokens. |

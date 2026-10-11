@@ -5,7 +5,7 @@ description: Manage the people who write in and the companies they belong to.
 
 Scopes: `contacts:read` to read, `contacts:write` to change.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id` |
 | `POST` | `/v1/contacts` | Create a contact |
@@ -20,15 +20,30 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 
 ```ts
 type Contact = {
-  id: string; email: string | null; name: string; phone: string; avatar_url: string;
+  id: string;
+  email: string | null;
+  name: string;
+  phone: string;
+  avatar_url: string;
   company: { id: string; name: string; domain: string } | null;
-  external_id: string | null; notes: string; custom: Record<string, unknown>;
-  blocked: boolean; ticket_count: number; created_at: string; updated_at: string;
+  external_id: string | null;
+  notes: string;
+  custom: Record<string, unknown>;
+  blocked: boolean;
+  ticket_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 type Company = {
-  id: string; name: string; domain: string; notes: string; custom: Record<string, unknown>;
-  contact_count: number; created_at: string; updated_at: string;
+  id: string;
+  name: string;
+  domain: string;
+  notes: string;
+  custom: Record<string, unknown>;
+  contact_count: number;
+  created_at: string;
+  updated_at: string;
 };
 ```
 

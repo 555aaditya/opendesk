@@ -27,7 +27,7 @@ If you retry with the same key within **24 hours**, opendesk returns the result 
 
 ## Outcomes
 
-| situation | response |
+| Situation | Response |
 | --- | --- |
 | First request with a key | Runs normally. The result is stored, unless it is a `5xx` or `429`. |
 | Retry with the same key and body | The stored result, with `Idempotent-Replayed: true`. |

@@ -1,0 +1,107 @@
+---
+import OdIcon from './OdIcon.astro';
+
+const { pagination, editUrl } = Astro.locals.starlightRoute;
+const { prev, next } = pagination;
+---
+
+{
+  editUrl && (
+    <p class="od-edit print:hidden">
+      <a href={editUrl.href}>
+        <OdIcon name="pencil" size={13} /> Edit this page on GitHub
+      </a>
+    </p>
+  )
+}
+
+{
+  (prev || next) && (
+    <nav class="od-pager print:hidden" aria-label="Pages">
+      {prev ? (
+        <a href={prev.href} rel="prev">
+          <span class="od-pager-dir">
+            <OdIcon name="arrowLeft" size={13} /> Previous
+          </span>
+          <span class="od-pager-title">{prev.label}</span>
+        </a>
+      ) : (
+        <span />
+      )}
+      {next && (
+        <a href={next.href} rel="next" class="od-pager-next">
+          <span class="od-pager-dir">
+            Next <OdIcon name="arrowRight" size={13} />
+          </span>
+          <span class="od-pager-title">{next.label}</span>
+        </a>
+      )}
+    </nav>
+  )
+}
+
+<style>
+  .od-edit {
+    margin-top: 4rem;
+    font-size: 13px;
+  }
+  .od-edit a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--od-muted);
+    text-decoration: none;
+    transition: color 120ms ease;
+  }
+  .od-edit a:hover {
+    color: var(--od-heading);
+  }
+  .od-edit + .od-pager {
+    margin-top: 1.25rem;
+  }
+  .od-pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 4rem;
+  }
+  .od-pager a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--od-line);
+    border-radius: 12px;
+    text-decoration: none;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+  .od-pager a:hover {
+    background: var(--od-soft);
+  }
+  .od-pager-next {
+    align-items: flex-end;
+    text-align: end;
+  }
+  .od-pager-dir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font: 500 11px/1.4 var(--__sl-font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--od-muted);
+  }
+  .od-pager-title {
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--od-heading);
+  }
+  @media (max-width: 40em) {
+    .od-pager {
+      grid-template-columns: 1fr;
+    }
+    .od-pager > span {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,34 @@
+---
+import ThemeSelect from './ThemeSelect.astro';
+---
+
+<div class="od-mobile-footer">
+  <div class="od-mobile-links">
+    <a href="https://app.opendesk.sh/">Open app</a>
+    <a href="https://opendesk.sh/">opendesk.sh</a>
+    <a href="https://github.com/opendesk/opendesk">GitHub</a>
+  </div>
+  <ThemeSelect />
+</div>
+
+<style>
+  .od-mobile-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-block: 1rem;
+    border-top: 1px solid var(--od-line);
+  }
+  .od-mobile-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .od-mobile-links a {
+    font-size: 14px;
+    color: var(--od-muted);
+    text-decoration: none;
+  }
+</style>

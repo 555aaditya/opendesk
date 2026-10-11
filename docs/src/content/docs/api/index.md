@@ -7,7 +7,7 @@ The opendesk web app uses exactly this public API. Anything you can do in the ap
 
 ## Base URL
 
-| | base URL |
+| | Base URL |
 | --- | --- |
 | Cloud | `https://api.opendesk.sh/v1` |
 | Self-hosted | `https://<your-domain>/v1` (your `API_URL` followed by `/v1`) |

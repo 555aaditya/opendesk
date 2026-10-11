@@ -9,7 +9,7 @@ opendesk limits how fast clients can call the API, to keep the service fast for 
 
 Rate-limited responses carry the IETF `RateLimit` headers:
 
-| header | meaning |
+| Header | Meaning |
 | --- | --- |
 | `RateLimit-Limit` | Requests allowed in the current window. |
 | `RateLimit-Remaining` | Requests left in the current window. |

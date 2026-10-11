@@ -7,14 +7,14 @@ A **mailbox** is a support address, such as `support@example.com`, connected to 
 
 Each mailbox has two halves: how mail comes **in** and how replies go **out**.
 
-| inbound | how it works | setup |
+| Inbound | How it works | Setup |
 | --- | --- | --- |
 | Forwarding | Your provider forwards mail to a unique opendesk address. | [Forwarding](/guides/mailboxes/forwarding/) |
 | IMAP | opendesk reads new mail from the mailbox. | [IMAP and SMTP](/guides/mailboxes/imap-smtp/) |
 | Google | You sign in with Google once; opendesk reads Gmail. | [Connect Google](/guides/mailboxes/google/) |
 | Microsoft | You sign in with Microsoft once; opendesk reads Outlook. | [Connect Microsoft](/guides/mailboxes/microsoft/) |
 
-| outbound | how it works |
+| Outbound | How it works |
 | --- | --- |
 | SMTP | Replies are sent through your provider's SMTP server. |
 | Google | Replies are sent through the connected Gmail account. |

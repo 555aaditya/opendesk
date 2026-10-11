@@ -7,7 +7,7 @@ description: Invite members, choose their role, group them into teams and secure
 
 Every member of a workspace has one role. Roles are ordered: each one can do everything the role below it can.
 
-| role | can |
+| Role | Can |
 | --- | --- |
 | `owner` | Everything, including deleting the workspace and transferring ownership. |
 | `admin` | Manage settings: mailboxes, members, API keys, webhooks, automations, SLA policies and the chat widget. |

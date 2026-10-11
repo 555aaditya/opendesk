@@ -18,14 +18,14 @@ API_URL/v1/mailboxes/oauth/{provider}/callback   mailbox connections
 
 For `API_URL=https://desk.example.com`:
 
-| provider | redirect URIs |
+| Provider | Redirect URIs |
 | --- | --- |
 | Google | `https://desk.example.com/v1/auth/oauth/google/callback`, `https://desk.example.com/v1/mailboxes/oauth/google/callback` |
 | Microsoft | `https://desk.example.com/v1/auth/oauth/microsoft/callback`, `https://desk.example.com/v1/mailboxes/oauth/microsoft/callback` |
 
 ## Scopes
 
-| provider | sign-in | mailbox connection |
+| Provider | Sign-in | Mailbox connection |
 | --- | --- | --- |
 | Google | `openid`, `email`, `profile` | `openid`, `email`, `https://mail.google.com/` |
 | Microsoft | `openid`, `email`, `profile` | `openid`, `email`, `offline_access`, `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://graph.microsoft.com/Mail.Send`, `https://graph.microsoft.com/User.Read` |

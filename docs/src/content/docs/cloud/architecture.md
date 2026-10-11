@@ -7,7 +7,7 @@ The hosted service at opendesk.sh runs the same code as a self-hosted install, s
 
 ## Domains
 
-| domain | serves | runs on |
+| Domain | Serves | Runs on |
 | --- | --- | --- |
 | `opendesk.sh` | Marketing site and `install.sh` | Cloudflare Pages |
 | `docs.opendesk.sh` | This documentation | Cloudflare Pages |
@@ -53,7 +53,7 @@ Postgres runs on [Neon](https://neon.tech). Request handlers use the pooled (`-p
 
 ## Subprocessors
 
-| provider | purpose |
+| Provider | Purpose |
 | --- | --- |
 | Amazon Web Services | Compute, object storage, email sending, secrets |
 | Cloudflare | DNS, static hosting, inbound email, edge security |

@@ -5,7 +5,7 @@ description: Read a ticket's conversation, send replies and notes, and upload at
 
 Scopes: `tickets:read` to read, `tickets:write` to send.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/tickets/{id}/messages` | All messages, ascending |
 | `POST` | `/v1/tickets/{id}/messages` | Send a reply or add a note |
@@ -17,12 +17,23 @@ Scopes: `tickets:read` to read, `tickets:write` to send.
 
 ```ts
 type Message = {
-  id: string; ticket_id: string; kind: "reply" | "note"; direction: "inbound" | "outbound";
+  id: string;
+  ticket_id: string;
+  kind: "reply" | "note";
+  direction: "inbound" | "outbound";
   author: { type: "contact" | "user" | "system" | "api"; user: UserRef | null; contact: ContactRef | null };
-  body_html: string; body_text: string; has_quoted: boolean; subject: string;
-  from_email: string; from_name: string; to: string[]; cc: string[]; bcc: string[];
+  body_html: string;
+  body_text: string;
+  has_quoted: boolean;
+  subject: string;
+  from_email: string;
+  from_name: string;
+  to: string[];
+  cc: string[];
+  bcc: string[];
   attachments: Attachment[];
-  delivery_status: "none" | "pending" | "sent" | "failed" | "bounced"; delivery_error: string;
+  delivery_status: "none" | "pending" | "sent" | "failed" | "bounced";
+  delivery_error: string;
   created_at: string;
 };
 ```

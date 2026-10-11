@@ -5,7 +5,7 @@ description: List, create, update, merge and bulk edit tickets.
 
 Scopes: `tickets:read` to read, `tickets:write` to change.
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/tickets` | List tickets |
 | `GET` | `/v1/tickets/counts` | Counts for the sidebar |
@@ -23,17 +23,30 @@ Messages are on their own page: [Messages and attachments](/api/resources/messag
 
 ```ts
 type Ticket = {
-  id: string; number: number; subject: string;
+  id: string;
+  number: number;
+  subject: string;
   status: "open" | "pending" | "on_hold" | "solved" | "closed";
   priority: "low" | "normal" | "high" | "urgent";
   channel: "email" | "chat" | "api" | "portal";
-  mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
+  mailbox_id: string | null;
+  contact: ContactRef | null;
+  assignee: UserRef | null;
+  team_id: string | null;
   tags: { id: string; name: string }[];
   sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
-  first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
-  last_message_at: string; last_customer_message_at: string | null; last_message_preview: string; message_count: number;
-  spam: boolean; csat: { score: number; comment: string } | null; custom: Record<string, unknown>;
-  created_at: string; updated_at: string;
+  first_responded_at: string | null;
+  solved_at: string | null;
+  snoozed_until: string | null;
+  last_message_at: string;
+  last_customer_message_at: string | null;
+  last_message_preview: string;
+  message_count: number;
+  spam: boolean;
+  csat: { score: number; comment: string } | null;
+  custom: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 };
 ```
 
@@ -44,7 +57,7 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
   -H "Authorization: Bearer od_live_..."
 ```
 
-| filter | values |
+| Filter | Values |
 | --- | --- |
 | `status` | comma-separated statuses |
 | `priority` | comma-separated priorities |
@@ -89,7 +102,7 @@ curl https://api.opendesk.sh/v1/tickets \
   }'
 ```
 
-| field | |
+| Field | Notes |
 | --- | --- |
 | `subject` | required |
 | `contact_id` or `contact` | an existing contact, or `{ email, name }` to find or create one |
@@ -144,7 +157,7 @@ curl https://api.opendesk.sh/v1/tickets/1042/merge \
 
 `GET /v1/tickets/{id}/activities` returns the timeline entries that are not messages:
 
-| type | data |
+| Type | Data |
 | --- | --- |
 | `status_changed`, `priority_changed`, `assigned` | `{ from, to }` |
 | `team_changed` | |

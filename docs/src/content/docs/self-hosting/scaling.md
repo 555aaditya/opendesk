@@ -9,7 +9,7 @@ A single machine running the self-host bundle serves a sizeable team. When you o
 
 The opendesk binary runs in one of three roles, set with `OPENDESK_ROLE`:
 
-| role | runs | scale by |
+| Role | Runs | Scale by |
 | --- | --- | --- |
 | `all` | Everything in one process. The default and the self-host setup. | one instance |
 | `api` | The HTTP API (and the web app with `SERVE_WEB=true`). Stateless. | requests |

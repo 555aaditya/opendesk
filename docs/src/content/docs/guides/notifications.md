@@ -7,7 +7,7 @@ opendesk notifies you about the things that need you, in the app and in real tim
 
 ## Types
 
-| type | when |
+| Type | When |
 | --- | --- |
 | `assigned` | A ticket is assigned to you. |
 | `mentioned` | A teammate mentions you in a note. |

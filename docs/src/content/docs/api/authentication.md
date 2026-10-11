@@ -5,7 +5,7 @@ description: Authenticate with user access tokens or workspace API keys, and the
 
 opendesk accepts two kinds of bearer credential.
 
-| credential | for | header |
+| Credential | For | Header |
 | --- | --- | --- |
 | Access token | The web app and anything acting as a signed-in user | `Authorization: Bearer <jwt>` plus `OD-Workspace` |
 | API key | Servers, scripts and integrations | `Authorization: Bearer od_live_...` |
@@ -27,7 +27,7 @@ curl https://api.opendesk.sh/v1/contacts \
 
 ### Scopes
 
-| scope | grants |
+| Scope | Grants |
 | --- | --- |
 | `tickets:read` | Read tickets, their messages and activities, and related ticket data |
 | `tickets:write` | Create, update and reply to tickets |
@@ -56,7 +56,7 @@ Sign-in is rate limited and protected by a challenge, so for automation use API 
 
 ## Credential formats
 
-| credential | format | lifetime |
+| Credential | Format | Lifetime |
 | --- | --- | --- |
 | Access token | JWT, HS256, `purpose: access` | 15 minutes |
 | Realtime token | JWT, `purpose: ws` | 5 minutes, only needs to be valid at connect |

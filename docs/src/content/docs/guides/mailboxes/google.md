@@ -13,7 +13,7 @@ Connecting Google lets opendesk read new mail from a Gmail or Google Workspace m
 
 ## What opendesk asks for
 
-| scope | why |
+| Scope | Why |
 | --- | --- |
 | `openid`, `email` | Identify which Google account was connected. |
 | `https://mail.google.com/` | Read incoming mail over IMAP and send replies through Gmail. |

@@ -1,0 +1,136 @@
+---
+import type { StarlightRouteData } from '@astrojs/starlight/route-data';
+import SidebarRestorePoint from '@astrojs/starlight/components/SidebarRestorePoint.astro';
+import OdIcon from './OdIcon.astro';
+
+type Entry = StarlightRouteData['sidebar'][number];
+interface Props {
+  entries: Entry[];
+  depth?: number;
+}
+
+const { entries, depth = 0 } = Astro.props;
+// Top-level groups read as headings when the list is all groups; otherwise groups fold.
+const headings = depth === 0 && entries.every((e) => e.type === 'group');
+const hasCurrent = (e: Entry): boolean =>
+  e.type === 'link' ? e.isCurrent : e.entries.some(hasCurrent);
+---
+
+<ul class:list={['od-side', { 'od-side-nested': depth > 0 }]}>
+  {
+    entries.map((e) =>
+      e.type === 'link' ? (
+        <li>
+          <a href={e.href} class="od-side-link" aria-current={e.isCurrent ? 'page' : undefined} {...e.attrs}>
+            {e.label}
+          </a>
+        </li>
+      ) : headings ? (
+        <li class="od-side-group">
+          <p class="od-side-heading">{e.label}</p>
+          <Astro.self entries={e.entries} depth={depth + 1} />
+        </li>
+      ) : (
+        <li>
+          <details class="od-side-folder" open={hasCurrent(e) || !e.collapsed}>
+            <summary class="od-side-link">
+              <span>{e.label}</span>
+              <OdIcon name="chevronRight" size={14} class="od-side-caret" />
+            </summary>
+            <SidebarRestorePoint />
+            <Astro.self entries={e.entries} depth={depth + 1} />
+          </details>
+        </li>
+      )
+    )
+  }
+</ul>
+
+<style>
+  .od-side {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .od-side > li + li {
+    margin-top: 2px;
+  }
+  .od-side > li.od-side-group,
+  .od-side > li + li.od-side-group,
+  .od-side > li.od-side-group + li {
+    margin-top: 1.25rem;
+  }
+  .od-side > li.od-side-group:first-child {
+    margin-top: 0;
+  }
+  .od-side-heading {
+    margin: 0 0 0.5rem;
+    padding-inline: 1.125rem;
+    font: 500 11px/1.5 var(--__sl-font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--od-faint);
+  }
+  .od-side-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    position: relative;
+    padding: 0.375rem 0.625rem 0.375rem 1.125rem;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--od-muted);
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .od-side-link:hover {
+    background: var(--od-soft);
+    color: var(--od-heading);
+  }
+  /* The current page is marked with the Module's round piece. */
+  .od-side-link::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0.4rem;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    margin-top: -2.5px;
+    border-radius: 50%;
+    background: var(--od-ink);
+    transform: scale(0);
+    transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .od-side-link[aria-current='page'] {
+    color: var(--od-heading);
+    font-weight: 500;
+  }
+  .od-side-link[aria-current='page']::before {
+    transform: scale(1);
+  }
+  summary.od-side-link {
+    list-style: none;
+  }
+  summary.od-side-link::-webkit-details-marker {
+    display: none;
+  }
+  .od-side-folder :global(.od-side-caret) {
+    flex-shrink: 0;
+    transition: transform 150ms ease;
+  }
+  .od-side-folder[open] > summary :global(.od-side-caret) {
+    transform: rotate(90deg);
+  }
+  .od-side-folder > .od-side-nested {
+    margin: 2px 0 4px 1.125rem;
+    padding-inline-start: 0;
+    border-inline-start: 1px solid var(--od-line);
+  }
+  .od-side-folder > .od-side-nested > li + li {
+    margin-top: 2px;
+  }
+</style>

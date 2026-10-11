@@ -7,7 +7,7 @@ Press <kbd>?</kbd> anywhere in the app to see this list. <kbd>mod</kbd> is <kbd>
 
 ## General
 
-| keys | action |
+| Keys | Action |
 | --- | --- |
 | <kbd>mod</kbd> <kbd>k</kbd> | Command menu |
 | <kbd>/</kbd> | Search tickets |
@@ -20,7 +20,7 @@ Press <kbd>?</kbd> anywhere in the app to see this list. <kbd>mod</kbd> is <kbd>
 
 ## Ticket list
 
-| keys | action |
+| Keys | Action |
 | --- | --- |
 | <kbd>j</kbd> | Next ticket |
 | <kbd>k</kbd> | Previous ticket |
@@ -30,7 +30,7 @@ Press <kbd>?</kbd> anywhere in the app to see this list. <kbd>mod</kbd> is <kbd>
 
 ## Ticket
 
-| keys | action |
+| Keys | Action |
 | --- | --- |
 | <kbd>r</kbd> | Reply |
 | <kbd>n</kbd> | Add a note |

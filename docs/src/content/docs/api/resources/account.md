@@ -7,7 +7,7 @@ These endpoints act on the signed-in user, not a workspace, so they do not take 
 
 ## Sign-in
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/auth/config` | Providers, password login, sign-up and challenge settings |
 | `POST` | `/v1/auth/register` | `{email, password, name, turnstile_token?}` |
@@ -35,7 +35,7 @@ Login, registration and password reset are rate limited and protected by a Turns
 
 ## Two-factor authentication
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/v1/auth/totp/setup` | → `{secret, otpauth_url}` |
 | `POST` | `/v1/auth/totp/enable` | `{code}` → `{recovery_codes}` |
@@ -45,7 +45,7 @@ A code can be used only once. Recovery codes are single use.
 
 ## Your account
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/v1/me` | `{ user, memberships }` |
 | `PATCH` | `/v1/me` | `{name?, avatar_url?}` |

@@ -1,0 +1,72 @@
+---
+import OdIcon from './OdIcon.astro';
+---
+
+<od-theme-toggle class="od-theme" role="group" aria-label="Color theme">
+  <button type="button" data-theme-value="light" aria-label="Light theme" title="Light">
+    <OdIcon name="sun" size={14} />
+  </button>
+  <button type="button" data-theme-value="dark" aria-label="Dark theme" title="Dark">
+    <OdIcon name="moon" size={14} />
+  </button>
+</od-theme-toggle>
+
+<script>
+  const KEY = 'starlight-theme';
+
+  const sync = () => {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+    document.querySelectorAll('od-theme-toggle button').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-theme-value') === theme));
+    });
+  };
+
+  class OdThemeToggle extends HTMLElement {
+    connectedCallback() {
+      sync();
+      this.querySelectorAll('button').forEach((b) =>
+        b.addEventListener('click', () => {
+          const theme = b.getAttribute('data-theme-value') === 'dark' ? 'dark' : 'light';
+          document.documentElement.dataset.theme = theme;
+          try {
+            localStorage.setItem(KEY, theme);
+          } catch {}
+          sync();
+        })
+      );
+    }
+  }
+  customElements.define('od-theme-toggle', OdThemeToggle);
+</script>
+
+<style>
+  .od-theme {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--od-line);
+    border-radius: 9px;
+    background: var(--od-bg);
+  }
+  .od-theme button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--od-muted);
+    cursor: pointer;
+  }
+  .od-theme button:hover {
+    color: var(--od-heading);
+  }
+  .od-theme button[aria-pressed='true'] {
+    background: var(--od-hover);
+    color: var(--od-heading);
+  }
+</style>

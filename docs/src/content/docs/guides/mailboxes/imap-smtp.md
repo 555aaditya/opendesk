@@ -9,7 +9,7 @@ Use IMAP and SMTP for providers without a one-click connection, such as Fastmail
 
 In **Settings → Mailboxes**, add a mailbox and choose **IMAP** for inbound and **SMTP** for outbound. You need:
 
-| field | example |
+| Field | Example |
 | --- | --- |
 | IMAP host | `imap.example.com` |
 | IMAP port | `993` |

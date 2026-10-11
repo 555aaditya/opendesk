@@ -3,7 +3,7 @@ title: System
 description: Health checks, the OpenAPI document and the API reference UI.
 ---
 
-| method | path | |
+| Method | Path | Description |
 | --- | --- | --- |
 | `GET` | `/healthz` | Liveness: the process is up |
 | `GET` | `/readyz` | Readiness: the database and NATS are reachable |

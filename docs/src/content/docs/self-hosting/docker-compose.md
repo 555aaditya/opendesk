@@ -7,7 +7,7 @@ The installer is a convenience around Docker Compose. The same `docker-compose.y
 
 ## Services
 
-| service | image | role |
+| Service | Image | Role |
 | --- | --- | --- |
 | `caddy` | `caddy:2.11-alpine` | Ports 80 and 443 with automatic HTTPS. `/socket*` goes to `realtime`, everything else to `opendesk`. |
 | `opendesk` | `ghcr.io/opendesk/opendesk:${OPENDESK_VERSION}` | The API, workers and web app (`SERVE_WEB=true`), with NATS embedded on the internal network. |
@@ -39,7 +39,7 @@ From a checkout, `make selfhost-env` writes `.env` with fresh secrets (it never 
 
 `.env` sits next to `docker-compose.yml`. The template (`deploy/self-host/.env.template`) documents each setting. The ones specific to this bundle:
 
-| variable | default | meaning |
+| Variable | Default | Meaning |
 | --- | --- | --- |
 | `OPENDESK_VERSION` | pinned by the installer | Release of the `opendesk` and `realtime` images. Change it, then `docker compose pull && docker compose up -d`, to upgrade. |
 | `OPENDESK_IMAGE`, `REALTIME_IMAGE` | `ghcr.io/opendesk/...` | Image names, for a mirror. |
@@ -114,7 +114,7 @@ Combine profiles with commas: `COMPOSE_PROFILES=minio,ollama`.
 
 ## Routing
 
-| path | goes to |
+| Path | Goes to |
 | --- | --- |
 | `/socket`, `/socket/*` | `realtime:4000`, including the chat widget socket at `/socket/widget` |
 | everything else | `opendesk:8080`: the API, web app, widget script, help center and `/config.js` |
@@ -123,7 +123,7 @@ Caddy's access log strips the `token` query parameter and the `Authorization` an
 
 ## Volumes
 
-| volume | holds |
+| Volume | Holds |
 | --- | --- |
 | `opendesk-data` | Attachments and raw email (local storage), embedded NATS data |
 | `postgres-data` | The database |
