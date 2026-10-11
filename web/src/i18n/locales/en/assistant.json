@@ -74,5 +74,18 @@
     "pause": "Pause for a week",
     "dismiss": "Dismiss"
   },
-  "shortcut": "Toggle {{name}}"
+  "shortcut": "Toggle {{name}}",
+  "chips": {
+    "summarize": "Summarize this ticket",
+    "assign": "Who should take this?",
+    "reply": "Draft a reply",
+    "note": "Add an internal note",
+    "triage": "What needs attention now?",
+    "unassigned": "Suggest assignees for old tickets",
+    "report": "How are we doing this week?",
+    "kb": "Draft a help article",
+    "label": "Label this week's billing tickets",
+    "breach": "What breaches SLA soon?",
+    "mine": "What's waiting on me?"
+  }
 }
