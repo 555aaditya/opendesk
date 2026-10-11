@@ -329,10 +329,6 @@
       "contact": "Add fields like plan or account manager to keep customer details in one place.",
       "company": "Add fields like renewal date or seats to track accounts."
     },
-    "unavailable": {
-      "title": "Custom fields need a server update",
-      "description": "Your opendesk server doesn't support custom fields yet. They appear here once it's updated."
-    },
     "type": {
       "text": "Text",
       "long_text": "Long text",

@@ -153,7 +153,7 @@ export default function Tags() {
               title={
                 group ? (
                   <span className="flex items-center gap-2">
-                    <span className={cn("size-2 rounded-xs", tones[group.color ?? "gray"].solid)} aria-hidden />
+                    {group.color && <span className={cn("size-2 rounded-xs", tones[group.color].solid)} aria-hidden />}
                     {group.name}
                     {group.exclusive && (
                       <Tooltip content={t("labels.group.exclusiveHint")}>
@@ -175,7 +175,7 @@ export default function Tags() {
               actions={
                 <>
                   {i === 0 && search}
-                  {group && canEdit && <GroupMenu group={group} onEdit={() => setGroupEditing(group)} onDelete={() => void structure.removeGroup(group.id)} onAdd={() => setEditing({ label: null, group: group.id })} />}
+                  {group && canEdit && <GroupMenu group={group} onEdit={() => setGroupEditing(group)} onDelete={() => structure.removeGroup(group.id)} onAdd={() => setEditing({ label: null, group: group.id })} />}
                 </>
               }
             >
@@ -449,7 +449,7 @@ function SortableRow({ label, onDrop, onMove, ...rowProps }: Omit<RowProps, "onM
   );
 }
 
-function GroupMenu({ group, onEdit, onDelete, onAdd }: { group: LabelGroup; onEdit: () => void; onDelete: () => void; onAdd: () => void }) {
+function GroupMenu({ group, onEdit, onDelete, onAdd }: { group: LabelGroup; onEdit: () => void; onDelete: () => Promise<unknown>; onAdd: () => void }) {
   const { t } = useTranslation("settings");
   const confirm = useConfirm();
   return (
@@ -471,7 +471,7 @@ function GroupMenu({ group, onEdit, onDelete, onAdd }: { group: LabelGroup; onEd
           danger
           icon={<Trash2 />}
           onSelect={() =>
-            confirm.show(t("labels.group.deleteBody", { name: group.name }), async () => onDelete(), {
+            confirm.show(t("labels.group.deleteBody", { name: group.name }), () => onDelete(), {
               title: t("labels.group.deleteTitle"),
               confirmLabel: t("labels.group.deleteConfirm"),
               danger: true,

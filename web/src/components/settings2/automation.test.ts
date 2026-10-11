@@ -12,6 +12,7 @@ describe("automation AI helpers", () => {
   it("offers is / is not for sentiment and needs no value for triage", () => {
     expect(opsFor("sentiment")).toEqual(["equals", "not_equals"]);
     expect(actionNeedsValue("ai_triage")).toBe(false);
+    expect(actionNeedsValue("set_field")).toBe(false);
     expect(sentimentLabel("frustrated")).toBe("Frustrated");
     expect(sentimentLabel("custom")).toBe("custom");
   });
@@ -25,5 +26,6 @@ describe("automation labels", () => {
     expect(fieldLabel.from_email).toBe("Sender email");
     expect(Object.keys(fieldLabel)).toContain("sentiment");
     expect(Object.keys(actionLabel).at(-1)).toBe("ai_triage");
+    expect(actionLabel.set_field).toBe("Set field");
   });
 });

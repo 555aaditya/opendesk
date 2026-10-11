@@ -34,16 +34,32 @@ import { useAI } from "@/lib/ai";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { Action, ActionType, Automation, AutomationTrigger, Condition, ConditionField, ConditionOp } from "@/lib/api/types";
+import type { Action, ActionType, Automation, AutomationTrigger, Condition, ConditionField, ConditionOp, FieldCondition, FieldOp } from "@/lib/api/types";
+import {
+  FieldValueInput,
+  fieldConditionComplete,
+  fieldOpsFor,
+  isFieldRef,
+  parseFieldRef,
+  useAutomationFields,
+  useFieldConditionItems,
+  useFieldOpLabel,
+  type FieldRef,
+} from "@/components/settings2/fieldRules";
+import { typeIcon } from "@/components/settings2/fields/model";
 import { q, qk, removeFromList, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
 import { tone, type Tone } from "@/lib/tones";
 
+/** A builder rule: a built-in condition, or one on a custom field with its type's operators. */
+type Rule = Condition | FieldCondition;
+const isFieldRule = (c: Rule): c is FieldCondition => isFieldRef(c.field);
+
 type Draft = {
   name: string;
   trigger: AutomationTrigger;
-  conditions: Condition[];
+  conditions: Rule[];
   actions: Action[];
   enabled: boolean;
 };
@@ -60,26 +76,34 @@ const allFields = Object.keys(fieldLabel) as ConditionField[];
 const allActions = Object.keys(actionLabel) as ActionType[];
 
 /** Builder lists; AI fields and actions only when the instance has AI, unless already in use. */
-function useFieldItems(current: ConditionField) {
+function useFieldItems(current: string) {
   const { enabled } = useAI();
-  return offered(allFields, aiFields, enabled, current).map((f) => ({
-    value: f,
+  const { t } = useTranslation("settingsInbox");
+  const custom = useFieldConditionItems(current);
+  const builtIn = offered(allFields, aiFields, enabled, isFieldRef(current) ? undefined : (current as ConditionField)).map((f) => ({
+    value: f as string,
     label: fieldLabel[f],
     icon: aiFields.has(f) ? <AiIcon /> : undefined,
+    group: custom.length ? t("customFields.ticketBasics") : undefined,
   }));
+  return [...builtIn, ...custom];
 }
 function useActionItems(current: ActionType) {
   const { enabled, cost } = useAI();
   const { t } = useTranslation();
-  return offered(allActions, aiActions, enabled, current).map((a) => {
-    const n = aiActions.has(a) ? cost("triage") : null;
-    return {
-      value: a,
-      label: actionLabel[a],
-      icon: aiActions.has(a) ? <AiIcon /> : undefined,
-      hint: n !== null ? t("credits", { count: n }) : undefined,
-    };
-  });
+  const { all } = useAutomationFields();
+  const hasTicketFields = all.some((f) => f.entity === "ticket" && !f.archived);
+  return offered(allActions, aiActions, enabled, current)
+    .filter((a) => a !== "set_field" || hasTicketFields || current === "set_field")
+    .map((a) => {
+      const n = aiActions.has(a) ? cost("triage") : null;
+      return {
+        value: a,
+        label: actionLabel[a],
+        icon: aiActions.has(a) ? <AiIcon /> : undefined,
+        hint: n !== null ? t("credits", { count: n }) : undefined,
+      };
+    });
 }
 
 const isEmptyHtml = (h: string) => !h || h.replace(/<[^>]+>/g, "").trim() === "";
@@ -111,7 +135,7 @@ export default function AutomationEdit() {
     return {
       name: existing.name,
       trigger: existing.trigger,
-      conditions: existing.conditions,
+      conditions: existing.conditions as Rule[],
       actions: existing.actions,
       enabled: existing.enabled,
     };
@@ -133,6 +157,8 @@ export default function AutomationEdit() {
     mutationFn: (d: Draft) => {
       const body = {
         ...d,
+        // The API type narrows ops to the built-in set; field rules carry their own (contracts/api.md).
+        conditions: d.conditions as Condition[],
         name: d.name.trim(),
         position: existing?.position ?? all?.length ?? 0,
       };
@@ -155,7 +181,7 @@ export default function AutomationEdit() {
         setDraft({
           name: a.name,
           trigger: a.trigger,
-          conditions: a.conditions,
+          conditions: a.conditions as Rule[],
           actions: a.actions,
           enabled: a.enabled,
         });
@@ -201,8 +227,11 @@ export default function AutomationEdit() {
     );
 
   const set = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
-  const condInvalid = (c: Condition) => !c.value.trim();
-  const actInvalid = (a: Action) => actionNeedsValue(a.type) && (a.type === "send_reply" || a.type === "add_note" ? isEmptyHtml(a.value) : !a.value.trim());
+  const condInvalid = (c: Rule) => (isFieldRule(c) ? !fieldConditionComplete(c) : !c.value.trim());
+  const actInvalid = (a: Action) =>
+    a.type === "set_field"
+      ? !a.field
+      : actionNeedsValue(a.type) && (a.type === "send_reply" || a.type === "add_note" ? isEmptyHtml(a.value) : !a.value.trim());
   const problems: string[] = [];
   if (!draft.name.trim()) problems.push(t("edit.problems.name"));
   if (!draft.actions.length) problems.push(t("edit.problems.action"));
@@ -438,43 +467,79 @@ function ConditionRow({
   onChange,
   onRemove,
 }: {
-  c: Condition;
+  c: Rule;
   first: boolean;
   invalid: boolean;
-  onChange: (c: Condition) => void;
+  onChange: (c: Rule) => void;
   onRemove: () => void;
 }) {
   const { t } = useTranslation("settingsInbox");
-  const ops = opsFor(c.field);
   const fieldItems = useFieldItems(c.field);
+  const { find } = useAutomationFields();
+  const opLabelFor = useFieldOpLabel();
+  const custom = isFieldRule(c) ? find(c.field as FieldRef) : undefined;
+  const fieldOps = isFieldRule(c) ? fieldOpsFor(custom?.type) : [];
+  const builtInOps = isFieldRule(c) ? [] : opsFor(c.field);
+
+  const pickField = (v: string) => {
+    if (isFieldRef(v)) {
+      const f = find(v);
+      const ops = fieldOpsFor(f?.type);
+      onChange({ field: v, op: isFieldRule(c) && ops.includes(c.op) ? c.op : ops[0], value: "" });
+    } else {
+      const field = v as ConditionField;
+      const nextOps = opsFor(field);
+      const cur = isFieldRule(c) ? undefined : c.op;
+      onChange({ field, op: cur && nextOps.includes(cur) ? cur : nextOps[0], value: "" });
+    }
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
       <span className="w-9 shrink-0 text-[12px] text-fg-4">{first ? t("edit.if") : t("edit.and")}</span>
       <SinglePick
         items={fieldItems}
         value={c.field}
-        onChange={(v) => {
-          const field = v as ConditionField;
-          const nextOps = opsFor(field);
-          onChange({
-            field,
-            op: nextOps.includes(c.op) ? c.op : nextOps[0],
-            value: "",
-          });
-        }}
+        onChange={pickField}
         placeholder={t("edit.field")}
-        className="w-[140px]"
+        width={260}
+        className="w-[160px]"
+        renderValue={
+          custom
+            ? () => (
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {parseFieldRef(c.field as FieldRef).entity === "contact" && <span className="text-fg-3">{t("customFields.contactPrefix")}</span>}
+                  <span className="truncate">{custom.name}</span>
+                </span>
+              )
+            : undefined
+        }
       />
-      <Select<ConditionOp>
-        size="sm"
-        value={c.op}
-        onChange={(op) => onChange({ ...c, op })}
-        options={ops.map((o) => ({ value: o, label: opLabel[o] }))}
-        className="w-[150px]"
-        aria-label={t("edit.operator")}
-      />
+      {isFieldRule(c) ? (
+        <Select<FieldOp>
+          size="sm"
+          value={c.op}
+          onChange={(op) => onChange({ ...c, op, value: op === "set" || op === "not_set" ? "" : c.value })}
+          options={fieldOps.map((o) => ({ value: o, label: opLabelFor(o, custom?.type) }))}
+          className="w-[150px]"
+          aria-label={t("edit.operator")}
+        />
+      ) : (
+        <Select<ConditionOp>
+          size="sm"
+          value={c.op}
+          onChange={(op) => onChange({ ...c, op })}
+          options={builtInOps.map((o) => ({ value: o, label: opLabel[o] }))}
+          className="w-[150px]"
+          aria-label={t("edit.operator")}
+        />
+      )}
       <div className="min-w-[180px] flex-1">
-        <ConditionValue c={c} invalid={invalid} onChange={(value) => onChange({ ...c, value })} />
+        {isFieldRule(c) ? (
+          <FieldValueInput field={custom} op={c.op} value={c.value} invalid={invalid} onChange={(value) => onChange({ ...c, value })} />
+        ) : (
+          <ConditionValue c={c} invalid={invalid} onChange={(value) => onChange({ ...c, value })} />
+        )}
       </div>
       <RemoveButton onClick={onRemove} label={t("edit.removeCondition")} />
     </div>
@@ -589,6 +654,9 @@ function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boo
     case "mark_spam":
       control = <span className="text-[12px] text-fg-3">{ts("edit.markSpamHint")}</span>;
       break;
+    case "set_field":
+      control = <SetFieldControl a={a} invalid={invalid} onChange={onChange} />;
+      break;
     case "ai_triage": {
       const n = cost("triage");
       control = (
@@ -632,6 +700,35 @@ function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boo
             ariaLabel={a.type === "send_reply" ? ts("edit.replyText") : ts("edit.noteText")}
           />
         </div>
+      )}
+    </div>
+  );
+}
+
+/** set_field: which ticket field, then its value ("" clears it). */
+function SetFieldControl({ a, invalid, onChange }: { a: Action; invalid: boolean; onChange: (a: Action) => void }) {
+  const { t } = useTranslation("settingsInbox");
+  const { all } = useAutomationFields();
+  const ticketFields = all.filter((f) => f.entity === "ticket" && (!f.archived || f.key === a.field));
+  const field = ticketFields.find((f) => f.key === a.field);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <SinglePick
+        items={ticketFields.map((f) => ({ value: f.key, label: f.name, icon: <span className="flex text-fg-3">{typeIcon[f.type]}</span>, keywords: [f.key] }))}
+        value={a.field ?? null}
+        onChange={(key) => onChange({ ...a, field: key, value: "" })}
+        placeholder={t("customFields.chooseField")}
+        invalid={invalid}
+        width={260}
+        className="w-[170px]"
+      />
+      {field && (
+        <>
+          <span className="text-[12px] text-fg-4">{t("customFields.to")}</span>
+          <div className="min-w-[160px] flex-1">
+            <FieldValueInput field={field} value={a.value} onChange={(value) => onChange({ ...a, value })} allowClear />
+          </div>
+        </>
       )}
     </div>
   );

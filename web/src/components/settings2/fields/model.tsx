@@ -1,13 +1,13 @@
-// Custom fields for the settings screens, shaped like the "Labels and custom
-// fields" contract. Local types until lib/api/types.ts carries them.
-//
-// TODO(fields): when the custom field hooks land in lib/queries.ts, read the
-// list from them and wire `useFieldWrites` to their create, update, delete and
-// reorder calls. Until then the page shows that the server needs an update.
+// Custom fields for the settings screens: the list from the query cache and
+// optimistic writes. Realtime keeps qk.customFields fresh.
 
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { AtSign, Calendar, CheckSquare, Hash, Link2, List, ListChecks, Text, TextQuote, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Tone } from "@/lib/tones";
+import { api, rows } from "@/lib/api/endpoints";
+import type { CustomField as ApiField } from "@/lib/api/types";
+import { q, qk } from "@/lib/queries";
 
 export type FieldEntity = "ticket" | "contact" | "company";
 export const ENTITIES: FieldEntity[] = ["ticket", "contact", "company"];
@@ -94,17 +94,67 @@ export function slugOption(label: string): string {
   );
 }
 
-export function useCustomFields(): { fields: CustomField[]; available: boolean; isLoading: boolean } {
-  return { fields: [], available: false, isLoading: false };
+export function useCustomFields(): { fields: CustomField[]; isLoading: boolean } {
+  const { data, isLoading } = useQuery(q.customFields());
+  return { fields: (data ?? []) as CustomField[], isLoading };
 }
 
-const notYet = () => Promise.reject(new Error("This needs a newer server."));
-
 export function useFieldWrites() {
+  const qc = useQueryClient();
+  const key = qk.customFields;
+  const snapshot = () => qc.getQueryData<ApiField[]>(key);
+  const restore = (prev: ApiField[] | undefined) => prev && qc.setQueryData(key, prev);
+  const refresh = () => qc.invalidateQueries({ queryKey: key });
+  const upsert = (f: ApiField) => qc.setQueryData<ApiField[]>(key, (old) => (old ? [...old.filter((x) => x.id !== f.id), f] : old));
   return {
-    create: (_v: FieldInput) => notYet(),
-    update: (_id: string, _v: Partial<FieldInput>) => notYet(),
-    remove: (_id: string) => notYet(),
-    reorder: (_entity: FieldEntity, _ids: string[]) => notYet(),
+    create: async (v: FieldInput) => {
+      const f = await api.customFields.create({ entity: v.entity, key: v.key, name: v.name, type: v.type, options: v.options, required_on_solve: v.required_on_solve, description: v.description });
+      upsert(f);
+      void refresh();
+      return f;
+    },
+    update: async (id: string, v: Partial<FieldInput>) => {
+      const prev = snapshot();
+      const patch = { name: v.name, options: v.options, required_on_solve: v.required_on_solve, description: v.description, archived: v.archived };
+      const clean = Object.fromEntries(Object.entries(patch).filter(([, x]) => x !== undefined));
+      qc.setQueryData<ApiField[]>(key, (old) => old?.map((f) => (f.id === id ? ({ ...f, ...clean } as ApiField) : f)));
+      try {
+        const f = await api.customFields.update(id, clean);
+        upsert(f);
+        return f;
+      } catch (e) {
+        restore(prev);
+        throw e;
+      } finally {
+        void refresh();
+      }
+    },
+    remove: async (id: string) => {
+      const prev = snapshot();
+      qc.setQueryData<ApiField[]>(key, (old) => old?.filter((f) => f.id !== id));
+      try {
+        await api.customFields.remove(id);
+      } catch (e) {
+        restore(prev);
+        throw e;
+      } finally {
+        void refresh();
+      }
+    },
+    reorder: async (entity: FieldEntity, ids: string[]) => {
+      const prev = snapshot();
+      const pos = new Map(ids.map((id, i) => [id, i]));
+      qc.setQueryData<ApiField[]>(key, (old) => old?.map((f) => (f.entity === entity && pos.has(f.id) ? { ...f, position: pos.get(f.id)! } : f)));
+      try {
+        const res = rows(await api.customFields.reorder(entity, ids));
+        const byId = new Map(res.map((f) => [f.id, f]));
+        qc.setQueryData<ApiField[]>(key, (old) => old?.map((f) => byId.get(f.id) ?? f));
+      } catch (e) {
+        restore(prev);
+        throw e;
+      } finally {
+        void refresh();
+      }
+    },
   };
 }

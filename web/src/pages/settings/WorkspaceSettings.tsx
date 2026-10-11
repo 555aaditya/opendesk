@@ -4,7 +4,6 @@ import { ChevronDown, ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DisplayOverridesEditor, type Overrides } from "@/components/settings2/DisplayOverrides";
-import { useLabels } from "@/components/settings2/labels/model";
 import { SettingsPage, Section, Row } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -25,7 +24,6 @@ import { q, qk } from "@/lib/queries";
 import { atLeast, reloadSession, updateWorkspace, useRole, useSession } from "@/lib/session";
 import { LOCALE_NAMES, matchLocale, SUPPORTED } from "@/i18n";
 
-// Display overrides from the labels contract; local until the API types carry them.
 type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority> };
 type Draft = {
   name: string;
@@ -34,7 +32,7 @@ type Draft = {
 };
 
 function toDraft(w: Workspace): Draft {
-  const extra = w.settings as WS & DisplaySettings;
+  const extra: DisplaySettings = w.settings;
   return {
     display: { status_labels: extra.status_labels ?? {}, priority_labels: extra.priority_labels ?? {} },
     name: w.name,
@@ -63,8 +61,6 @@ function timezones(): string[] {
 export default function WorkspaceSettings() {
   const { t } = useTranslation("settings");
   const { data: ws } = useQuery(q.workspace());
-  // The display overrides ship with the labels API; show them once the server speaks it.
-  const displaySupported = useLabels().caps.colors;
   const role = useRole();
   const canEdit = atLeast(role, "admin");
   const qc = useQueryClient();
@@ -82,7 +78,7 @@ export default function WorkspaceSettings() {
         ...d.settings,
         help_center_title: d.settings.help_center_title.trim(),
         brand_color: d.settings.brand_color || undefined,
-        ...(displaySupported ? d.display : {}),
+        ...d.display,
       };
       return api.workspaces.update({ name: d.name.trim(), settings });
     },
@@ -90,7 +86,7 @@ export default function WorkspaceSettings() {
       await qc.cancelQueries({ queryKey: qk.workspace });
       const prev = qc.getQueryData<Workspace>(qk.workspace);
       if (prev) {
-        const next = { ...prev, name: d.name.trim(), settings: { ...prev.settings, ...d.settings, ...(displaySupported ? d.display : {}) } };
+        const next = { ...prev, name: d.name.trim(), settings: { ...prev.settings, ...d.settings, ...d.display } };
         qc.setQueryData(qk.workspace, next);
         updateWorkspace(next);
       }
@@ -228,17 +224,15 @@ export default function WorkspaceSettings() {
           </Row>
         </Section>
 
-        {displaySupported && (
-          <Section title={t("display.title")} description={t("display.description")}>
-            <DisplayOverridesEditor
-              statuses={draft.display.status_labels}
-              priorities={draft.display.priority_labels}
-              onStatuses={(v) => setDraft({ ...draft, display: { ...draft.display, status_labels: v } })}
-              onPriorities={(v) => setDraft({ ...draft, display: { ...draft.display, priority_labels: v } })}
-              disabled={!canEdit}
-            />
-          </Section>
-        )}
+        <Section title={t("display.title")} description={t("display.description")}>
+          <DisplayOverridesEditor
+            statuses={draft.display.status_labels}
+            priorities={draft.display.priority_labels}
+            onStatuses={(v) => setDraft({ ...draft, display: { ...draft.display, status_labels: v } })}
+            onPriorities={(v) => setDraft({ ...draft, display: { ...draft.display, priority_labels: v } })}
+            disabled={!canEdit}
+          />
+        </Section>
       </fieldset>
 
       {role === "owner" && <DangerZone ws={ws} />}

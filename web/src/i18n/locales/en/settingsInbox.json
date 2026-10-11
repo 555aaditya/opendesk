@@ -153,7 +153,11 @@
     "currently": "Currently {{time}}",
     "needName": "Give the policy a name.",
     "resolutionTooSoon": "Resolution can't be sooner than the first response.",
-    "units": { "m": "Minutes", "h": "Hours", "d": "Days" }
+    "units": {
+      "m": "Minutes",
+      "h": "Hours",
+      "d": "Days"
+    }
   },
   "automations": {
     "title": "Automations",
@@ -274,7 +278,8 @@
     "remove_tag": "Remove tag",
     "send_reply": "Send a reply",
     "add_note": "Add an internal note",
-    "mark_spam": "Mark as spam"
+    "mark_spam": "Mark as spam",
+    "set_field": "Set field"
   },
   "unsaved": {
     "title": "Leave without saving?",
@@ -285,5 +290,50 @@
   "pickers": {
     "search": "Search",
     "andMore": "{{first}} and {{count}} more"
+  },
+  "customFields": {
+    "ticketBasics": "Ticket",
+    "ticketGroup": "Ticket fields",
+    "contactGroup": "Contact fields",
+    "contactPrefix": "Contact:",
+    "missing": "This field was deleted",
+    "noValue": "No value needed",
+    "chooseOption": "Choose an option",
+    "chooseOptions": "Choose options",
+    "choosePerson": "Choose a person",
+    "choosePeople": "Choose people",
+    "yes": "Yes",
+    "no": "No",
+    "valueFor": "{{name}} value",
+    "clearHint": "Leave empty to clear",
+    "chooseField": "Choose a field",
+    "to": "to",
+    "ops": {
+      "eq": "is",
+      "ne": "is not",
+      "contains": "contains",
+      "not_contains": "doesn't contain",
+      "gt": "is more than",
+      "gte": "is at least",
+      "lt": "is less than",
+      "lte": "is at most",
+      "any": "is any of",
+      "all": "has all of",
+      "none": "is none of",
+      "set": "is set",
+      "not_set": "is empty",
+      "date": {
+        "gt": "is after",
+        "gte": "is on or after",
+        "lt": "is before",
+        "lte": "is on or before"
+      },
+      "number": {
+        "gt": "is more than",
+        "gte": "is at least",
+        "lt": "is less than",
+        "lte": "is at most"
+      }
+    }
   }
 }

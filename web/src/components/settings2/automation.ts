@@ -51,14 +51,15 @@ export function opsFor(field: ConditionField): ConditionOp[] {
   return field === "subject" || field === "body" || field === "from_email" ? ["contains", "not_contains", "equals", "not_equals"] : ["equals", "not_equals"];
 }
 
-const plainActions = ["set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam"] as const;
+const plainActions = ["set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "set_field", "send_reply", "add_note", "mark_spam"] as const;
 export const actionLabel: Record<ActionType, string> = Object.defineProperty(labels(plainActions, "actionTypes"), "ai_triage", {
   get: () => i18n.t("ai:automation.ai_triage"),
   enumerable: true,
 }) as Record<ActionType, string>;
 
+/** Whether the action's `value` must be filled. set_field may write "" to clear, so it needs only its field. */
 export function actionNeedsValue(t: ActionType) {
-  return t !== "mark_spam" && t !== "ai_triage";
+  return t !== "mark_spam" && t !== "ai_triage" && t !== "set_field";
 }
 
 /** Picker items for a builder list: AI entries only when AI is on, but an entry already in use always shows. */

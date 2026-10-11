@@ -25,7 +25,7 @@ export default function CustomFields() {
   const role = useRole();
   const canEdit = atLeast(role, "admin");
   const confirm = useConfirm();
-  const { fields, available, isLoading } = useCustomFields();
+  const { fields, isLoading } = useCustomFields();
   const writes = useFieldWrites();
   const [entity, setEntity] = useState<FieldEntity>("ticket");
   const [editing, setEditing] = useState<CustomField | "new" | null>(null);
@@ -69,14 +69,14 @@ export default function CustomFields() {
           </div>
         </div>
         {hasOptions(f.type) && (
-          <span className="hidden max-w-[280px] items-center gap-1 overflow-hidden md:flex">
-            {f.options.slice(0, 4).map((o) => (
+          <span className="hidden shrink-0 items-center gap-1 md:flex">
+            {f.options.slice(0, 3).map((o) => (
               <span key={o.id} className={cn("inline-flex h-[18px] shrink-0 items-center gap-1 rounded-sm px-1.5 text-[11px] font-medium", tones[o.color].chip)}>
                 <span className={cn("size-1.5 rounded-xs", tones[o.color].solid)} />
                 {o.label}
               </span>
             ))}
-            {f.options.length > 4 && <span className="mono text-[11px] text-fg-4">+{f.options.length - 4}</span>}
+            {f.options.length > 3 && <span className="mono text-[11px] text-fg-4">+{f.options.length - 3}</span>}
           </span>
         )}
         {canEdit && !f.archived && (
@@ -127,62 +127,53 @@ export default function CustomFields() {
       title={t("fields.title")}
       description={t("fields.description")}
       actions={
-        canEdit &&
-        available && (
+        canEdit && (
           <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
             {t("fields.new")}
           </Button>
         )
       }
     >
-      {!available && !isLoading ? (
-        <Section>
-          <EmptyState lit={0} title={t("fields.unavailable.title")} description={t("fields.unavailable.description")} />
+      <div className="-mb-4 flex items-center justify-between gap-3">
+        <Segmented
+          value={entity}
+          onChange={setEntity}
+          options={ENTITIES.map((e) => ({
+            value: e,
+            label: (
+              <span className="flex items-center gap-1.5">
+                {t(`fields.entityPlural.${e}`)}
+                <span className="mono text-[10.5px] tabular-nums text-fg-4">{count(e)}</span>
+              </span>
+            ),
+          }))}
+        />
+      </div>
+      <Section flush title={t("fields.listTitle", { entity: t(`fields.entity.${entity}`) })} description={entity === "ticket" ? t("fields.ticketHint") : undefined}>
+        {isLoading ? (
+          <ListSkeleton rows={4} />
+        ) : !active.length ? (
+          <EmptyState
+            compact
+            lit={1}
+            title={t("fields.empty.title", { entity: t(`fields.entity.${entity}`).toLowerCase() })}
+            description={t(`fields.empty.${entity}`)}
+            action={
+              canEdit && (
+                <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
+                  {t("fields.new")}
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <MotionList>{active.map((f, i) => row(f, i, active))}</MotionList>
+        )}
+      </Section>
+      {archived.length > 0 && (
+        <Section flush title={t("fields.archivedTitle", { count: archived.length })}>
+          <MotionList>{archived.map((f, i) => row(f, i, archived))}</MotionList>
         </Section>
-      ) : (
-        <>
-          <div className="-mb-4 flex items-center justify-between gap-3">
-            <Segmented
-              value={entity}
-              onChange={setEntity}
-              options={ENTITIES.map((e) => ({
-                value: e,
-                label: (
-                  <span className="flex items-center gap-1.5">
-                    {t(`fields.entityPlural.${e}`)}
-                    <span className="mono text-[10.5px] tabular-nums text-fg-4">{count(e)}</span>
-                  </span>
-                ),
-              }))}
-            />
-          </div>
-          <Section flush title={t("fields.listTitle", { entity: t(`fields.entity.${entity}`) })} description={entity === "ticket" ? t("fields.ticketHint") : undefined}>
-            {isLoading ? (
-              <ListSkeleton rows={4} />
-            ) : !active.length ? (
-              <EmptyState
-                compact
-                lit={1}
-                title={t("fields.empty.title", { entity: t(`fields.entity.${entity}`).toLowerCase() })}
-                description={t(`fields.empty.${entity}`)}
-                action={
-                  canEdit && (
-                    <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
-                      {t("fields.new")}
-                    </Button>
-                  )
-                }
-              />
-            ) : (
-              <MotionList>{active.map((f, i) => row(f, i, active))}</MotionList>
-            )}
-          </Section>
-          {archived.length > 0 && (
-            <Section flush title={t("fields.archivedTitle", { count: archived.length })}>
-              <MotionList>{archived.map((f, i) => row(f, i, archived))}</MotionList>
-            </Section>
-          )}
-        </>
       )}
       {editing && (
         <FieldDialog
