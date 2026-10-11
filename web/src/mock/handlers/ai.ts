@@ -8,6 +8,7 @@ import { COSTS, reserve, spend } from "../credits";
 import { publish } from "../gateway";
 import { HttpError, forbidden, get, invalid, patch, post, strArr, type Ctx } from "../router";
 import { escapeHtml, isRecord, stripHtml } from "../util";
+import { ASSISTANT_NAME } from "@/components/assistant/name";
 
 export function aiOff(): boolean {
   return typeof location !== "undefined" && new URLSearchParams(location.search).get("mock_ai") === "off";
@@ -25,7 +26,7 @@ function role(ws: WsData) {
 
 function config(ws: WsData): AIConfig {
   if (aiOff()) {
-    return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {} };
+    return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {}, assistant_name: ASSISTANT_NAME };
   }
   return {
     enabled: true,
@@ -34,6 +35,7 @@ function config(ws: WsData): AIConfig {
     embeddings: true,
     features: ws.ai,
     costs: { ...COSTS },
+    assistant_name: ASSISTANT_NAME,
   };
 }
 
@@ -180,7 +182,7 @@ export function draftArticle(ws: WsData, ticketIds: string[], topic: string): KB
 function settingsPatch(ctx: Ctx): Partial<AISettings> {
   const b = ctx.body;
   const out: Partial<AISettings> = {};
-  for (const k of ["enabled", "auto_triage", "auto_summarize", "widget_answers"] as const) {
+  for (const k of ["enabled", "auto_triage", "auto_summarize", "widget_answers", "assistant"] as const) {
     if (k in b) {
       if (typeof b[k] !== "boolean") throw invalid(`${k} must be true or false`);
       out[k] = b[k];

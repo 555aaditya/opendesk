@@ -466,7 +466,7 @@ export default function InboxPage() {
           </Suspense>
         </section>
       ) : previewing && focusedTicket ? (
-        <section aria-label={tr("preview.label")} className="flex min-w-0 flex-1 flex-col">
+        <section aria-label={tr("preview.label")} className="flex min-w-0 flex-1 flex-col" data-jev-ticket={focusedTicket.id}>
           <TicketPreview key={focusedTicket.id} ticket={focusedTicket} onOpen={() => open(focusedTicket)} onReply={canEdit ? replyFocused : undefined} />
         </section>
       ) : null}

@@ -20,17 +20,19 @@ import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
 import { AI_TONE, tone } from "@/lib/tones";
 import { IconTile } from "@/components/settings2/bits";
+import { ASSISTANT_NAME } from "@/components/assistant/name";
 
 const PRESET_TONES = ["friendly", "professional", "concise"] as const;
 type ToneChoice = (typeof PRESET_TONES)[number] | "custom";
 
-const FEATURE_ORDER: AIFeature[] = ["summarize", "rewrite", "translate", "triage", "copilot", "draft_reply", "answer", "kb_draft"];
+const FEATURE_ORDER: AIFeature[] = ["summarize", "rewrite", "translate", "triage", "copilot", "draft_reply", "answer", "kb_draft", "assistant"];
 
 const DEFAULTS: AISettings = {
   enabled: true,
   auto_triage: false,
   auto_summarize: false,
   widget_answers: false,
+  assistant: true,
   tone: "friendly",
   reply_language: "customer",
   instructions: "",
@@ -46,6 +48,7 @@ function toneChoice(tone: string): ToneChoice {
 export default function AiSettings() {
   const { t } = useTranslation("ai");
   const { data: config, isLoading } = useQuery(q.aiConfig());
+  const assistantName = config?.assistant_name || ASSISTANT_NAME;
   const role = useRole();
   const qc = useQueryClient();
   const available = !!config?.enabled;
@@ -108,6 +111,17 @@ export default function AiSettings() {
             </div>
             <Switch checked={available && draft.enabled} disabled={!canEdit} onCheckedChange={(enabled) => set({ enabled })} aria-label={t("settings.enabled")} />
           </div>
+        </Section>
+
+        <Section title={t("settings.assistant_section", { name: assistantName })} description={t("settings.assistant_section_hint", { name: assistantName })}>
+          <FeatureRow
+            label={t("settings.assistant", { name: assistantName })}
+            description={t("settings.assistant_hint", { name: assistantName })}
+            cost={config?.costs?.assistant}
+            checked={draft.assistant}
+            disabled={off}
+            onChange={(assistant) => set({ assistant })}
+          />
         </Section>
 
         <Section title={t("settings.automatic")} description={t("settings.automatic_hint")}>

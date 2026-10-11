@@ -109,7 +109,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     seq: 0,
     csat: {},
     billing: defaultBilling(),
-    ai: { enabled: true, auto_triage: false, auto_summarize: false, widget_answers: false, tone: "friendly", reply_language: "customer", instructions: "" },
+    ai: { enabled: true, auto_triage: false, auto_summarize: false, widget_answers: false, assistant: true, tone: "friendly", reply_language: "customer", instructions: "" },
     aiUsage: [],
     routing: defaultRouting(),
   };

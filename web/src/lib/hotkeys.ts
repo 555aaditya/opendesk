@@ -75,6 +75,7 @@ export const shortcutGroups: { title: string; items: { keys: string; label: stri
     title: "General",
     items: [
       { keys: "mod k", label: "Command menu" },
+      { keys: "mod j", label: "Ask Jev" },
       { keys: "/", label: "Search tickets" },
       { keys: "c", label: "New ticket" },
       { keys: "?", label: "Keyboard shortcuts" },

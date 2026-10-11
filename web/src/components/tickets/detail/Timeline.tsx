@@ -27,11 +27,12 @@ function ref(v: unknown, members: Member[] | undefined): UserRef | null {
 }
 
 function actorName(a: Activity, t: TFunction<"inbox">, jev: string) {
+  // The AI acts on someone's behalf (actor.user), but the change is Jev's.
+  if (isAIActor(a.actor)) return jev;
   if (a.actor.user) return a.actor.user.name;
   if (typeof a.data.automation_name === "string") return t("activity.automationNamed", { name: a.data.automation_name });
   if (a.actor.type === "automation") return t("activity.automation");
   if (a.actor.type === "contact") return t("activity.customer");
-  if (isAIActor(a.actor)) return jev;
   return "opendesk";
 }
 
@@ -67,7 +68,7 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
       const to = ref(d.to, members);
       return {
         icon: <UserRound />,
-        text: to ? (a.actor.user?.id === to.id ? line("activity.took") : line("activity.assigned", { to: to.name })) : line("activity.unassigned"),
+        text: to ? (a.actor.user?.id === to.id && !isAIActor(a.actor) ? line("activity.took") : line("activity.assigned", { to: to.name })) : line("activity.unassigned"),
       };
     }
     case "team_changed": {

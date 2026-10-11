@@ -8,7 +8,8 @@
     "copilot": "Ask about a ticket",
     "draft_reply": "Draft a reply",
     "answer": "Answer in the chat widget",
-    "kb_draft": "Draft a help article"
+    "kb_draft": "Draft a help article",
+    "assistant": "Assistant messages"
   },
   "sentiment": {
     "positive": "Positive",
@@ -38,6 +39,10 @@
     "save_failed": "Couldn't save the AI settings",
     "enabled": "Use AI in this workspace",
     "enabled_hint": "Turns every AI feature on or off for everyone. Nothing is sent to the provider while it's off.",
+    "assistant_section": "{{name}}",
+    "assistant_section_hint": "{{name}} is the assistant in the header. It works with each teammate's own permissions.",
+    "assistant": "Let teammates ask {{name}}",
+    "assistant_hint": "Answers questions about the queue, finds tickets and prepares changes. Nothing changes until the teammate approves it. Each message uses credits.",
     "automatic": "Automatic",
     "automatic_hint": "These run without anyone asking, and use credits each time.",
     "auto_triage": "Triage new tickets",

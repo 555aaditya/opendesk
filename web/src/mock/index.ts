@@ -8,6 +8,7 @@ import { db } from "./db";
 import { paused, publish, socketFactory, sockets } from "./gateway";
 import { registerAi } from "./handlers/ai";
 import { registerAiTicket } from "./handlers/aiTicket";
+import { registerAssistant } from "./handlers/assistant";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
 import { registerLabels } from "./handlers/labels";
@@ -49,6 +50,7 @@ export function installMock(): void {
   registerBilling();
   registerAi();
   registerAiTicket();
+  registerAssistant();
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);

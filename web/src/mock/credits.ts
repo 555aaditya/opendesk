@@ -17,6 +17,7 @@ export const COSTS: Record<AIFeature, number> = {
   draft_reply: 3,
   answer: 3,
   kb_draft: 5,
+  assistant: 2,
 };
 
 /** Throws 402 no_credits when the workspace can't afford `feature`. */

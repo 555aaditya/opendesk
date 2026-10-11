@@ -9,6 +9,7 @@ import { startRealtime, stopRealtime } from "@/lib/realtime/manager";
 import { reloadSession, useSession } from "@/lib/session";
 import { useUpgrade } from "@/lib/upgrade";
 import { toast } from "@/components/ui/toast";
+import { AssistantDock, AssistantRoot } from "@/components/assistant/AssistantRoot";
 import type { Notification } from "@/lib/api/types";
 import { Sidebar } from "./Sidebar";
 import { AppHeader } from "./AppHeader";
@@ -136,10 +137,12 @@ export function AppLayout() {
             <Outlet />
           </div>
         </main>
+        <AssistantDock />
       </div>
 
       <CommandPalette />
       <ShortcutsSheet />
+      <AssistantRoot />
       {upgradeReason && (
         <Suspense fallback={null}>
           <UpgradeDialog />

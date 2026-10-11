@@ -629,7 +629,7 @@ export type Billing = {
   credits: { unlimited: boolean; monthly: number; used: number; purchased: number; remaining: number; period_end: string };
   prices: { pro_month: Price | null; pro_year: Price | null; credit_pack: Price | null };
 };
-export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "copilot" | "draft_reply" | "answer" | "kb_draft";
+export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "copilot" | "draft_reply" | "answer" | "kb_draft" | "assistant";
 /** GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive. */
 export type BillingUsage = {
   from: string;
@@ -648,6 +648,8 @@ export type AISettings = {
   auto_triage: boolean;
   auto_summarize: boolean;
   widget_answers: boolean;
+  /** The assistant panel (Jev). Default true. */
+  assistant: boolean;
   tone: string;
   reply_language: "customer" | "workspace";
   instructions: string;
@@ -659,6 +661,8 @@ export type AIConfig = {
   embeddings: boolean;
   features: AISettings;
   costs: Partial<Record<AIFeature, number>>;
+  /** The name AI acts under everywhere ("Jev"). */
+  assistant_name?: string;
 };
 export type KBSource = { article_id: string; title: string; url: string };
 export type AIDraft = { body_html: string; body_text: string; sources: KBSource[] };

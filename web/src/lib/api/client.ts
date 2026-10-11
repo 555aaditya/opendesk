@@ -324,6 +324,45 @@ export async function stream<T>(path: string, body: unknown, h: StreamHandlers =
   throw new ApiError({ status: 0, title: "The stream ended early" });
 }
 
+/**
+ * POST with `Accept: text/event-stream` and hand every event to `onEvent`, in
+ * order, until the stream ends. An `error` event throws its problem; an error
+ * before the stream starts is the normal ApiError of that status.
+ */
+export async function streamEvents(
+  path: string,
+  body: unknown,
+  onEvent: (event: string, data: unknown) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await raw("POST", path, { body, headers: { Accept: "text/event-stream" }, signal });
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("text/event-stream") || !res.body) {
+    onEvent("result", await res.json());
+    return;
+  }
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buf += value;
+    let sep: number;
+    while ((sep = buf.search(/\r?\n\r?\n/)) >= 0) {
+      const frame = buf.slice(0, sep);
+      buf = buf.slice(sep).replace(/^\r?\n\r?\n/, "");
+      const ev = parseFrame(frame);
+      if (!ev) continue;
+      const data: unknown = JSON.parse(ev.data);
+      if (ev.event === "error") {
+        const p = data as Problem;
+        throw announce(new ApiError({ ...p, status: p.status || 500 }));
+      }
+      onEvent(ev.event, data);
+    }
+    if (done) return;
+  }
+}
+
 export function parseFrame(frame: string): { event: string; data: string } | null {
   let event = "message";
   const data: string[] = [];

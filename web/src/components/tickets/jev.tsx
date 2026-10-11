@@ -1,24 +1,18 @@
-// The AI teammate's identity inside tickets: its name (from the workspace's AI
-// settings, "Jev" by default), a small violet mark for things it set, and an
-// avatar for timeline lines it authored. Kept here until the assistant's own
-// blob component lands in components/assistant.
+// The AI teammate's identity inside tickets: its name (assistant_name from the
+// AI config, "Jev" by default), a small violet mark for things it set, and the
+// Jev blob as the avatar on timeline lines it authored.
 
 import { Sparkles } from "lucide-react";
-import type { AISettings } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { tone } from "@/lib/tones";
 import { useQuery } from "@tanstack/react-query";
 import { q } from "@/lib/queries";
+import { JevMark } from "@/components/assistant/JevMark";
+import { useAssistantName } from "@/components/assistant/name";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useTranslation } from "react-i18next";
 
-export const DEFAULT_ASSISTANT_NAME = "Jev";
-
-export function useAssistantName(): string {
-  const { data } = useQuery(q.workspace());
-  const ai = data?.settings.ai as (AISettings & { assistant_name?: string }) | undefined;
-  return ai?.assistant_name?.trim() || DEFAULT_ASSISTANT_NAME;
-}
+export { useAssistantName };
 
 /** An activity or message the AI authored (contracts/ai.md: actor_type "ai"). */
 export function isAIActor(actor: { type: string } | null | undefined) {
@@ -45,12 +39,8 @@ export function SetByJev({ className }: { className?: string }) {
 /** The actor avatar on timeline lines and messages the AI wrote. */
 export function JevAvatar({ size = 16, className }: { size?: number; className?: string }) {
   return (
-    <span
-      aria-hidden
-      className={cn("inline-flex shrink-0 items-center justify-center rounded-full", tone.violet.chip, className)}
-      style={{ width: size, height: size }}
-    >
-      <Sparkles style={{ width: size * 0.6, height: size * 0.6 }} strokeWidth={2} />
+    <span aria-hidden className={cn("inline-flex shrink-0 items-center justify-center", className)} style={{ width: size, height: size }}>
+      <JevMark size={size} eyes={size >= 16} />
     </span>
   );
 }
