@@ -328,7 +328,8 @@ export type Envelope<D = Record<string, unknown>> = {
   workspace_id: string;
   type: string;
   visibility: "agents" | "public";
-  topics: string[];
+  /** Not sent over the gateway (it pushes the envelope minus topics); present in GET /v1/events. */
+  topics?: string[];
   data: D;
   occurred_at: string;
 };

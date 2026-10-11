@@ -116,8 +116,11 @@ function useSend(ticket: Ticket) {
     },
     onSuccess: (m, { tempId }) => {
       qc.setQueryData<Message[]>(qk.messages(ticket.id), (old) => {
+        // The socket may have delivered this message (and its delivery status) before
+        // the response arrived; that copy is newer than the response.
+        const live = (old ?? []).find((x) => x.id === m.id);
         const rest = (old ?? []).filter((x) => x.id !== tempId && x.id !== m.id);
-        return [...rest, m].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+        return [...rest, live ?? m].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
       });
     },
     onError: (e, { tempId }, ctx) => {

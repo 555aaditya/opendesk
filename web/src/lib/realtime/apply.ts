@@ -18,6 +18,8 @@ import { patchTicketEverywhere, removeTicketEverywhere } from "../ticketCache";
 
 export type ApplyContext = {
   me: string;
+  /** The envelope came from the user:<me> channel (the gateway pushes envelopes without `topics`). */
+  viaUser?: boolean;
   /** The signed-in user was removed from this workspace or changed role. */
   onSelfMembershipChanged?: () => void;
   onNotification?: (n: Notification) => void;
@@ -75,7 +77,15 @@ function mergeMessage(qc: QueryClient, ticketId: string, m: Message) {
     return;
   }
   const partial = !Array.isArray(m.to) || !Array.isArray(m.attachments) || !m.author;
-  qc.setQueryData<Message[]>(key, [...old, { ...m, to: m.to ?? [], cc: m.cc ?? [], bcc: m.bcc ?? [], attachments: m.attachments ?? [] }]);
+  const full = { ...m, to: m.to ?? [], cc: m.cc ?? [], bcc: m.bcc ?? [], attachments: m.attachments ?? [] };
+  // Our own send can arrive here before its POST answers: take the optimistic copy's place.
+  const temp = old.findIndex((x) => x.id.startsWith("tmp-") && x.kind === m.kind && x.author?.user?.id === m.author?.user?.id && x.delivery_status !== "failed");
+  if (temp >= 0 && m.author?.type === "user") {
+    qc.setQueryData<Message[]>(key, old.map((x, j) => (j === temp ? full : x)));
+    if (partial) void qc.invalidateQueries({ queryKey: key, exact: true });
+    return;
+  }
+  qc.setQueryData<Message[]>(key, [...old, full]);
   if (partial) void qc.invalidateQueries({ queryKey: key, exact: true });
 }
 
@@ -132,8 +142,8 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       return;
     }
     case "notification.created": {
-      // The workspace channel carries everyone's notifications; keep ours.
-      if (!env.topics.includes(`user:${ctx.me}`)) return;
+      // The workspace channel carries everyone's notifications; ours arrive on user:<me>.
+      if (!ctx.viaUser && !env.topics?.includes(`user:${ctx.me}`)) return;
       const n = d.notification as Notification;
       if (!n) return;
       qc.setQueryData<Notification[]>(qk.notifications, (old) =>

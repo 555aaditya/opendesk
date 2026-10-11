@@ -46,9 +46,10 @@ export class RealtimeManager {
     });
   }
 
-  private apply(env: Envelope) {
+  private apply(env: Envelope, viaUser = false) {
     applyEnvelope(this.opts.qc, env, {
       me: this.opts.userId,
+      viaUser,
       onNotification: this.opts.onNotification,
       onSelfMembershipChanged: this.opts.onSelfMembershipChanged,
     });
@@ -115,8 +116,10 @@ export class RealtimeManager {
     const user = socket.channel(`user:${uid}`);
     user.on("event", (p) => {
       const env = p as Envelope;
-      if (this.sync.hasSeen(env.id)) return;
       if (env.workspace_id !== wid) return;
+      // Notifications are applied from here only (the workspace copy carries no topics).
+      if (env.type === "notification.created") return this.apply(env, true);
+      if (this.sync.hasSeen(env.id)) return;
       this.sync.markSeen(env.id);
       this.apply(env);
     });
