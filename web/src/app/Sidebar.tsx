@@ -60,7 +60,7 @@ const rowShape = (rail: boolean) => (rail ? "mx-3 h-8 w-8 justify-center" : "mx-
 const rowIdle = "text-fg-2 hover:bg-chrome-hover hover:text-fg [&>svg]:text-fg-3 hover:[&>svg]:text-fg-2";
 // The module dot: a small ink circle in the gutter beside the current row.
 const rowActive =
-  "bg-chrome-active text-fg font-medium [&>svg]:text-fg before:absolute before:-left-[7px] before:top-1/2 before:size-[5px] before:-translate-y-1/2 before:rounded-full before:bg-fg before:content-[''] before:animate-pop-in";
+  "bg-chrome-active text-fg font-medium [&>svg]:text-fg";
 
 function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
   if (!rail) return children;
