@@ -98,7 +98,9 @@ cmd_backup() {
 
 cmd_restore() {
     src=${1:-}
-    [ -n "$src" ] && [ -f "$src/db.dump" ] || die "usage: opendesk-ctl restore <backup dir containing db.dump>"
+    if [ -z "$src" ] || [ ! -f "$src/db.dump" ]; then
+        die "usage: opendesk-ctl restore <backup dir containing db.dump>"
+    fi
     say "This replaces the database and data volume of $DIR with $src."
     if [ "${OPENDESK_YES:-0}" != 1 ]; then
         printf '  Type "restore" to continue: '
