@@ -48,8 +48,9 @@ Every state change that someone else should see is written as an event, in the s
 | `custom_field.deleted` | agents | | `{ custom_field_id, entity, key }` |
 | `mailbox.created`, `mailbox.updated` | agents | | `{ mailbox }` |
 | `mailbox.deleted` | agents | | `{ mailbox_id }` |
-| `member.added`, `member.updated` | agents | `user:<uid>` | `{ member }` |
+| `member.added`, `member.updated` | agents | `user:<uid>` | `{ member }`, also on a picture, availability or cap change |
 | `member.removed` | agents | `user:<uid>` | `{ user_id }` |
+| `workspace.updated` | agents | | `{ workspace }`, when the name, settings, logo or a brand image changes |
 | `notification.created` | agents | `user:<uid>` | `{ notification }` |
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `team.*`, `webhook.*` | agents | | `{ <resource> }` on create and update, `{ <resource>_id }` on delete |
 | `billing.updated` | agents | | `Billing`, see [Billing API](/api/resources/billing/). Cloud only. |

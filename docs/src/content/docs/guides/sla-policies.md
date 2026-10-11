@@ -13,6 +13,7 @@ Each policy has:
 - a **priority** it applies to, or any priority
 - a **first response** target, in minutes
 - a **resolution** target, in minutes
+- a **business hours** switch: count only the minutes your workspace is open ([business hours](/guides/triage-and-assignment/#business-hours))
 - an **enabled** switch and a **position**
 
 New workspaces start with a default policy that you can edit.

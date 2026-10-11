@@ -125,6 +125,14 @@ See [Email setup](/self-hosting/email/).
 
 See [Google and Microsoft OAuth](/self-hosting/oauth-apps/). A sign-in provider is offered only when it is configured (for OIDC, the issuer and client id).
 
+## Profile pictures
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LOGO_DEV_TOKEN` | | A [logo.dev](https://logo.dev) publishable token. When set, company logos come from logo.dev instead of the company's website. |
+
+Agent pictures from Google and GitHub, Gravatar and website icons need no configuration. See [Profile pictures and logos](/guides/profile-pictures/).
+
 ## Bot protection and analytics
 
 | Variable | Default | Meaning |

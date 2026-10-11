@@ -22,19 +22,32 @@ description: The workspace, its members, invitations, teams, audit logs and noti
 | `GET` | `/v1/notifications` | Your notifications |
 | `POST` | `/v1/notifications/read` | Mark notifications read |
 
+Pictures, availability, assignment, triage, business hours and the setup checklist are in [Pictures, assignment and setup](/api/resources/pictures-assignment/).
+
 ## Objects
 
 ```ts
-type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; created_at: string };
+type Workspace = {
+  id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings;
+  avatar_url: string | null; avatar_source: "upload" | null; // the workspace logo
+  images: { help_center_logo: string | null; help_center_favicon: string | null; widget_avatar: string | null; widget_launcher: string | null };
+  created_at: string;
+};
 type WorkspaceSettings = {
   brand_color?: string;
   timezone?: string;
   help_center_enabled?: boolean;
   help_center_title?: string;
   csat_enabled?: boolean;
-  auto_assign?: "none" | "round_robin";
+  auto_assign?: "none" | "round_robin" | "load_balanced";
+  gravatar?: boolean;     // default false
+  domain_logos?: boolean; // default true
 };
-type Member = { user: UserRef; role: "owner" | "admin" | "agent" | "viewer"; created_at: string };
+type Member = {
+  user: UserRef & { avatar_source: AvatarSource | null }; role: "owner" | "admin" | "agent" | "viewer";
+  availability: "online" | "away" | "offline"; presence: "online" | "away" | "offline";
+  max_open_tickets: number | null; open_tickets: number; last_seen_at: string | null; created_at: string;
+};
 type Invitation = { id: string; email: string; role: Role; expires_at: string; created_at: string; invited_by: UserRef | null };
 type Team = { id: string; name: string; member_ids: string[]; created_at: string };
 type AuditLog = {
