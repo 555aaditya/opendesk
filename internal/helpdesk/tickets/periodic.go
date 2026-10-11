@@ -81,8 +81,8 @@ func breachTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) error {
 		sla_first_response_breached_at = CASE WHEN fr THEN now() ELSE sla_first_response_breached_at END,
 		sla_resolution_breached_at = CASE WHEN res THEN now() ELSE sla_resolution_breached_at END
 		FROM (SELECT id,
-			(first_responded_at IS NULL AND first_response_due_at < now() AND sla_first_response_breached_at IS NULL) AS fr,
-			(resolution_due_at < now() AND sla_resolution_breached_at IS NULL) AS res
+			COALESCE(first_responded_at IS NULL AND first_response_due_at < now() AND sla_first_response_breached_at IS NULL, false) AS fr,
+			COALESCE(resolution_due_at < now() AND sla_resolution_breached_at IS NULL, false) AS res
 			FROM tickets WHERE workspace_id = $1 AND id = $2 AND status IN ('open', 'pending', 'on_hold')
 			AND deleted_at IS NULL AND sla_policy_id IS NOT NULL FOR UPDATE) s
 		WHERE t.id = s.id AND (s.fr OR s.res)
