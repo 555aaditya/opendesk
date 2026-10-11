@@ -31,12 +31,18 @@ Same code, same API.
 | Summarize a ticket | `summarize` | 1 |
 | Rewrite (tone, length, fix grammar) | `rewrite` | 1 |
 | Translate a message or draft | `translate` | 1 |
-| Auto-triage (tags, priority, sentiment, language) | `triage` | 1 |
+| Auto-triage (tags, priority, severity, team, sentiment, language): one call, every question batched | `triage` | 1 |
+| `ai_decide` automation conditions (all of one trigger run in one call) | `decide` | 1 |
+| Widget answer relevance check (Jev) | `answer_check` | 0 |
 | Ask about a ticket (copilot) | `copilot` | 2 |
 | Draft a reply | `draft_reply` | 3 |
 | Widget AI answer from the knowledge base | `answer` | 3 |
 | Draft a KB article from tickets | `kb_draft` | 5 |
 | Ollie, the assistant (each model turn of a run) | `assistant` | 2 |
+
+Decisions on Jev cost a fraction of an LLM call (TypeSafe charges per input token, output free), so
+triage stays at 1 credit with every question in one batched call rather than a credit per field, and
+the widget relevance check is free. Usage rows record decision calls with model `jev` (counts only).
 
 Go API (`internal/plan`, `d.Plan`):
 - `d.Plan.Entitlements(ctx, q, wid)`, `d.Plan.CheckMailbox`, `d.Plan.CheckMember` (return

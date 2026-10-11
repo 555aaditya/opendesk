@@ -61,9 +61,10 @@ type CompanyRef = { id: string; name: string; domain: string; avatar_url: string
 
 type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 type Priority = "low" | "normal" | "high" | "urgent";
+type Severity = "sev1" | "sev2" | "sev3" | "sev4"; // business impact, sev1 the most severe; a ticket may have none
 type Channel = "email" | "chat" | "api" | "portal";
 type Ticket = {
-  id: string; number: number; subject: string; status: TicketStatus; priority: Priority; channel: Channel;
+  id: string; number: number; subject: string; status: TicketStatus; priority: Priority; severity: Severity | null; channel: Channel;
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
   tags: TagRef[]; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
@@ -82,9 +83,9 @@ type Message = {
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
-// activity types: status_changed{from,to} priority_changed{from,to} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
+// activity types: status_changed{from,to} priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
-// AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,via} ai_answered{message_id,article_ids} ai_handoff (actor "ai" or "contact")
+// AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,severity,via,model?,engine?}; AI changes carry {via, model?: "jev", confidence?: number} ai_answered{message_id,article_ids} ai_handoff (actor "ai" or "contact")
 
 // Labels ("tags" in the API). See "Labels and custom fields" below.
 type LabelColor = "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
@@ -112,7 +113,7 @@ type FieldOp = "eq" | "ne" | "contains" | "not_contains" | "gt" | "gte" | "lt" |
 
 type SavedReply = { id: string; title: string; shortcut: string; body_html: string; created_at: string; updated_at: string };
 type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number };
-type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string; tag?: string; channel?: Channel; q?: string; fields?: FieldFilter[] /* max 20, ANDed */ };
+type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; severity?: (Severity | "none")[] /* "none": no severity */; assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string; tag?: string; channel?: Channel; q?: string; fields?: FieldFilter[] /* max 20, ANDed */ };
 type SlaPolicy = { id: string; name: string; priority: Priority | null; first_response_minutes: number; resolution_minutes: number;
   business_hours: boolean /* count only open business hours (default false) */; enabled: boolean; position: number };
 
@@ -120,8 +121,11 @@ type SlaPolicy = { id: string; name: string; priority: Priority | null; first_re
 type AssignMode = "none" | "round_robin" | "load_balanced";
 type AssignmentRule = { target_type: "mailbox" | "team"; target_id: string; mode: AssignMode };
 type Assignment = { mode: AssignMode /* = settings.auto_assign */; rules: AssignmentRule[]; auto_away_minutes: number /* 0 = off */ };
-type TriageField = "priority" | "labels";
-type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean; available: boolean /* AI is configured and on for the workspace */ };
+type TriageField = "priority" | "severity" | "labels" | "team";
+type DecisionEngine = { provider: "typesafe" | "llm" | "none"; model: string /* "jev-latest", or the LLM fast model */; connected: boolean };
+type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean;
+  threshold: number /* 0.5..0.99, default 0.7: confidence at or above it applies a decision, below it leaves a suggestion */;
+  engine: DecisionEngine; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
 type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type BusinessHours = { enabled: boolean; timezone: string /* the workspace timezone */; schedule: Record<Weekday, { start: string; end: string }[]> /* "HH:MM", 24h */; holidays: { date: string /* YYYY-MM-DD */; name: string }[] };
 type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie";
@@ -129,11 +133,12 @@ type OnboardingStep = { id: OnboardingStepId; title: string; description: string
 type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
 type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
 type Condition = {
-  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment" | `field.${string}` | `contact.field.${string}`;
+  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide" | `field.${string}` | `contact.field.${string}`;
   op: "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "any" | "all" | "none" | "set" | "not_set";
   value: string;
-}; // sentiment: equals/not_equals only; eq = equals, ne = not_equals. field.<key>: a ticket custom field, contact.field.<key>: the ticket contact's; ops per field type (below)
-type Action = { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "ai_triage" | "set_field"; value: string; field?: string /* set_field: the ticket field key */ };
+  question?: string; // ai_decide only: a yes/no question, 3..300 characters of plain text
+}; // severity: equals/not_equals with a Severity or "none"; ai_decide: gt/lt with value a probability 0.01..0.99 (contracts/ai.md "Automations"); sentiment: equals/not_equals only; eq = equals, ne = not_equals. field.<key>: a ticket custom field, contact.field.<key>: the ticket contact's; ops per field type (below)
+type Action = { type: "set_status" | "set_priority" | "set_severity" /* value Severity, or "" to clear */ | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "ai_triage" | "set_field"; value: string; field?: string /* set_field: the ticket field key */ };
 type Mailbox = {
   id: string; name: string; email: string; display_name: string;
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft"; outbound_kind: "smtp" | "google" | "microsoft" | "system";
@@ -242,11 +247,11 @@ Core notes:
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `assignee` (`me`/`none`/uuid), `team_id`, `mailbox_id`, `tag`, `channel`, `contact_id`, `view_id`, `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`due`/`field.<key>`), `order` |
+| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `severity` (csv of `sev1`..`sev4` and `none`), `assignee` (`me`/`none`/uuid), `team_id`, `mailbox_id`, `tag`, `channel`, `contact_id`, `view_id`, `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`severity` (sev1 first, none last)/`due`/`field.<key>`), `order` |
 | GET | `/v1/tickets/counts` | → `{ unassigned, mine, open, pending, on_hold, solved, spam, views: {<view_id>: n} }` |
-| POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, body_html, kind?: "reply"\|"note", priority?, assignee_id?, team_id?, tags?: string[], fields?: FieldValues, status?}`; an email ticket with a reply is sent to the contact |
+| POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, body_html, kind?: "reply"\|"note", priority?, severity?, assignee_id?, team_id?, tags?: string[], fields?: FieldValues, status?}`; an email ticket with a reply is sent to the contact |
 | GET | `/v1/tickets/{id}` | id is uuid, or `#<number>` / numeric number |
-| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, assignee_id?, team_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?, fields?: Record<string, FieldValue \| null> /* merged; null clears */}`. A status of `solved` or `closed` with an empty `required_on_solve` field is `422 field_required`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze |
+| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, severity? /* null clears */, assignee_id?, team_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?, fields?: Record<string, FieldValue \| null> /* merged; null clears */}`. A status of `solved` or `closed` with an empty `required_on_solve` field is `422 field_required`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze. Changing `priority`, `severity`, `team_id`, `spam` or labels removes Ollie's pending suggestion for that field (`custom.ai_suggestions`, contracts/ai.md) |
 | DELETE | `/v1/tickets/{id}` | soft delete |
 | POST | `/v1/tickets/bulk` | `{ids, patch: {...PATCH body}}` or `{ids, delete: true}` |
 | POST | `/v1/tickets/{id}/merge` | `{into_id}` |
@@ -279,11 +284,11 @@ Core notes:
 | CRUD | `/v1/sla-policies` | body takes `business_hours?: boolean` |
 | GET/PUT | `/v1/business-hours` | GET members → `BusinessHours`; PUT admin, full `BusinessHours` (`timezone` sets `settings.timezone`) → `BusinessHours`. Audit `business_hours.updated` |
 | GET/PATCH | `/v1/assignment` | GET members → `Assignment`; PATCH admin `{mode?, rules? /* replaces */, auto_away_minutes?}` → `Assignment`. Audit `assignment.updated` |
-| GET/PATCH | `/v1/triage` | GET members → `TriageSettings`; PATCH admin `{auto_triage?, fields?, assign_after_triage?}` → `TriageSettings` (stored in `settings.ai`, contracts/ai.md). Audit `triage.updated` |
+| GET/PATCH | `/v1/triage` | GET members → `TriageSettings`; PATCH admin `{auto_triage?, fields?, assign_after_triage?, threshold?}` → `TriageSettings` (stored in `settings.ai`, contracts/ai.md). Audit `triage.updated` |
 | CRUD | `/v1/automations` | |
 | CRUD | `/v1/kb/collections`, `/v1/kb/articles` | articles list supports `collection_id`, `status`, `q` |
 | GET | `/v1/search?q=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[]}` (5 each) |
-| GET | `/v1/reports/overview?from=&to=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_agent: [{user, solved, first_response_p50_minutes}]}` |
+| GET | `/v1/reports/overview?from=&to=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_severity: Record<Severity \| "none", number> /* tickets created in the range */, by_agent: [{user, solved, first_response_p50_minutes}]}` |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed (`?token=` for img tags) |
 
@@ -368,10 +373,15 @@ automation is saved and skipped at run time if the field was archived or deleted
 #### Triage
 
 `/v1/triage` is the one place to set up Ollie's triage: `auto_triage` (`settings.ai.auto_triage`), `fields`
-(`settings.ai.triage_fields`, default both: `priority` lets triage raise priority, `labels` lets it add labels; sentiment,
-language and category are always recorded) and `assign_after_triage` (`settings.ai.assign_after_triage`, default false):
-after Ollie triages a new ticket, it is assigned by the resolved mode, or `load_balanced` when that mode is `none`, with actor
-`ai` and `via: "triage"`.
+(`settings.ai.triage_fields`, default `priority`, `severity` and `labels`: `priority` lets triage raise priority, `severity`
+lets it set or raise severity, `labels` lets it add labels, `team` lets it set the team of a ticket that has none; sentiment,
+language and category are always recorded), `threshold` (`settings.ai.triage_threshold`, 0.5..0.99, default 0.7) and
+`assign_after_triage` (`settings.ai.assign_after_triage`, default false): after Ollie triages a new ticket, it is assigned by
+the resolved mode (of the team triage picked, when it picked one), or `load_balanced` when that mode is `none`, with actor
+`ai` and `via: "triage"`. A decision whose confidence is below `threshold` is not applied; it is kept as a suggestion an
+agent accepts or dismisses (contracts/ai.md "Decisions"). `engine` reports the decision engine: `typesafe` (Jev by
+TypeSafe, calibrated confidence), `llm` (the configured AI model's structured output, applied without a confidence gate) or
+`none`.
 
 #### Business hours
 
