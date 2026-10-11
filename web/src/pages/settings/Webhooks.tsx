@@ -1,12 +1,12 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { MoreHorizontal, Pencil, Plus, Trash2, Webhook as WebhookIcon } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Webhook as WebhookIcon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NoAccess, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { useConfirm } from "@/components/ui/confirm";
@@ -102,17 +102,19 @@ export default function Webhooks() {
         {isLoading ? (
           <ListSkeleton rows={3} />
         ) : !list.length ? (
-          <EmptyState
-            compact
-            lit={3}
-            className="py-12"
+          <SettingsEmpty
+            art="settings"
             title={t("webhooks.empty.title")}
             description={t("webhooks.empty.description")}
             action={
-              <Button size="sm" variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
+              <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
                 {t("webhooks.new")}
               </Button>
             }
+            tips={[
+              { label: t("webhooks.empty.tips.signed"), icon: <ShieldCheck /> },
+              { label: t("webhooks.empty.tips.retry"), icon: <RefreshCw /> },
+            ]}
           />
         ) : (
           <>
