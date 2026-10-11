@@ -55,8 +55,7 @@ const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog
     <meta name="generator" content={Astro.generator} />
     <meta name="robots" content={noIndex ? 'noindex,nofollow' : 'index,follow,max-image-preview:large'} />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#ffffff" />
 
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
@@ -83,16 +82,16 @@ const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog
     <script type="application/ld+json" is:inline set:html={JSON.stringify(organization)} />
     {extra.map((s) => <script type="application/ld+json" is:inline set:html={JSON.stringify(s)} />)}
 
-    <!-- Theme before first paint: stored choice, else the system. -->
+    <!-- Theme before first paint. White first: dark only when someone chose it (or chose "system" on a dark system). -->
     <script is:inline>
       (function () {
         var d = document.documentElement;
         d.classList.add('js');
         var t = null;
         try { t = localStorage.getItem('od-theme'); } catch (e) {}
-        var dark = t === 'dark' || ((!t || t === 'system') && matchMedia('(prefers-color-scheme: dark)').matches);
+        var dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         d.classList.toggle('dark', dark);
-        d.dataset.theme = t || 'system';
+        d.dataset.theme = t || 'light';
       })();
     </script>
 
@@ -113,16 +112,18 @@ const posthogHost = import.meta.env.PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog
       </script>
     )}
   </head>
-  <body class="min-h-dvh flex flex-col overflow-x-hidden">
+  <body class="min-h-dvh flex flex-col">
     <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] btn btn-primary">Skip to content</a>
     <Header />
-    <main id="main" class="flex-1">
+    <main id="main" class="relative flex-1">
       <slot />
     </main>
     <Footer />
     <script>
       import { initReveal } from '../lib/reveal';
+      import { initScenes } from '../lib/scenes';
       initReveal();
+      initScenes();
     </script>
   </body>
 </html>

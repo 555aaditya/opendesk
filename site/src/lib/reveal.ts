@@ -12,7 +12,7 @@ export function initReveal() {
     },
     { rootMargin: '0px 0px -8% 0px', threshold: 0.08 },
   );
-  document.querySelectorAll('.reveal').forEach((el) => reveal.observe(el));
+  document.querySelectorAll('.reveal, .snap').forEach((el) => reveal.observe(el));
 
   const live = new IntersectionObserver((entries) => {
     for (const e of entries) e.target.classList.toggle('is-live', e.isIntersecting);

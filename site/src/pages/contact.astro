@@ -12,20 +12,20 @@ const channels = [
 ] as const;
 ---
 <Layout title="Contact" description="Talk to the opendesk team about plans, support, security or privacy, or join the project on GitHub.">
-  <PageHero eyebrow="Contact" title="Talk to a person." lede="Email reaches the people who build opendesk. Pick the address that fits and we will take it from there." />
+  <PageHero label="Contact" title="Talk to a person." lede="Email reaches the people who build opendesk. Pick the address that fits and we will take it from there." />
   <section class="container-page py-16 md:py-24">
     <div class="grid gap-4 md:grid-cols-2">
       {channels.map((c, i) => (
         <a href={`mailto:${c.email}`} class="reveal group card flex flex-col p-7 transition-colors hover:border-fg/25" style={`--d:${(i % 2) * 60}ms`}>
-          <span class="flex size-9 items-center justify-center rounded-lg bg-surface text-fg ring-1 ring-line"><Icon name={c.icon} size={17} /></span>
+          <span class="flex size-9 items-center justify-center rounded-[5px] bg-surface text-fg ring-1 ring-line"><Icon name={c.icon} size={17} /></span>
           <h2 class="mt-6 text-[19px] font-semibold tracking-[-0.02em] text-fg">{c.title}</h2>
           <p class="mt-2 text-[15px] text-muted">{c.body}</p>
           <span class="mt-6 inline-flex items-center gap-1.5 font-mono text-[13.5px] text-fg">{c.email}<Icon name="arrowRight" size={14} class="transition-transform group-hover:translate-x-0.5" /></span>
         </a>
       ))}
     </div>
-    <div class="reveal mt-4 flex flex-col gap-5 rounded-2xl border border-line bg-surface-2 p-7 md:flex-row md:items-center">
-      <span class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-fg text-bg"><Icon name="github" size={17} /></span>
+    <div class="reveal mt-4 flex flex-col gap-5 rounded-[8px] border border-line bg-surface-2 p-7 md:flex-row md:items-center">
+      <span class="flex size-9 shrink-0 items-center justify-center rounded-[5px] bg-fg text-bg"><Icon name="github" size={17} /></span>
       <div>
         <div class="text-[16px] font-medium text-fg">Self-hosting or contributing?</div>
         <p class="mt-1 text-[14.5px] text-muted">Questions about running opendesk yourself and bug reports are best on GitHub, where others can find the answer.</p>

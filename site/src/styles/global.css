@@ -2,13 +2,13 @@
 @import '@fontsource-variable/geist-mono/wght.css';
 @import 'tailwindcss';
 
-/* Class-based dark mode. The head script sets .dark from the stored choice or the system. */
+/* Class-based dark mode. The site is white first: dark only when someone picks it. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
  * Monochrome tokens from brand/tokens.css, mapped to roles so every component
- * (including the product mocks) flips with the theme. Status colours exist only
- * as tiny semantic dots, never as brand colour.
+ * (including the product scenes) flips with the theme. Status colours exist only
+ * as small semantic dots and badges, never as brand colour.
  */
 :root {
   --ink: #0a0a0a;
@@ -22,21 +22,27 @@
 
   --bg: var(--paper);
   --fg: var(--ink);
-  --muted: var(--graphite);
-  --subtle: var(--smoke);
+  --body: #3d3d3d;
+  --muted: #6b6b6b;
+  --subtle: #8a8a8a;
+  --faint: #b5b5b5;
   --line: var(--ash);
-  --line-soft: #efefef;
+  --line-soft: #f0f0f0;
+  --line-strong: #d4d4d4;
   --surface: var(--mist);
   --surface-2: #fafafa;
   --raised: var(--paper);
   --inverse: var(--ink);
   --inverse-fg: var(--paper);
-  --grid: rgba(10, 10, 10, 0.06);
-  --shadow: 0 1px 0 rgba(10, 10, 10, 0.04), 0 24px 48px -24px rgba(10, 10, 10, 0.18);
-
+  --grid: rgba(10, 10, 10, 0.045);
+  --shadow: 0 1px 2px rgba(10, 10, 10, 0.04), 0 12px 32px -16px rgba(10, 10, 10, 0.14);
+  --shadow-window: 0 1px 2px rgba(10, 10, 10, 0.05), 0 30px 60px -30px rgba(10, 10, 10, 0.32);
+  --shadow-float: 0 1px 2px rgba(10, 10, 10, 0.06), 0 24px 48px -20px rgba(10, 10, 10, 0.36);
+  
   --ok: #16a34a;
   --warn: #d97706;
   --bad: #dc2626;
+  --info: #2563eb;
 
   color-scheme: light;
 }
@@ -44,35 +50,44 @@
 .dark {
   --bg: var(--ink);
   --fg: var(--paper);
+  --body: #d4d4d4;
   --muted: #a3a3a3;
-  --subtle: #737373;
-  --line: var(--charcoal);
-  --line-soft: #1e1e1e;
+  --subtle: #7a7a7a;
+  --faint: #525252;
+  --line: #242424;
+  --line-soft: #1a1a1a;
+  --line-strong: #333333;
   --surface: var(--coal);
   --surface-2: #0f0f0f;
-  --raised: var(--coal);
+  --raised: #121212;
   --inverse: var(--paper);
   --inverse-fg: var(--ink);
   --grid: rgba(255, 255, 255, 0.06);
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
+  --shadow-window: 0 30px 60px -30px rgba(0, 0, 0, 0.9);
+  --shadow-float: 0 24px 48px -20px rgba(0, 0, 0, 0.9);
 
   --ok: #22c55e;
   --warn: #f59e0b;
   --bad: #ef4444;
+  --info: #60a5fa;
 
   color-scheme: dark;
 }
 
 @theme inline {
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-bg: var(--bg);
   --color-fg: var(--fg);
+  --color-body: var(--body);
   --color-muted: var(--muted);
   --color-subtle: var(--subtle);
+  --color-faint: var(--faint);
   --color-line: var(--line);
   --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-raised: var(--raised);
@@ -81,17 +96,23 @@
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
+  --color-info: var(--info);
 
   --shadow-card: var(--shadow);
+  --shadow-window: var(--shadow-window);
+  --shadow-float: var(--shadow-float);
 }
 
 @layer base {
+  /* Nothing may widen the page; clip (not hidden) keeps the sticky header working. */
+  html, body { overflow-x: clip; }
   html {
     background: var(--bg);
     color: var(--fg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
     scroll-behavior: smooth;
   }
@@ -99,6 +120,7 @@
     background: var(--bg);
     font-feature-settings: 'ss01', 'cv11';
   }
+  * { border-color: var(--line); }
   /* Grid items never grow past their track because of a long unbreakable line. */
   .grid > * { min-width: 0; }
   ::selection {
@@ -116,36 +138,71 @@
   }
 }
 
-@layer components {
-  .container-page {
-    width: 100%;
-    max-width: 1200px;
-    margin-inline: auto;
-    padding-inline: 16px;
-  }
-  @media (min-width: 640px) {
-    .container-page { padding-inline: 24px; }
-  }
-  @media (min-width: 1024px) {
-    .container-page { padding-inline: 32px; }
-  }
+/* Site-wide content width, shared by the header, every section and the footer. */
+@utility container-page {
+  width: 100%;
+  max-width: 90rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+  @media (min-width: 768px) { padding-inline: 2.5rem; }
+}
 
-  .display {
+@layer components {
+  /* Type. Geist SemiBold at -4% for headlines (brand/README.md), mono for labels. */
+  .h-hero {
+    font-size: 42px;
     font-weight: 600;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.04em;
     line-height: 1.02;
     text-wrap: balance;
+    color: var(--fg);
   }
-  .eyebrow {
+  @media (min-width: 640px) { .h-hero { font-size: 58px; } }
+  @media (min-width: 1024px) { .h-hero { font-size: 72px; } }
+
+  .h-section {
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    line-height: 1.06;
+    text-wrap: balance;
+    color: var(--fg);
+  }
+  @media (min-width: 768px) { .h-section { font-size: 46px; } }
+
+  .h-card {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+    color: var(--fg);
+  }
+
+  .lede {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--graphite);
+    text-wrap: pretty;
+  }
+  @media (min-width: 768px) { .lede { font-size: 18.5px; } }
+  .dark .lede { color: var(--muted); }
+
+  .label {
     font-family: var(--font-mono);
-    font-size: 12px;
+    font-size: 11.5px;
+    font-weight: 500;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--subtle);
-  }
-  .lede {
     color: var(--muted);
-    text-wrap: pretty;
+  }
+  /* The circle from the Module mark, the one accent. */
+  .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 99px;
+    background: var(--fg);
+    flex-shrink: 0;
   }
 
   .btn {
@@ -155,38 +212,81 @@
     gap: 8px;
     height: 40px;
     padding-inline: 16px;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 14.5px;
     font-weight: 500;
     white-space: nowrap;
-    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, transform 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
   }
   .btn:active { transform: translateY(1px); }
   .btn-primary { background: var(--inverse); color: var(--inverse-fg); }
-  .btn-primary:hover { background: color-mix(in oklab, var(--inverse) 86%, var(--bg)); }
-  .btn-ghost { border: 1px solid var(--line); color: var(--fg); background: var(--bg); }
+  .btn-primary:hover { background: color-mix(in oklab, var(--inverse) 82%, var(--bg)); }
+  .btn-ghost { box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--fg); background: var(--bg); }
   .btn-ghost:hover { background: var(--surface); }
-  .btn-lg { height: 46px; padding-inline: 22px; font-size: 15.5px; }
+  .btn-lg { height: 46px; padding-inline: 20px; font-size: 15px; }
+  .btn-sm { height: 34px; padding-inline: 13px; font-size: 13.5px; border-radius: 5px; }
 
-  /* Faint engineering grid used behind heroes. */
-  .bg-grid {
+  .link-arrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14.5px;
+    font-weight: 500;
+    color: var(--fg);
+  }
+  .link-arrow svg { transition: transform 200ms ease; }
+  .link-arrow:hover svg { transform: translateX(3px); }
+
+  /* Modules: cells joined by 1px hairlines, inside one frame. */
+  .modules {
+    display: grid;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .modules > * { background: var(--bg); min-width: 0; }
+
+  /* Graph paper behind product scenes. */
+  .graph {
+    background-color: var(--surface);
     background-image:
       linear-gradient(to right, var(--grid) 1px, transparent 1px),
       linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
-    background-size: 56px 56px;
-  }
-  .bg-dots {
-    background-image: radial-gradient(var(--grid) 1px, transparent 1px);
-    background-size: 18px 18px;
-  }
-  .fade-mask {
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
   }
 
   .card {
     background: var(--raised);
     border: 1px solid var(--line);
-    border-radius: 16px;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+  }
+  /* A tinted band behind a section, edge to edge. */
+  .band {
+    background: var(--surface-2);
+    border-block: 1px solid var(--line);
+  }
+
+  /* App window chrome inside a scene, with the app's radii. */
+  .app-window {
+    position: absolute;
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow-window);
+  }
+  .float-card {
+    position: absolute;
+    overflow: hidden;
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: var(--shadow-float);
   }
 
   .kbd {
@@ -207,7 +307,7 @@
 
   /* Long-form text: legal pages, blog, changelog. */
   .prose-od {
-    color: var(--muted);
+    color: var(--body);
     font-size: 16.5px;
     line-height: 1.75;
   }
@@ -215,44 +315,48 @@
   .prose-od h2 {
     margin-top: 2.4em;
     color: var(--fg);
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
+    font-size: 24px;
+    font-weight: 500;
+    letter-spacing: -0.025em;
     line-height: 1.3;
     scroll-margin-top: 96px;
   }
   .prose-od h3 {
     margin-top: 1.8em;
     color: var(--fg);
-    font-size: 17.5px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.015em;
     scroll-margin-top: 96px;
   }
   .prose-od strong { color: var(--fg); font-weight: 600; }
-  .prose-od a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  .prose-od a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
   .prose-od a:hover { text-decoration-color: var(--fg); }
   .prose-od ul { list-style: none; padding-left: 0; }
   .prose-od ul > li { position: relative; padding-left: 1.3em; }
   .prose-od ul > li + li { margin-top: 0.45em; }
-  .prose-od ul > li::before { content: ''; position: absolute; left: 0.2em; top: 0.72em; width: 6px; height: 6px; border-radius: 2px; background: var(--subtle); }
+  .prose-od ul > li::before { content: ''; position: absolute; left: 0.25em; top: 0.72em; width: 5px; height: 5px; border-radius: 99px; background: var(--subtle); }
   .prose-od ol { list-style: decimal; padding-left: 1.3em; }
   .prose-od ol > li + li { margin-top: 0.45em; }
   .prose-od code { font-family: var(--font-mono); font-size: 0.88em; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0.1em 0.35em; }
-  .prose-od pre { font-family: var(--font-mono); font-size: 13.5px; line-height: 1.65; background: var(--surface) !important; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; overflow-x: auto; }
+  .prose-od pre { font-family: var(--font-mono); font-size: 13.5px; line-height: 1.65; background: var(--surface-2) !important; border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; overflow-x: auto; }
   .prose-od pre code { background: none; border: 0; padding: 0; font-size: inherit; }
   .prose-od table { width: 100%; border-collapse: collapse; font-size: 14.5px; display: block; overflow-x: auto; }
-  .prose-od th { text-align: left; color: var(--fg); font-weight: 600; }
+  .prose-od th { text-align: left; color: var(--fg); font-weight: 500; }
   .prose-od th, .prose-od td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
   .prose-od hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.4em; }
   .prose-od blockquote { border-left: 2px solid var(--fg); padding-left: 1em; color: var(--fg); }
 }
 
+
 /* Scroll reveal. Without JS nothing is hidden. */
-.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1); transition-delay: var(--d, 0ms); }
+.js .reveal { opacity: 0; transform: translateY(12px); transition: opacity 600ms ease, transform 700ms cubic-bezier(0.16, 1, 0.3, 1); transition-delay: var(--d, 0ms); }
+/* A module snaps into its cell: a small slide and settle. */
+.js .snap { opacity: 0; transform: translate(var(--sx, 0), var(--sy, 10px)) scale(0.985); transition: opacity 500ms ease, transform 650ms cubic-bezier(0.16, 1, 0.3, 1); transition-delay: var(--d, 0ms); }
+.js .snap.is-in { opacity: 1; transform: none; }
 .js .reveal.is-in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .js .reveal { opacity: 1; transform: none; }
+  .js .reveal, .js .snap { opacity: 1; transform: none; transition: none; }
 }
 
 /* Loops in a scene only run while it is on screen. */
@@ -280,6 +384,97 @@
 }
 
 /* Above-the-fold entrance: plays on load, no JS needed, and never hides content for long. */
-.rise { animation: rise 800ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: var(--d, 0ms); }
-@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+.rise { animation: rise 900ms cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
 @media (prefers-reduced-motion: reduce) { .rise { animation: none; } }
+
+/* Shared scene loops. */
+@keyframes od-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+@keyframes od-dots { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+@keyframes od-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--ok) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 6px transparent; } }
+.od-caret { display: inline-block; width: 1.5px; height: 1.05em; margin-left: 1px; vertical-align: -0.15em; background: var(--fg); animation: od-blink 1.05s steps(1) infinite; }
+.od-dot { display: inline-block; width: 4px; height: 4px; border-radius: 99px; background: currentColor; animation: od-dots 1.2s ease-in-out infinite; }
+.od-dot:nth-child(2) { animation-delay: 0.15s; }
+.od-dot:nth-child(3) { animation-delay: 0.3s; }
+.od-live { animation: od-pulse 2s ease-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .od-caret, .od-dot, .od-live { animation: none; }
+}
+
+/* Scene timelines (lib/scenes.ts). Hidden states apply only once the script runs. */
+.seq-js [data-step] { transition: opacity 500ms ease, transform 600ms cubic-bezier(0.22, 1, 0.36, 1), height 600ms cubic-bezier(0.22, 1, 0.36, 1), background-color 400ms ease, width 700ms cubic-bezier(0.22, 1, 0.36, 1); }
+.seq-js [data-step]:not(.on).s-fade { opacity: 0; }
+.seq-js [data-step]:not(.on).s-up { opacity: 0; transform: translateY(10px); }
+.seq-js [data-step]:not(.on).s-pop { opacity: 0; transform: translateY(8px) scale(0.97); }
+.seq-js [data-step]:not(.on).s-left { opacity: 0; transform: translateX(-12px); }
+.seq-js [data-step]:not(.on).s-arrive { height: 0 !important; opacity: 0; }
+.seq-js [data-step].on.s-gone { opacity: 0; transform: translateY(-4px); }
+.seq-js [data-step]:not(.on).s-grow { width: 0 !important; }
+.seq-js .w { opacity: 0; transition: opacity 260ms ease; }
+.seq-js .w.on { opacity: 1; }
+.seq-js.seq-reset { opacity: 0; transition: opacity 400ms ease; }
+.seq-js { transition: opacity 400ms ease; }
+.seq-js [data-step].off { display: none; }
+[data-seq]:not(.seq-js) [data-until] { display: none; }
+
+/*
+ * Semantic colour, used only inside product illustrations: ticket status,
+ * priority, tags, AI and charts. The page itself stays ink on paper.
+ *   status   open = blue, pending = amber, on hold = violet-grey, solved = green
+ *   priority urgent = red, high = orange, normal = blue, low = grey
+ *   AI       violet
+ */
+:root {
+  --c-blue: #2b6cf0;
+  --c-green: #12a150;
+  --c-amber: #d48806;
+  --c-orange: #e8590c;
+  --c-red: #e03131;
+  --c-violet: #7048e8;
+  --c-teal: #0c9488;
+  --c-pink: #d6336c;
+  --c-grey: #737373;
+}
+.dark {
+  --c-blue: #6b9bff;
+  --c-green: #3dd68c;
+  --c-amber: #f5b53d;
+  --c-orange: #ff8a4c;
+  --c-red: #ff6b6b;
+  --c-violet: #9d85ff;
+  --c-teal: #2dd4bf;
+  --c-pink: #f472b6;
+  --c-grey: #a3a3a3;
+}
+.t-blue { --t: var(--c-blue); }
+.t-green { --t: var(--c-green); }
+.t-amber { --t: var(--c-amber); }
+.t-orange { --t: var(--c-orange); }
+.t-red { --t: var(--c-red); }
+.t-violet { --t: var(--c-violet); }
+.t-teal { --t: var(--c-teal); }
+.t-pink { --t: var(--c-pink); }
+.t-grey { --t: var(--c-grey); }
+
+/* A tinted pill: status, priority, tag. Add .pill-dot for a leading dot. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 19px;
+  padding-inline: 6px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: color-mix(in oklab, var(--t) 82%, var(--fg));
+  background: color-mix(in oklab, var(--t) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--t) 18%, transparent);
+}
+.pill-dot::before { content: ''; width: 6px; height: 6px; border-radius: 99px; background: var(--t); }
+.tint { color: var(--t); }
+.tint-bg { background: color-mix(in oklab, var(--t) 10%, transparent); color: var(--t); }
+.fill-t { background: var(--t); }
+.ring-t { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--t) 45%, transparent); }

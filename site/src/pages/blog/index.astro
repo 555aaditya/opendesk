@@ -7,7 +7,7 @@ import { getPublishedPosts, formatDate } from '../../lib/blog';
 const posts = await getPublishedPosts();
 ---
 <Layout title="Blog" description="Notes from the team building opendesk, the open-source helpdesk: releases, engineering and how we think about support software.">
-  <PageHero eyebrow="Blog" title="Notes from the desk." lede="Releases, engineering and how we think about support software.">
+  <PageHero label="Blog" title="Notes from the desk." lede="Releases, engineering and how we think about support software.">
     <a href="/blog/rss.xml" class="mt-8 inline-flex items-center gap-2 text-[14px] text-muted hover:text-fg"><Icon name="rss" size={15} />Subscribe with RSS</a>
   </PageHero>
   <section class="container-page py-14 md:py-20">

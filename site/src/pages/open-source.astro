@@ -25,7 +25,7 @@ const stack = [
 ];
 ---
 <Layout title="Open source" description="opendesk is open source under the Apache-2.0 license. The hosted service and the self-hosted build are the same code, developed in public on GitHub.">
-  <PageHero eyebrow="Open source" title="Built in the open.<br/>Licensed Apache-2.0." lede="opendesk is developed in public. The code that runs opendesk Cloud is the code in the repository, and you can run, change and ship it under a permissive license.">
+  <PageHero label="Open source" title="Built in the open.<br/>Licensed Apache-2.0." lede="opendesk is developed in public. The code that runs opendesk Cloud is the code in the repository, and you can run, change and ship it under a permissive license.">
     <div class="mt-10 flex flex-wrap gap-3">
       <a href={LINKS.github} class="btn btn-primary btn-lg"><Icon name="github" size={17} />opendesk/opendesk{stars && <span class="ml-1 inline-flex items-center gap-1 rounded-full bg-bg/15 px-2 py-0.5 font-mono text-[12px]"><Icon name="star" size={11} />{stars}</span>}</a>
       <a href={`${LINKS.docs}/contributing/`} class="btn btn-ghost btn-lg">How to contribute</a>
@@ -36,7 +36,7 @@ const stack = [
     <div class="grid gap-4 md:grid-cols-2">
       {reasons.map(([icon, t, d], i) => (
         <div class="reveal card p-7 md:p-8" style={`--d:${(i % 2) * 60}ms`}>
-          <span class="flex size-9 items-center justify-center rounded-lg bg-fg text-bg"><Icon name={icon} size={17} /></span>
+          <span class="flex size-9 items-center justify-center rounded-[5px] bg-fg text-bg"><Icon name={icon} size={17} /></span>
           <h2 class="mt-6 text-[20px] font-semibold tracking-[-0.02em] text-fg">{t}</h2>
           <p class="mt-2.5 text-[15px] leading-relaxed text-muted">{d}</p>
         </div>
@@ -47,12 +47,12 @@ const stack = [
   <section class="border-y border-line bg-surface-2">
     <div class="container-page grid gap-12 py-20 md:py-28 lg:grid-cols-2 lg:items-start">
       <div class="reveal">
-        <div class="eyebrow">License</div>
-        <h2 class="display mt-4 text-[34px] sm:text-[44px] text-fg">Apache-2.0, without asterisks.</h2>
+        <div class="label">License</div>
+        <h2 class="h-section mt-4">Apache-2.0, without asterisks.</h2>
         <p class="lede mt-5 text-[17px] leading-[1.65]">Use opendesk commercially, modify it, run it for your clients, and keep your changes private if you want to. The license includes an explicit patent grant. Keep the notices, and say what you changed.</p>
         <a href={LINKS.license} class="mt-7 inline-flex items-center gap-1.5 text-[14.5px] font-medium text-fg hover:underline underline-offset-4">Read the license<Icon name="arrowUpRight" size={14} /></a>
       </div>
-      <div class="reveal grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2" style="--d:80ms">
+      <div class="reveal grid grid-cols-1 gap-px overflow-hidden rounded-[8px] border border-line bg-line sm:grid-cols-2" style="--d:80ms">
         {[
           ['Commercial use', true], ['Modification', true], ['Distribution', true], ['Patent grant', true], ['Private use', true], ['Trademark use', false],
         ].map(([k, ok]) => (
@@ -68,8 +68,8 @@ const stack = [
   <section class="container-page py-20 md:py-28">
     <div class="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
       <div class="reveal">
-        <div class="eyebrow">Stack</div>
-        <h2 class="display mt-4 text-[34px] sm:text-[44px] text-fg">Boring parts, on purpose.</h2>
+        <div class="label">Stack</div>
+        <h2 class="h-section mt-4">Boring parts, on purpose.</h2>
         <p class="lede mt-5 text-[17px] leading-[1.65]">Proven tools, few moving parts. Contracts between the pieces live in the repository, so the API, events and realtime protocol are written down before they are built.</p>
       </div>
       <dl class="reveal divide-y divide-line border-y border-line" style="--d:80ms">

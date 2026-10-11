@@ -39,9 +39,22 @@ export const COMPANY = {
 } as const;
 
 export const NAV = [
-  { href: '/features/', label: 'Features' },
   { href: '/self-hosting/', label: 'Self-hosting' },
   { href: '/pricing/', label: 'Pricing' },
   { href: LINKS.docs, label: 'Docs' },
   { href: '/changelog/', label: 'Changelog' },
+  { href: '/blog/', label: 'Blog' },
+] as const;
+
+// The Product menu in the header and the feature anchors on /features.
+export const PRODUCT_NAV = [
+  { icon: 'inbox', href: '/features/#inbox', title: 'Shared inbox', desc: 'Every mailbox and channel in one queue.' },
+  { icon: 'chat', href: '/features/#chat', title: 'Live chat', desc: 'A light widget that speaks 13 languages.' },
+  { icon: 'sparkles', href: '/features/#ai', title: 'AI', desc: 'Drafts, summaries, triage and translation.' },
+  { icon: 'book', href: '/features/#knowledge-base', title: 'Knowledge base', desc: 'A help center customers search themselves.' },
+  { icon: 'zap', href: '/features/#automations', title: 'Automations and SLAs', desc: 'Rules and targets that run on arrival.' },
+  { icon: 'chart', href: '/features/#reports', title: 'Reports and CSAT', desc: 'Medians, breaches and satisfaction.' },
+  { icon: 'radio', href: '/features/#realtime', title: 'Realtime', desc: 'Presence, typing and live updates.' },
+  { icon: 'braces', href: '/features/#api', title: 'API and webhooks', desc: 'The same REST API the app uses.' },
+  { icon: 'shield', href: '/security/', title: 'Security', desc: 'CASA Tier 1 controls, written down.' },
 ] as const;

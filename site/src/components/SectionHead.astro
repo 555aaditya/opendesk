@@ -1,16 +1,27 @@
 ---
+/**
+ * A section's opening row: a mono index and label in the left column, the
+ * heading and one paragraph in the right, over a hairline. The index is the
+ * section's place in the page's module grid.
+ */
 interface Props {
-  eyebrow?: string;
+  index?: string;
+  label: string;
   title: string;
   lede?: string;
-  align?: 'left' | 'center';
   class?: string;
 }
-const { eyebrow, title, lede, align = 'left', class: className = '' } = Astro.props;
+const { index, label, title, lede, class: className = '' } = Astro.props;
 ---
-<div class={`reveal ${align === 'center' ? 'mx-auto text-center max-w-2xl' : 'max-w-2xl'} ${className}`}>
-  {eyebrow && <div class="eyebrow">{eyebrow}</div>}
-  <h2 class="display mt-4 text-[34px] sm:text-[44px] md:text-[52px] text-fg" set:html={title} />
-  {lede && <p class="lede mt-5 text-[17px] md:text-[18.5px] leading-[1.6]">{lede}</p>}
-  <slot />
+<div class={`grid gap-6 border-t border-line pt-6 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] md:gap-10 md:pt-8 ${className}`}>
+  <div class="reveal label flex items-center gap-2.5 self-start">
+    <span class="dot"></span>
+    {index && <span class="tabular-nums text-subtle">{index}</span>}
+    <span class="text-fg">{label}</span>
+  </div>
+  <div class="reveal" style="--d:60ms">
+    <h2 class="h-section max-w-3xl" set:html={title} />
+    {lede && <p class="lede mt-5 max-w-2xl">{lede}</p>}
+    <slot />
+  </div>
 </div>

@@ -11,7 +11,7 @@ interface Props {
 }
 const { tabs, class: className = '', id } = Astro.props;
 ---
-<div class={`overflow-hidden rounded-2xl border border-line bg-raised shadow-card ${className}`} data-tabs>
+<div class={`overflow-hidden rounded-[8px] border border-line bg-raised shadow-card ${className}`} data-tabs>
   <div class="flex items-center gap-1 overflow-x-auto border-b border-line bg-surface-2 px-2 h-11" role="tablist">
     {tabs.map((t, i) => (
       <button type="button" role="tab" id={`${id}-tab-${i}`} aria-controls={`${id}-panel-${i}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}

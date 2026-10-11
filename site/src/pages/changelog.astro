@@ -10,7 +10,7 @@ const entries = (await getCollection('changelog')).sort((a, b) => b.data.date.va
 const rendered = await Promise.all(entries.map(async (e) => ({ e, Content: (await render(e)).Content })));
 ---
 <Layout title="Changelog" description="Every opendesk release: what is new, what changed and what was fixed, on the cloud and for self-hosters.">
-  <PageHero eyebrow="Changelog" title="What shipped." lede="Every release, newest first. The cloud updates as soon as a release is out; self-hosters upgrade with one command.">
+  <PageHero label="Changelog" title="What shipped." lede="Every release, newest first. The cloud updates as soon as a release is out; self-hosters upgrade with one command.">
     <div class="mt-8 flex flex-wrap gap-5 text-[14px]">
       <a href={LINKS.githubReleases} class="inline-flex items-center gap-2 text-muted hover:text-fg"><Icon name="github" size={15} />Releases on GitHub</a>
       <a href="/blog/rss.xml" class="inline-flex items-center gap-2 text-muted hover:text-fg"><Icon name="rss" size={15} />RSS</a>

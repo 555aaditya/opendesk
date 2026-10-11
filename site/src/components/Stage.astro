@@ -1,0 +1,78 @@
+---
+/**
+ * A fixed-size product scene on graph paper, scaled as one picture to the width
+ * it is given, so a phone sees the same composition a desktop does.
+ *
+ * The scene is authored at `w` x `h` px and positions its windows absolutely
+ * inside that box. Loops run only while the stage is on screen (`.is-live`),
+ * `enter-*` pieces play once when it first scrolls in (`.is-seen`), and
+ * everything holds still under reduced motion.
+ */
+
+interface Props {
+  w: number;
+  h: number;
+  /** Frame style: graph paper (default), plain mist, or ink for the dark scenes. */
+  tone?: 'graph' | 'plain' | 'ink';
+  /** Phones: show a `mobileW` wide window of the scene, starting `mobileX` px in. */
+  mobileW?: number;
+  mobileX?: number;
+  /** Short description of what the scene shows, for assistive tech. */
+  label?: string;
+  class?: string;
+}
+const { w, h, tone = 'graph', mobileW, mobileX = 0, label, class: className = '' } = Astro.props;
+const skin = { graph: 'graph', plain: 'bg-surface', ink: 'bg-[#0a0a0a]' }[tone];
+---
+<figure
+  class={`stage-box relative m-0 w-full overflow-hidden ${skin} ${className}`}
+  style={`--ar:${w}/${h};${mobileW ? `--arm:${mobileW}/${h};` : ''}`}
+  role={label ? 'img' : undefined}
+  aria-label={label}
+>
+  <div class="stage absolute left-0 top-0 origin-top-left" style={`width:${w}px;height:${h}px;`} data-w={w} data-mw={mobileW} data-mx={mobileX} aria-hidden="true">
+    <slot />
+  </div>
+</figure>
+<script is:inline>(function(b){var s=b.querySelector('.stage'),d=s.dataset;var f=function(){var m=d.mw&&innerWidth<768,k=b.clientWidth/Number(m?d.mw:d.w);s.style.transform='translateX('+(m?-Number(d.mx)*k:0)+'px) scale('+k+')'};f();if(window.ResizeObserver)new ResizeObserver(f).observe(b)})(document.currentScript.previousElementSibling)</script>
+
+<style is:global>
+  .stage-box { aspect-ratio: var(--ar); }
+  @media (max-width: 767px) { .stage-box { aspect-ratio: var(--arm, var(--ar)); } }
+  .stage-box:not(.is-live) .stage *,
+  .stage-box:not(.is-live) .stage *::before,
+  .stage-box:not(.is-live) .stage *::after {
+    animation-play-state: paused !important;
+  }
+  .stage .float-card { transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .stage-box:hover .stage .float-card { transform: translate(-3px, -3px); }
+
+  .enter-fade { transition: opacity 700ms ease var(--d, 0ms), transform 800ms cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms); }
+  .enter-grow-y { transform-origin: bottom; transition: transform 1000ms cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms); }
+  .enter-grow-x { transform-origin: left; transition: transform 1000ms cubic-bezier(0.22, 1, 0.36, 1) var(--d, 0ms); }
+  .enter-draw { transition: stroke-dashoffset 1600ms cubic-bezier(0.4, 0, 0.2, 1) var(--d, 0ms); }
+  .js-stage:not(.is-seen) .enter-fade { opacity: 0; transform: translateY(12px); }
+  .js-stage:not(.is-seen) .enter-grow-y { transform: scaleY(0); }
+  .js-stage:not(.is-seen) .enter-grow-x { transform: scaleX(0); }
+  .js-stage:not(.is-seen) .enter-draw { stroke-dashoffset: var(--len, 1); }
+  @media (prefers-reduced-motion: reduce) {
+    .stage *, .stage *::before, .stage *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<script>
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const boxes = [...document.querySelectorAll<HTMLElement>('.stage-box')];
+  if (reduced || typeof IntersectionObserver === 'undefined') {
+    boxes.forEach((b) => b.classList.add('is-seen'));
+  } else {
+    boxes.forEach((b) => b.classList.add('js-stage'));
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        e.target.classList.toggle('is-live', e.isIntersecting);
+        if (e.isIntersecting) e.target.classList.add('is-seen');
+      }
+    }, { threshold: 0.25 });
+    boxes.forEach((b) => io.observe(b));
+  }
+</script>

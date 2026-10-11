@@ -5,7 +5,7 @@ import { LINKS } from '../lib/site';
 ---
 <Layout title="Page not found" description="This page does not exist." noIndex>
   <section class="relative overflow-hidden">
-    <div class="pointer-events-none absolute inset-0 bg-grid fade-mask opacity-80" aria-hidden="true"></div>
+    <div class="pointer-events-none absolute inset-0" aria-hidden="true"></div>
     <div class="container-page relative flex min-h-[64vh] flex-col items-center justify-center py-24 text-center">
       <!-- The Module mark with its circle gone missing. -->
       <svg viewBox="0 0 64 64" class="size-20 text-fg" aria-hidden="true">
@@ -13,7 +13,7 @@ import { LINKS } from '../lib/site';
         <circle cx="47" cy="17" r="12.25" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3" />
       </svg>
       <div class="mt-10 font-mono text-[13px] text-subtle">404</div>
-      <h1 class="display mt-3 text-[40px] sm:text-[56px] text-fg">This page is missing a piece.</h1>
+      <h1 class="h-hero mt-3">This page is missing a piece.</h1>
       <p class="lede mt-4 max-w-md text-[17px]">The page you asked for does not exist, or it moved.</p>
       <div class="mt-9 flex flex-wrap justify-center gap-3">
         <a href="/" class="btn btn-primary">Go home<Icon name="arrowRight" size={15} /></a>

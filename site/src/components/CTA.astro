@@ -1,8 +1,9 @@
 ---
 import Icon from './Icon.astro';
-import Logo from './Logo.astro';
+import ModuleMark from './ModuleMark.astro';
 import { LINKS } from '../lib/site';
 
+/** The closing module on every page: ink, one line, two buttons, and the mark snapping together. */
 interface Props {
   title?: string;
   body?: string;
@@ -11,24 +12,22 @@ interface Props {
 const {
   title = 'Give every customer a good answer.',
   body = 'Start on the cloud in a minute, or self-host it tonight. It is the same code either way.',
-  secondary,
+  secondary = { href: '/self-hosting/', label: 'Self-host it' },
 } = Astro.props;
 ---
-<section class="container-page mt-28 md:mt-36">
-  <div class="reveal relative overflow-hidden rounded-[28px] border border-line bg-surface-2 px-6 py-16 text-center sm:px-10 md:py-24">
-    <div class="pointer-events-none absolute inset-0 bg-grid fade-mask opacity-70" aria-hidden="true"></div>
-    <div class="relative">
-      <Logo variant="mark" class="mx-auto size-12 text-fg" />
-      <h2 class="display mx-auto mt-8 max-w-2xl text-[34px] sm:text-[48px] md:text-[56px] text-fg">{title}</h2>
-      <p class="lede mx-auto mt-5 max-w-xl text-[17px] leading-[1.6]">{body}</p>
-      <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <a href={LINKS.signup} class="btn btn-primary btn-lg w-full sm:w-auto">Start for free<Icon name="arrowRight" size={16} /></a>
-        {secondary ? (
-          <a href={secondary.href} class="btn btn-ghost btn-lg w-full sm:w-auto">{secondary.label}</a>
-        ) : (
-          <a href="/self-hosting/" class="btn btn-ghost btn-lg w-full sm:w-auto"><Icon name="terminal" size={16} />Self-host</a>
-        )}
+<section class="container-page py-20 md:py-28">
+  <div class="snap grid overflow-hidden rounded-[8px] bg-[#0a0a0a] text-white ring-1 ring-white/10 md:grid-cols-[1fr_auto]">
+    <div class="px-6 py-12 sm:px-10 md:px-14 md:py-20">
+      <div class="font-mono text-[11.5px] font-medium uppercase tracking-[0.06em] text-white/50">Get started</div>
+      <h2 class="mt-5 max-w-xl text-[32px] font-semibold leading-[1.06] tracking-[-0.04em] md:text-[46px]">{title}</h2>
+      <p class="mt-5 max-w-md text-[16px] leading-[1.6] text-white/60 md:text-[17px]">{body}</p>
+      <div class="mt-9 flex flex-wrap items-center gap-3">
+        <a href={LINKS.signup} class="btn btn-lg bg-white text-[#0a0a0a] hover:bg-white/90">Start free<Icon name="arrowRight" size={15} /></a>
+        <a href={secondary.href} class="btn btn-lg text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.22)] hover:bg-white/[0.06]">{secondary.label}</a>
       </div>
+    </div>
+    <div class="hidden md:flex items-center border-l border-white/10 px-16">
+      <div class="w-[200px] text-white"><ModuleMark plain /></div>
     </div>
   </div>
 </section>
