@@ -48,7 +48,7 @@ export const opLabel: Record<ConditionOp, string> = {
 
 /** Text fields take any operator; enumerated fields only is / is not. */
 export function opsFor(field: ConditionField): ConditionOp[] {
-  if (field === "sentiment") return ["eq"];
+  if (field === "sentiment") return ["equals", "not_equals"]; // the API stores "eq" as "equals"
   return field === "subject" || field === "body" || field === "from_email"
     ? ["contains", "not_contains", "equals", "not_equals"]
     : ["equals", "not_equals"];

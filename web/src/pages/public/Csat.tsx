@@ -55,7 +55,7 @@ export default function Csat() {
   const { token } = route.useParams();
   const search = route.useSearch();
   const { data, isLoading, isError, isPending } = useQuery(q.csat(token));
-  const { locale, loaded } = usePublicLocale(data?.locale, !isPending);
+  const { locale, loaded } = usePublicLocale(data?.locale || undefined, !isPending);
   const { t } = useTranslation("public");
   const label = (n: number) => t(`csat.scores.${n as 1 | 2 | 3 | 4 | 5}`);
   const pre = Number(search.score ?? landingScore(token));
@@ -106,14 +106,14 @@ export default function Csat() {
               </p>
             )}
             <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.03em]">{t("csat.question")}</h1>
-            {data.subject && (
+            {data.ticket?.subject && (
               <p className="mx-auto mt-2 max-w-[380px] truncate text-[13px] text-fg-3">
-                {data.ticket_number ? (
+                {data.ticket.number ? (
                   <>
-                    <bdi className="mono">#{data.ticket_number}</bdi>{" "}
+                    <bdi className="mono">#{data.ticket.number}</bdi>{" "}
                   </>
                 ) : null}
-                <bdi>{data.subject}</bdi>
+                <bdi>{data.ticket.subject}</bdi>
               </p>
             )}
             <div role="radiogroup" aria-label={t("csat.rating")} className="mt-8 grid grid-cols-5 gap-2">

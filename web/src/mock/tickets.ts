@@ -274,6 +274,7 @@ export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
   const msg: Message = {
     id: uuid(),
     ticket_id: t.id,
+    ai: false,
     kind: m.kind,
     direction: m.direction,
     author: inbound

@@ -29,6 +29,10 @@ function notificationText(n: Notification) {
       return `New reply ${subject}`;
     case "sla_breached":
       return `SLA breached ${subject}`;
+    case "ai_handoff":
+      return `A customer asked for a person ${subject}`;
+    default:
+      return `Notification ${subject}`;
   }
 }
 
@@ -73,6 +77,9 @@ export function AppLayout() {
   const newTicketOpen = useShell((s) => s.newTicketOpen);
   const sidebarOpen = useShell((s) => s.sidebarOpen);
   const upgradeReason = useUpgrade((s) => s.reason);
+  // Logging out clears the session before the router leaves the app; render
+  // nothing in between rather than pages that read the signed-in user.
+  const authed = useSession((s) => s.status === "authed" && !!s.user);
 
   useHotkeys({
     "mod+k": () => shell.palette(!useShell.getState().paletteOpen),
@@ -86,6 +93,8 @@ export function AppLayout() {
     "g r": () => void navigate({ to: "/reports" }),
     "g s": () => void navigate({ to: "/settings" }),
   });
+
+  if (!authed) return null;
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-canvas text-fg">

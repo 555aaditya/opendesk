@@ -105,7 +105,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
       api.mailboxes.update(mailbox.id, {
         name: draft.name.trim(),
         display_name: draft.display_name.trim(),
-        team_id: draft.team_id,
+        team_id: draft.team_id ?? "", // "" clears the team; null would mean "unchanged"
         signature_html: draft.signature_html,
         auto_reply_enabled: draft.auto_reply_enabled,
         auto_reply_subject: draft.auto_reply_subject.trim(),

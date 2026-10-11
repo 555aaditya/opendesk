@@ -76,7 +76,8 @@ function useCheckoutReturn(b: Billing | undefined) {
     if (handled.current || (!search.checkout && !search.credits)) return;
     handled.current = true;
     if (search.checkout === "success") setConfirming(true);
-    else if (search.checkout === "cancel") toast.info(t("toast.checkoutCancel"));
+    else if (search.checkout === "canceled") toast.info(t("toast.checkoutCancel"));
+    if (search.credits === "canceled") toast.info(t("toast.checkoutCancel"));
     if (search.credits === "success") {
       creditsBase.current = qc.getQueryData<Billing>(qk.billing)?.credits.purchased ?? 0;
       toast.info(t("toast.creditsPending"));
@@ -434,13 +435,13 @@ function Usage() {
   const [range, setRange] = useState<ReportsRange>(() => presets()[1].range);
   const [asTable, setAsTable] = useState(false);
   const { data, isPending, isError, error, refetch } = useQuery({ ...q.billingUsage(range), enabled: canManage, retry: (n, e) => !isApiError(e, "billing_disabled") && n < 2 });
-  const stacked = useMemo(() => (data ? stackDays(data) : null), [data]);
+  const stacked = useMemo(() => (data ? stackDays(data, range) : null), [data, range]);
 
   if (!canManage) return null;
-  // Instances without Stripe don't serve usage (404 billing_disabled).
+  // Usage is served on every instance (self-hosted too); an older server may answer 404 billing_disabled.
   if (isError && isApiError(error, "billing_disabled")) return null;
 
-  const total = data?.total.credits ?? 0;
+  const total = data?.total_credits ?? 0;
   return (
     <Section
       title={t("usage.title")}
@@ -468,7 +469,7 @@ function Usage() {
                 </div>
                 <div>
                   <div className="label-caps mb-1">{t("usage.calls")}</div>
-                  <div className="text-[20px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-fg-3">{fmt.num(data.total.calls)}</div>
+                  <div className="text-[20px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-fg-3">{fmt.num(data.total_calls)}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">

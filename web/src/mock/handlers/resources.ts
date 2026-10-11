@@ -412,7 +412,7 @@ export function registerResources() {
   };
   get("/v1/public/csat/:token", (ctx) => {
     const { ws, c, t } = findCsat(ctx.params.token);
-    return { score: c.score, comment: c.comment, workspace_name: ws.workspace.name, ticket_number: t.number, subject: t.subject, locale: ws.workspace.settings.locale };
+    return { score: c.score, comment: c.comment ?? "", workspace_name: ws.workspace.name, brand_color: ws.workspace.settings.brand_color ?? "", ticket: { number: t.number, subject: t.subject }, locale: ws.workspace.settings.locale ?? "" };
   });
   post("/v1/public/csat/:token", (ctx) => {
     const { ws, c, t } = findCsat(ctx.params.token);

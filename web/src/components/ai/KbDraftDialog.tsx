@@ -16,6 +16,9 @@ import { errorMessage, isPlanLimit } from "@/lib/api/client";
 import type { KBArticleDraft, Ticket } from "@/lib/api/types";
 import { AiIcon, useCreditLabel } from "./bits";
 
+/** The server drafts from at most 10 tickets. */
+const MAX_TICKETS = 10;
+
 export function KbDraftDialog({
   open,
   onOpenChange,
@@ -112,7 +115,7 @@ export function KbDraftDialog({
             <Picker
               multi
               values={picked.map((x) => x.id)}
-              onChange={(ids) => setPicked(ids.map((id) => known.get(id)).filter((x): x is Ticket => !!x))}
+              onChange={(ids) => setPicked(ids.map((id) => known.get(id)).filter((x): x is Ticket => !!x).slice(0, MAX_TICKETS))}
               onQueryChange={setQuery}
               placeholder={t("kb_draft.tickets_placeholder")}
               emptyText={search.isFetching ? "…" : t("kb_draft.tickets_empty")}

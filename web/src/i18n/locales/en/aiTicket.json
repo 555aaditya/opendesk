@@ -64,6 +64,7 @@
     "apply": "Apply",
     "applied": "Applied",
     "applyAll": "Apply all",
+    "newTag": "New tag, created when you apply all",
     "dismiss": "Dismiss",
     "nothing": "Everything already matches the suggestion.",
     "appliedToast": "Applied the triage suggestion",

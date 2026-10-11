@@ -12,10 +12,11 @@ const ref = (id: string | null) => (id ? { id, name: id.toUpperCase(), email: `$
 describe("aggregateUsage", () => {
   it("groups the range by day, feature and member", () => {
     const u = aggregateUsage(rows, "2026-10-01", "2026-10-03", ref);
-    expect(u.total).toEqual({ credits: 7, calls: 3 });
+    expect([u.total_credits, u.total_calls]).toEqual([7, 3]);
+    expect([u.from, u.to]).toEqual(["2026-10-01T00:00:00.000Z", "2026-10-04T00:00:00.000Z"]);
+    // Days without usage are left out, as the server does.
     expect(u.by_day.map((d) => [d.date, d.credits])).toEqual([
       ["2026-10-01", 4],
-      ["2026-10-02", 0],
       ["2026-10-03", 3],
     ]);
     expect(u.by_day[0].by_feature).toEqual({ draft_reply: 3, summarize: 1 });

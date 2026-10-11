@@ -162,10 +162,10 @@ export function startOAuth(provider: AuthProvider["id"], next?: string | null) {
     location.assign(`/auth/callback?code=mock-${provider}`);
     return;
   }
-  const back = new URL("/auth/callback", location.origin);
+  // redirect_to is where to land after sign-in; the API always returns to /auth/callback first.
   const n = safeNext(next);
-  if (n) back.searchParams.set("next", n);
-  location.assign(`${config.apiUrl}/v1/auth/oauth/${provider}/start?redirect_to=${encodeURIComponent(back.toString())}`);
+  const q = n ? `?redirect_to=${encodeURIComponent(n)}` : "";
+  location.assign(`${config.apiUrl}/v1/auth/oauth/${provider}/start${q}`);
 }
 
 export function ProviderButtons({ next, verb = "Continue" }: { next?: string | null; verb?: string }) {

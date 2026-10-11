@@ -221,7 +221,7 @@ export const api = {
     article: (slug: string, a: string) => http.get<T.KbArticle>(`/v1/public/help/${slug}/articles/${a}`, pub),
     search: (slug: string, q: string) => http.get<T.KbArticle[]>(`/v1/public/help/${slug}/search`, { ...pub, query: { q } }),
     csat: (token: string) =>
-      http.get<{ score: number | null; comment?: string; workspace_name?: string; ticket_number?: number; subject?: string; locale?: string }>(`/v1/public/csat/${token}`, pub),
+      http.get<T.CsatSurvey>(`/v1/public/csat/${token}`, pub),
     submitCsat: (token: string, b: { score: number; comment?: string }) => http.post<void>(`/v1/public/csat/${token}`, b, pub),
   },
 };

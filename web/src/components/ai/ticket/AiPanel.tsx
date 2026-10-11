@@ -23,10 +23,12 @@ import { AiIcon, AiTooltip, useCreditLabel } from "../bits";
 import { creditsSpent, isAbort, reportAiError } from "./errors";
 import { languageName, streamTextToHtml } from "./text";
 
+/** custom.ai_summary is stored as {text, key_points, sentiment, updated_at, message_count} (contracts/ai.md). */
 function readSummary(t: Ticket): AISummary | null {
-  const s = t.custom?.ai_summary as Partial<AISummary> | undefined;
-  if (!s || typeof s.summary !== "string") return null;
-  return { summary: s.summary, key_points: Array.isArray(s.key_points) ? s.key_points.filter((x) => typeof x === "string") : [], sentiment: (s.sentiment ?? "neutral") as Sentiment, updated_at: s.updated_at ?? t.updated_at };
+  const s = t.custom?.ai_summary as (Partial<AISummary> & { text?: string }) | undefined;
+  const text = typeof s?.text === "string" ? s.text : typeof s?.summary === "string" ? s.summary : null;
+  if (!s || text === null) return null;
+  return { summary: text, key_points: Array.isArray(s.key_points) ? s.key_points.filter((x) => typeof x === "string") : [], sentiment: (s.sentiment ?? "neutral") as Sentiment, updated_at: s.updated_at ?? t.updated_at };
 }
 
 /** Write a change into every cached copy of the ticket (lists and detail, by id or by number). */
@@ -75,7 +77,7 @@ function SummaryCard({ t: ticket }: { t: Ticket }) {
     try {
       const res = await api.ai.summary(ticket.id);
       const cur = qc.getQueryData<Ticket>(["tickets", "detail", ticket.id]) ?? ticket;
-      patchCachedTicket(qc, { ...cur, custom: { ...cur.custom, ai_summary: res, ai_sentiment: res.sentiment } }, me);
+      patchCachedTicket(qc, { ...cur, custom: { ...cur.custom, ai_summary: { text: res.summary, key_points: res.key_points, sentiment: res.sentiment, updated_at: res.updated_at }, ai_sentiment: res.sentiment } }, me);
       creditsSpent(qc);
     } catch (e) {
       reportAiError(e, t("summary.failed"));
@@ -173,7 +175,7 @@ function TriageCard({ t: ticket }: { t: Ticket }) {
   const rows: Row[] = result
     ? [
         { key: "priority", pending: result.priority !== ticket.priority },
-        { key: "tags", pending: newTags.length > 0 },
+        { key: "tags", pending: newTags.length > 0 || (result.suggested_tags?.length ?? 0) > 0 },
       ]
     : [];
   const anyPending = rows.some((r) => r.pending);
@@ -242,6 +244,11 @@ function TriageCard({ t: ticket }: { t: Ticket }) {
               <span key={x} className={cn(!current.has(x.toLowerCase()) ? "" : "opacity-50")}>
                 <TagChip name={x} />
               </span>
+            ))}
+            {(result.suggested_tags ?? []).map((x) => (
+              <Tooltip key={`new-${x}`} content={t("triage.newTag")}>
+                <span className="rounded-[4px] border border-dashed border-line-strong px-1 text-[11.5px] text-fg-3">+ {x}</span>
+              </Tooltip>
             ))}
           </dd>
           <ApplyButton pending={rows[1].pending} onClick={() => applyRow("tags")} />

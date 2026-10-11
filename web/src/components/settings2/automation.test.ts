@@ -9,8 +9,8 @@ describe("automation AI helpers", () => {
     expect(offered([...keys], aiActions, false, "ai_triage")).toEqual(["add_tag", "ai_triage"]);
   });
 
-  it("uses eq for sentiment and needs no value for triage", () => {
-    expect(opsFor("sentiment")).toEqual(["eq"]);
+  it("offers is / is not for sentiment and needs no value for triage", () => {
+    expect(opsFor("sentiment")).toEqual(["equals", "not_equals"]);
     expect(actionNeedsValue("ai_triage")).toBe(false);
     expect(sentimentLabel("frustrated")).toBe("Frustrated");
     expect(sentimentLabel("custom")).toBe("custom");

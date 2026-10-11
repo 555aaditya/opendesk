@@ -36,7 +36,7 @@ describe("languages", () => {
     expect(ticketLanguage({ custom: {} })).toBeNull();
   });
   it("spots AI bot answers", () => {
-    expect(isAiMessage({ custom: { ai: true } } as unknown as Message)).toBe(true);
+    expect(isAiMessage({ ai: true } as unknown as Message)).toBe(true);
     expect(isAiMessage({} as Message)).toBe(false);
   });
 });

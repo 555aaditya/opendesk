@@ -16,7 +16,7 @@ const route = getRouteApi("/help/$slug");
 export default function HelpLayout() {
   const { slug } = route.useParams();
   const { data, isError, isPending } = useQuery(q.publicHelp(slug));
-  const { locale, loaded } = usePublicLocale(data?.locale, !isPending);
+  const { locale, loaded } = usePublicLocale(data?.locale || undefined, !isPending);
   const { t } = useTranslation("public");
   const { dark, setTheme } = useTheme();
   const path = useRouterState({ select: (s) => s.location.pathname });

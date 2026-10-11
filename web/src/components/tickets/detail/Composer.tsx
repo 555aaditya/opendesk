@@ -91,6 +91,7 @@ function useSend(ticket: Ticket) {
       const temp: Message = {
         id: tempId,
         ticket_id: ticket.id,
+        ai: false,
         kind: body.kind,
         direction: "outbound",
         author: { type: "user", user: { id: user.id, name: user.name, email: user.email, avatar_url: user.avatar_url }, contact: null },

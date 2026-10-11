@@ -30,8 +30,17 @@ export const eventGroups: { label: string; events: string[] }[] = [
 ];
 export const allEvents = eventGroups.flatMap((g) => g.events);
 
+/** The server stores "every event, including ones added later" as ["*"]. */
+export function isAllEvents(events: string[]) {
+  return events.includes("*") || allEvents.every((e) => events.includes(e));
+}
+
+function expandEvents(events: string[]) {
+  return events.includes("*") ? allEvents : events;
+}
+
 export function eventSummary(events: string[]) {
-  if (allEvents.every((e) => events.includes(e))) return "All events";
+  if (isAllEvents(events)) return "All events";
   return events.length === 1 ? events[0] : `${events.length} events`;
 }
 
@@ -49,7 +58,7 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
   const qc = useQueryClient();
   const [url, setUrl] = useState(hook?.url ?? "");
   const [description, setDescription] = useState(hook?.description ?? "");
-  const [events, setEvents] = useState<string[]>(hook?.events ?? ["ticket.created", "ticket.updated", "message.created"]);
+  const [events, setEvents] = useState<string[]>(hook ? expandEvents(hook.events) : ["ticket.created", "ticket.updated", "message.created"]);
   const [enabled, setEnabled] = useState(hook?.enabled ?? true);
   const [error, setError] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -57,7 +66,7 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
 
   const save = useMutation({
     mutationFn: async () => {
-      const body = { url: url.trim(), description: description.trim(), events, enabled };
+      const body = { url: url.trim(), description: description.trim(), events: all ? ["*"] : events, enabled };
       if (hook) return { w: await api.webhooks.update(hook.id, body), secret: null };
       const created = await api.webhooks.create(body);
       return { w: created as Webhook, secret: created.secret };

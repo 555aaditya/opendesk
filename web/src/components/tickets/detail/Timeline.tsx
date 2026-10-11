@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlarmClock, ShieldAlert, ArrowRightLeft, CircleDot, GitMerge, Star, Tag as TagIcon, TimerOff, Users, UserRound, Signal } from "lucide-react";
+import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Star, Tag as TagIcon, TimerOff, Users, UserRound, Signal } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
-import type { Activity, Message, Priority, Team, TicketStatus, UserRef } from "@/lib/api/types";
+import type { Activity, Member, Message, Priority, Team, TicketStatus, UserRef } from "@/lib/api/types";
 import { dayLabel, fullDate, relShort, shortDate } from "@/lib/format";
 import { q } from "@/lib/queries";
 import { useRealtime, isCustomerTyping } from "@/lib/realtime/store";
@@ -12,8 +12,11 @@ import { MessageItem } from "./MessageItem";
 
 type Item = { kind: "message"; at: string; m: Message } | { kind: "activity"; at: string; a: Activity };
 
-function ref(v: unknown): UserRef | null {
-  return v && typeof v === "object" && "name" in (v as object) ? (v as UserRef) : null;
+/** A user in activity data: a UserRef, or a user id (resolved through the members list). */
+function ref(v: unknown, members: Member[] | undefined): UserRef | null {
+  if (v && typeof v === "object" && "name" in (v as object)) return v as UserRef;
+  if (typeof v === "string") return members?.find((m) => m.user.id === v)?.user ?? { id: v, name: "a former member", email: "", avatar_url: "" };
+  return null;
 }
 
 function actorName(a: Activity) {
@@ -21,10 +24,11 @@ function actorName(a: Activity) {
   if (typeof a.data.automation_name === "string") return `Automation “${a.data.automation_name}”`;
   if (a.actor.type === "automation") return "An automation";
   if (a.actor.type === "contact") return "The customer";
+  if (a.actor.type === "ai") return "AI";
   return "opendesk";
 }
 
-function describe(a: Activity, teams: Team[] | undefined): { icon: ReactNode; text: ReactNode; tone?: "danger" } {
+function describe(a: Activity, teams: Team[] | undefined, members: Member[] | undefined): { icon: ReactNode; text: ReactNode; tone?: "danger" } {
   const who = <span className="font-medium text-fg-2">{actorName(a)}</span>;
   const d = a.data;
   switch (a.type) {
@@ -49,7 +53,7 @@ function describe(a: Activity, teams: Team[] | undefined): { icon: ReactNode; te
         ),
       };
     case "assigned": {
-      const to = ref(d.to);
+      const to = ref(d.to, members);
       return {
         icon: <UserRound />,
         text: to ? (
@@ -96,8 +100,8 @@ function describe(a: Activity, teams: Team[] | undefined): { icon: ReactNode; te
     case "custom_updated":
       return { icon: <ArrowRightLeft />, text: <>{who} updated {Array.isArray(d.keys) ? <span className="mono text-fg-2">{(d.keys as string[]).join(", ")}</span> : "custom fields"}</> };
     case "merged": {
-      const into = d.into as { number?: number } | undefined;
-      const from = (typeof d.from_number === "number" ? { number: d.from_number } : (d.from as { number?: number } | undefined));
+      const into = typeof d.into_number === "number" ? { number: d.into_number } : typeof d.into === "object" ? (d.into as { number?: number }) : undefined;
+      const from = typeof d.from_number === "number" ? { number: d.from_number } : (d.from as { number?: number } | undefined);
       return {
         icon: <GitMerge />,
         text: into ? (
@@ -121,6 +125,19 @@ function describe(a: Activity, teams: Team[] | undefined): { icon: ReactNode; te
           </>
         ),
       };
+    case "ai_triaged":
+      return {
+        icon: <Sparkles />,
+        text: (
+          <>
+            {who} triaged this{typeof d.category === "string" ? <> as <span className="font-medium text-fg-2">{d.category.replace(/_/g, " ")}</span></> : null}
+          </>
+        ),
+      };
+    case "ai_answered":
+      return { icon: <Sparkles />, text: <>{who} answered from the knowledge base</> };
+    case "ai_handoff":
+      return { icon: <Hand />, text: <>{a.actor.type === "contact" ? "The customer asked for a person" : "AI handed this to the team"}</> };
     default:
       return { icon: <ArrowRightLeft />, text: <>{who} updated this ticket <span className="mono text-fg-4">{a.type}</span></> };
   }
@@ -128,7 +145,8 @@ function describe(a: Activity, teams: Team[] | undefined): { icon: ReactNode; te
 
 function ActivityLine({ a }: { a: Activity }) {
   const { data: teams } = useQuery(q.teams());
-  const { icon, text, tone } = describe(a, teams);
+  const { data: members } = useQuery(q.members());
+  const { icon, text, tone } = describe(a, teams, members);
   return (
     <div className="flex items-center gap-2.5 py-1 pl-[18px] text-[12px] text-fg-3">
       <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border bg-surface [&_svg]:size-3 ${tone === "danger" ? "border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] text-danger-fg" : "border-line text-fg-3"}`}>

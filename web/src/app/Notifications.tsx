@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { AtSign, Bell, CornerDownLeft, TimerOff, UserPlus } from "lucide-react";
+import { AtSign, Bell, CornerDownLeft, Hand, TimerOff, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { api } from "@/lib/api/endpoints";
 import type { Notification } from "@/lib/api/types";
@@ -17,6 +17,7 @@ const icon = {
   mentioned: <AtSign />,
   customer_replied: <CornerDownLeft />,
   sla_breached: <TimerOff />,
+  ai_handoff: <Hand />,
 };
 
 function describe(n: Notification): string {
@@ -33,6 +34,10 @@ function describe(n: Notification): string {
       return contact ? `${contact} replied` : "The customer replied";
     case "sla_breached":
       return "SLA breached";
+    case "ai_handoff":
+      return contact ? `${contact} asked for a person` : "A customer asked for a person";
+    default:
+      return "Notification";
   }
 }
 

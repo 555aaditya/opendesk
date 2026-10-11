@@ -482,7 +482,7 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
   const message = del.error
     ? isApiError(del.error, "sole_owner") || isApiError(del.error, "conflict")
       ? "Transfer ownership or delete the workspaces you own with other members first."
-      : isApiError(del.error, "invalid_credentials")
+      : isApiError(del.error, "invalid_credentials") || isApiError(del.error, "invalid_code")
         ? "That password or code is not right."
         : errorMessage(del.error)
     : null;

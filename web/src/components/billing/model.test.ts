@@ -59,9 +59,10 @@ describe("credits", () => {
 describe("usage series", () => {
   it("fills days and stacks the top features plus other", () => {
     const u: BillingUsage = {
-      from: "2026-10-01",
-      to: "2026-10-03",
-      total: { credits: 20, calls: 9 },
+      from: "2026-10-01T00:00:00Z",
+      to: "2026-10-04T00:00:00Z",
+      total_credits: 20,
+      total_calls: 9,
       by_feature: [
         { feature: "draft_reply", credits: 9, calls: 3 },
         { feature: "summarize", credits: 5, calls: 5 },
@@ -69,12 +70,12 @@ describe("usage series", () => {
         { feature: "rewrite", credits: 2, calls: 2 },
       ],
       by_day: [
-        { date: "2026-10-01", credits: 12, by_feature: { draft_reply: 6, summarize: 3, copilot: 2, rewrite: 1 } },
-        { date: "2026-10-03", credits: 8, by_feature: { draft_reply: 3, summarize: 2, copilot: 2, rewrite: 1 } },
+        { date: "2026-10-01", credits: 12, calls: 5, by_feature: { draft_reply: 6, summarize: 3, copilot: 2, rewrite: 1 } },
+        { date: "2026-10-03", credits: 8, calls: 4, by_feature: { draft_reply: 3, summarize: 2, copilot: 2, rewrite: 1 } },
       ],
       by_member: [],
     };
-    const { series, days } = stackDays(u);
+    const { series, days } = stackDays(u, { from: "2026-10-01", to: "2026-10-03" });
     expect(series).toEqual(["draft_reply", "summarize", "copilot", "other"]);
     expect(days.map((d) => d.date)).toEqual(["2026-10-01", "2026-10-02", "2026-10-03"]);
     expect(days[0].stacks.map((s) => s.credits)).toEqual([6, 3, 2, 1]);

@@ -101,7 +101,8 @@ function EditorScreen({ article }: { article: KbArticle | null }) {
         title: draft.title.trim() || "Untitled",
         excerpt: draft.excerpt.trim(),
         slug: (draft.slug || slugify(draft.title)) || undefined,
-        collection_id: draft.collection_id,
+        // On update an empty string takes the article out of its collection (null means "unchanged").
+        collection_id: current ? (draft.collection_id ?? "") : draft.collection_id,
         body_html: draft.body_html,
         status: nextStatus,
       };

@@ -118,13 +118,13 @@ export type StackedDay = { date: string; total: number; stacks: Stack[] };
  * "other". Missing days are zero. Series order follows the range totals, so
  * a feature keeps its shade across every bar.
  */
-export function stackDays(u: BillingUsage, top = 3): { series: (AIFeature | "other")[]; days: StackedDay[] } {
+export function stackDays(u: BillingUsage, range: { from: string; to: string }, top = 3): { series: (AIFeature | "other")[]; days: StackedDay[] } {
   const ranked = [...u.by_feature].filter((f) => f.credits > 0).sort((a, b) => b.credits - a.credits);
   const head = ranked.slice(0, top).map((f) => f.feature);
   const hasOther = ranked.length > top;
   const series: (AIFeature | "other")[] = hasOther ? [...head, "other"] : head;
   const byDate = new Map(u.by_day.map((d) => [d.date, d]));
-  const days = daysBetween(u.from, u.to).map((date) => {
+  const days = daysBetween(range.from.slice(0, 10), range.to.slice(0, 10)).map((date) => {
     const d = byDate.get(date);
     const total = d?.credits ?? 0;
     const per = d?.by_feature ?? {};

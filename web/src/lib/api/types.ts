@@ -136,6 +136,8 @@ export type Message = {
   attachments: Attachment[];
   delivery_status: DeliveryStatus;
   delivery_error: string;
+  /** An automatic answer from the widget answer bot (contracts/ai.md). */
+  ai: boolean;
   created_at: string;
 };
 export type ActivityType =
@@ -307,7 +309,7 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "mentioned" | "customer_replied" | "sla_breached";
+export type NotificationType = "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff";
 export type Notification = {
   id: string;
   type: NotificationType;
@@ -392,6 +394,16 @@ export type WidgetSettings = {
   allowed_origins: string[];
 };
 
+/** GET /v1/public/csat/{token}. `locale` is the workspace default ("" when not set). */
+export type CsatSurvey = {
+  workspace_name: string;
+  brand_color: string;
+  ticket: { number: number; subject: string };
+  score: number | null;
+  comment: string;
+  locale: string;
+};
+
 export type PublicHelpHome = { title: string; collections: KbCollection[]; featured: KbArticle[]; locale?: string };
 export type PublicCollection = { collection: KbCollection; articles: KbArticle[] };
 
@@ -403,7 +415,11 @@ export type TicketPatch = {
   team_id?: string | null;
   snoozed_until?: string | null;
   spam?: boolean;
+  /** Replaces the tags, by name. */
   tags?: string[];
+  /** Adds these tags, keeping the others. */
+  add_tags?: string[];
+  remove_tags?: string[];
   custom?: Record<string, unknown>;
 };
 
@@ -429,13 +445,14 @@ export type Billing = {
   prices: { pro_month: Price | null; pro_year: Price | null; credit_pack: Price | null };
 };
 export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "copilot" | "draft_reply" | "answer" | "kb_draft";
-/** GET /v1/billing/usage. Shape assumed: the contract names the three breakdowns only. */
+/** GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive. */
 export type BillingUsage = {
   from: string;
   to: string;
-  total: { credits: number; calls: number };
+  total_credits: number;
+  total_calls: number;
   by_feature: { feature: AIFeature; credits: number; calls: number }[];
-  by_day: { date: string; credits: number; by_feature?: Partial<Record<AIFeature, number>> }[];
+  by_day: { date: string; credits: number; calls: number; by_feature?: Partial<Record<AIFeature, number>> }[];
   by_member: { user: UserRef | null; credits: number; calls: number }[];
 };
 
@@ -464,6 +481,8 @@ export type AISummary = { summary: string; key_points: string[]; sentiment: Sent
 export type AIAnswer = { answer_html: string; sources: KBSource[] };
 export type Triage = {
   tags: string[];
+  /** At most 2 new tag names; only the explicit apply creates them. */
+  suggested_tags: string[];
   priority: Priority;
   sentiment: Sentiment;
   language: string;

@@ -223,16 +223,16 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
     const t = Date.parse(r.at);
     return t >= start && t < end;
   });
-  const days = new Map<string, { credits: number; by_feature: Partial<Record<AIFeature, number>> }>();
-  for (let t = start; t < end; t += DAY) days.set(new Date(t).toISOString().slice(0, 10), { credits: 0, by_feature: {} });
+  const days = new Map<string, { credits: number; calls: number; by_feature: Partial<Record<AIFeature, number>> }>();
   const feats = new Map<AIFeature, { credits: number; calls: number }>();
   const members = new Map<string, { credits: number; calls: number }>();
   for (const r of inRange) {
-    const day = days.get(r.at.slice(0, 10));
-    if (day) {
-      day.credits += r.credits;
-      day.by_feature[r.feature] = (day.by_feature[r.feature] ?? 0) + r.credits;
-    }
+    const dayKey = r.at.slice(0, 10);
+    const day = days.get(dayKey) ?? { credits: 0, calls: 0, by_feature: {} };
+    day.credits += r.credits;
+    day.calls += 1;
+    day.by_feature[r.feature] = (day.by_feature[r.feature] ?? 0) + r.credits;
+    days.set(dayKey, day);
     const f = feats.get(r.feature) ?? { credits: 0, calls: 0 };
     f.credits += r.credits;
     f.calls += 1;
@@ -244,11 +244,12 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
     members.set(key, m);
   }
   return {
-    from,
-    to,
-    total: { credits: inRange.reduce((s, r) => s + r.credits, 0), calls: inRange.length },
+    from: new Date(start).toISOString(),
+    to: new Date(end).toISOString(),
+    total_credits: inRange.reduce((s, r) => s + r.credits, 0),
+    total_calls: inRange.length,
     by_feature: [...feats].map(([feature, v]) => ({ feature, ...v })).sort((a, b) => b.credits - a.credits),
-    by_day: [...days].map(([date, v]) => ({ date, ...v })),
+    by_day: [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ date, ...v })),
     by_member: [...members].map(([id, v]) => ({ user: id ? ref(id) : null, ...v })).sort((a, b) => b.credits - a.credits),
   };
 }

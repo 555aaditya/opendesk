@@ -11,7 +11,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { ListSkeleton, MonoChip } from "@/components/settings2/bits";
 import { useListMutation } from "@/components/settings2/optimistic";
-import { WebhookDialog, allEvents } from "@/components/settings2/webhooks";
+import { WebhookDialog, isAllEvents } from "@/components/settings2/webhooks";
 import { api } from "@/lib/api/endpoints";
 import type { Webhook, WebhookDelivery } from "@/lib/api/types";
 import { fullDate, relShort } from "@/lib/format";
@@ -76,7 +76,7 @@ export default function WebhookDetail() {
 
   const rows = (deliveries.data ?? []).filter((d) => filter === "all" || d.status === "failed");
   const failed = (deliveries.data ?? []).filter((d) => d.status === "failed").length;
-  const everything = allEvents.every((e) => hook.events.includes(e));
+  const everything = isAllEvents(hook.events);
 
   return (
     <SettingsPage

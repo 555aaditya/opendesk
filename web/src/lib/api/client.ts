@@ -268,8 +268,13 @@ async function raw(method: string, path: string, opts: RequestOptions = {}): Pro
 
   let res = await send();
   if (res.status === 401 && useAuth && !NO_REFRESH.has(path)) {
+    // Only a missing or expired session is worth a refresh; a wrong password or
+    // code (401 invalid_credentials / invalid_code) is the answer itself.
+    const err = await parseError(res);
+    if (err.code !== "unauthenticated" && err.code !== "unauthorized") throw announce(err);
     const refreshed = await refreshSession();
-    if (refreshed) res = await send();
+    if (!refreshed) throw announce(err);
+    res = await send();
   }
   if (!res.ok) throw announce(await parseError(res));
   return res;

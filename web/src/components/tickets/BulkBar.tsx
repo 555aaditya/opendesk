@@ -79,7 +79,7 @@ export function BulkBar({ ids, onClear, spamView }: { ids: string[]; onClear: ()
             items={[...(tags ?? []).map((t) => ({ value: t.name, label: t.name })), ...tagSel.filter((x) => !tags?.some((t) => t.name === x)).map((x) => ({ value: x, label: x }))]}
             onOpenChange={(o) => {
               if (!o && tagSel.length) {
-                run({ ids, patch: { tags: tagSel } }, `Tagged ${plural(n, "ticket")}`);
+                run({ ids, patch: { add_tags: tagSel } }, `Tagged ${plural(n, "ticket")}`);
                 setTagSel([]);
               }
             }}

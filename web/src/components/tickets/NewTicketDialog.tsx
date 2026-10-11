@@ -65,8 +65,9 @@ export default function NewTicketDialog() {
         subject: subject.trim(),
         contact_id: to?.contact?.id,
         contact: !to?.contact && to?.email ? { email: to.email, name: "" } : undefined,
-        channel: "email",
-        mailbox_id: kind === "reply" ? mailbox : undefined,
+        // An email ticket needs its mailbox (later replies go out through it), also when it starts as a note.
+        channel: mailbox ? "email" : "api",
+        mailbox_id: mailbox || undefined,
         body_html: body,
         kind,
         priority,

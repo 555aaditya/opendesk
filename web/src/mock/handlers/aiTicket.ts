@@ -88,7 +88,7 @@ function detectLanguage(text: string): string {
 // ─── Ticket context ─────────────────────────────────────────────────────────
 
 function guard(ctx: Ctx) {
-  if (!ctx.ws.ai.enabled) throw new HttpError(404, "ai_disabled", "AI is turned off for this workspace.");
+  if (!ctx.ws.ai.enabled) throw new HttpError(403, "ai_off", "AI is turned off for this workspace.");
 }
 
 function ticketOf(ctx: Ctx): Ticket {
@@ -448,6 +448,7 @@ function triage(ws: WsData, t: Ticket): Triage {
   const lang = typeof t.custom.language === "string" ? t.custom.language : detectLanguage(threadOf(ws, t).map((m) => htmlToText(m.body_html)).join(" "));
   return {
     tags: theme.tags,
+    suggested_tags: [],
     priority,
     sentiment,
     language: lang,
@@ -717,7 +718,7 @@ function seedAiTicketData() {
       );
       bot.author = { type: "system", user: null, contact: null };
       bot.from_name = "Fieldnote assistant";
-      (bot as Message & { custom?: Record<string, unknown> }).custom = { ai: true, sources: article ? [article.id] : [] };
+      bot.ai = true;
       Object.assign(chat, keep, { message_count: keep.message_count + 1 });
     }
   }

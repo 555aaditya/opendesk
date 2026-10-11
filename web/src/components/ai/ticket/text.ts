@@ -54,9 +54,9 @@ export function messageLanguage(m: Message, t: Pick<Ticket, "custom"> | null | u
   return str((m as Message & WithCustom).custom?.language) ?? ticketLanguage(t);
 }
 
-/** Bot answers in chat carry custom.ai = true (contracts/ai.md). */
+/** Bot answers in chat carry `ai: true` (contracts/ai.md). */
 export function isAiMessage(m: Message): boolean {
-  return (m as Message & WithCustom).custom?.ai === true;
+  return m.ai === true;
 }
 
 /** Merge a draft below existing content, or replace it. */

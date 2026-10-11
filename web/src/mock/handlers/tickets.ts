@@ -158,9 +158,14 @@ export function registerTickets() {
         ctx.ws.deletedTickets.add(t.id);
         publish(ctx.ws, "ticket.deleted", { ticket_id: t.id });
       } else if (p) {
-        // Bulk tag edits add to the existing set rather than replacing it.
-        const patchFor: TicketPatch = { ...p };
-        if (p.tags) patchFor.tags = [...new Set([...t.tags.map((x) => x.name), ...p.tags])];
+        // add_tags/remove_tags edit the existing set; tags replaces it (as the API does).
+        const { add_tags, remove_tags, ...rest } = p;
+        const patchFor: TicketPatch = { ...rest };
+        if (add_tags?.length || remove_tags?.length) {
+          const base = rest.tags ?? t.tags.map((x) => x.name);
+          const drop = new Set((remove_tags ?? []).map((x) => x.toLowerCase()));
+          patchFor.tags = [...new Set([...base, ...(add_tags ?? [])])].filter((x) => !drop.has(x.toLowerCase()));
+        }
         applyPatch(ctx.ws, t, patchFor, userRef(db.meId));
       }
     }

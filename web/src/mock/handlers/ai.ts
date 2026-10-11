@@ -13,10 +13,10 @@ export function aiOff(): boolean {
   return typeof location !== "undefined" && new URLSearchParams(location.search).get("mock_ai") === "off";
 }
 
-/** Throws 404 ai_disabled when the instance (or the workspace) has AI off. */
+/** Throws 404 ai_disabled when the instance has no AI, 403 ai_off when the workspace turned it off. */
 export function assertAi(ws: WsData) {
   if (aiOff()) throw new HttpError(404, "ai_disabled", "AI isn't set up on this instance.");
-  if (!ws.ai.enabled) throw new HttpError(404, "ai_disabled", "AI is turned off for this workspace.");
+  if (!ws.ai.enabled) throw new HttpError(403, "ai_off", "AI is turned off for this workspace.");
 }
 
 function role(ws: WsData) {
