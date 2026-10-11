@@ -235,6 +235,8 @@ export class Controller {
   }
 
   private async deliver(key: string, local: UiMessage) {
+    // A sent message ends the typing burst: the next keystroke signals again.
+    this.live?.typingDone();
     try {
       const uploaded: Attachment[] = [];
       for (const f of local.localFiles ?? []) uploaded.push(await this.api.upload(f));
@@ -252,7 +254,6 @@ export class Controller {
           };
         });
         if (!message) void this.openConversation(conversation.id);
-        else this.live?.typing(conversation.id);
       } else {
         const msg = await this.api.send(key, local.body_text, ids.length ? ids : undefined);
         set((s) => ({

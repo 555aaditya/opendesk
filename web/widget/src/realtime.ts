@@ -105,6 +105,10 @@ export class Live {
     this.channel.push("typing", { ticket_id: ticketId });
   }
 
+  typingDone() {
+    this.lastTyping = 0;
+  }
+
   stop() {
     this.channel?.leave();
     this.socket?.disconnect();
