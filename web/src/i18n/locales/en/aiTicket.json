@@ -41,16 +41,23 @@
     "fix_grammar": "Fix spelling and grammar",
     "simplify": "Simpler"
   },
+  "ollie": {
+    "idle": "Here to help with this ticket",
+    "waiting_one": "Has {{count}} suggestion for you",
+    "waiting_other": "Has {{count}} suggestions for you",
+    "applying": "Updating the ticket",
+    "show": "Show",
+    "hide": "Hide"
+  },
   "summary": {
-    "title": "Summary",
-    "empty": "Get the gist of this conversation in a few lines.",
     "generate": "Summarize",
-    "refresh": "Refresh summary",
+    "refresh": "Refresh",
+    "refreshHint": "Summarize again",
     "updated": "Updated {{when}}",
+    "mood": "How the customer feels",
     "failed": "Couldn't summarize this ticket",
     "working": "Reading the conversation",
-    "points_one": "{{count}} point",
-    "points_other": "{{count}} points"
+    "hint": "{{name}} reads the conversation and sums it up"
   },
   "sentiment": {
     "label": "Sentiment",
@@ -59,45 +66,46 @@
     "negative": "Negative",
     "frustrated": "Frustrated"
   },
-  "triage": {
-    "title": "Triage",
-    "suggest": "Suggest triage",
+  "suggest": {
+    "run": "Suggest changes",
     "working": "Looking at the ticket",
-    "priority": "Priority",
-    "tags": "Tags",
-    "sentiment": "Sentiment",
-    "language": "Language",
-    "category": "Category",
     "apply": "Apply",
-    "applied": "Applied",
+    "skip": "Skip",
     "applyAll": "Apply all",
-    "newTag": "New tag, created when you apply all",
-    "dismiss": "Dismiss",
-    "nothing": "Everything already matches the suggestion.",
-    "appliedToast": "Applied the triage suggestion",
-    "failed": "Couldn't triage this ticket",
-    "newTags": "New tags",
-    "changes": "Proposed changes",
-    "applySome_one": "Apply {{count}} change",
-    "applySome_other": "Apply {{count}} changes",
-    "confidenceHint": "How well the suggestion fits your existing tags and categories",
-    "confidence": {
-      "0": "No signal",
-      "1": "Low confidence",
-      "2": "Worth a check",
-      "3": "High confidence"
-    }
+    "skipAll": "Skip all",
+    "applyAria": "Apply {{what}}",
+    "skipAria": "Skip {{what}}",
+    "sure": "{{name}} is {{pct}}% sure",
+    "newTag": "A new label, created when you apply",
+    "done": "Done. The ticket is updated.",
+    "nothing": "Everything already matches what {{name}} would pick.",
+    "failed": "Couldn't suggest anything for this ticket",
+    "spam": "Mark as spam",
+    "fields": {
+      "priority": "Priority",
+      "severity": "Severity",
+      "team": "Team",
+      "labels": "Labels",
+      "newLabels": "New labels",
+      "spam": "Spam"
+    },
+    "hint": "{{name}} proposes a priority, severity, team and labels. Nothing changes until you apply."
   },
   "ask": {
-    "title": "Ask about this ticket",
-    "placeholder": "What has the customer already tried?",
+    "title": "Ask {{name}}",
+    "placeholder": "Ask {{name}} about this ticket",
     "send": "Ask",
     "thinking": "Thinking",
-    "sources": "Sources",
+    "writing": "Writing",
+    "answered": "Answered in {{time}}",
+    "sources": "From",
     "failed": "Couldn't answer that",
     "clear": "Clear",
-    "writing": "Writing the answer",
-    "answered": "Answered in {{time}}"
+    "starters": {
+      "want": "What does the customer want?",
+      "tried": "What has been tried so far?",
+      "next": "What should I do next?"
+    }
   },
   "message": {
     "translate": "Translate",
@@ -109,5 +117,11 @@
     "failed": "Couldn't translate this message",
     "aiLabel": "AI",
     "aiHint": "Answered by the AI assistant from your knowledge base"
+  },
+  "tools": {
+    "title": "In your tools",
+    "more_one": "{{count}} more",
+    "more_other": "{{count}} more",
+    "fewer": "Fewer"
   }
 }

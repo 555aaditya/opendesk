@@ -24,6 +24,7 @@ describe("mock backend", () => {
       "/v1/api-keys", "/v1/webhooks", "/v1/audit-logs", "/v1/notifications", "/v1/kb/collections", "/v1/kb/articles",
       "/v1/saved-replies", "/v1/me/sessions", "/v1/widget/settings", "/v1/workspace", "/v1/search?q=sso",
       "/v1/reports/overview?from=2026-09-12&to=2026-10-11", "/v1/public/help/fieldnote", "/v1/public/csat/demo", "/v1/auth/config",
+      "/v1/integrations", "/v1/integrations/catalog",
     ]) {
       expect((await call("GET", path)).status, path).toBe(200);
     }
@@ -39,6 +40,27 @@ describe("mock backend", () => {
     expect(seqs[0]).toBe(before + 1);
     expect(seqs).toEqual(seqs.map((_: number, i: number) => before + 1 + i));
     expect(ev.data.some((e: { type: string }) => e.type === "ticket.updated")).toBe(true);
+  });
+
+  it("connects integrations and links tickets", async () => {
+    const created = await call("POST", "/v1/integrations", { provider: "github", token: "github_pat_example" });
+    expect(created.status).toBe(201);
+    expect(created.body.integration.status).toBe("connected");
+    expect(created.body.integration.tools.some((x: { read_only: boolean }) => !x.read_only)).toBe(true);
+    const oauth = await call("POST", "/v1/integrations", { provider: "sentry" });
+    expect(oauth.body.authorize_url).toContain("/settings/integrations?connected=");
+    expect((await call("POST", "/v1/integrations", { provider: "custom", url: "https://10.0.0.4/mcp" })).status).toBe(422);
+
+    const t = (await call("GET", "/v1/tickets/%231072")).body;
+    const before = db.workspaces[0].seq;
+    const link = await call("POST", `/v1/tickets/${t.id}/links`, { url: "https://github.com/fieldnote/app/issues/7", title: "SSO loop" });
+    expect(link.status).toBe(201);
+    expect((await call("POST", `/v1/tickets/${t.id}/links`, { url: "javascript:alert(1)" })).status).toBe(422);
+    const ev = (await call("GET", `/v1/events?since=${before}`)).body.data.map((e: { type: string }) => e.type);
+    expect(ev).toContain("ticket_link.created");
+    expect(ev).toContain("activity.created");
+    expect((await call("DELETE", `/v1/tickets/${t.id}/links/${link.body.id}`)).status).toBe(204);
+    expect((await call("DELETE", `/v1/integrations/${created.body.integration.id}`)).status).toBe(204);
   });
 
   it("sends presence_state when a ticket topic is joined", async () => {

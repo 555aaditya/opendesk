@@ -447,6 +447,17 @@ const sBilling = createRoute({
   staticData: { title: "Plan and billing" },
 });
 const sAi = settingsPage("/ai", "AI", () => import("./pages/settings/AiSettings"), (qc) => qc.ensureQueryData(q.aiConfig()));
+const sIntegrations = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/integrations",
+  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string } => ({ connected: str(s.connected), error: str(s.error) }),
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(q.integrationCatalog());
+    return context.queryClient.ensureQueryData(q.integrations());
+  },
+  component: page(() => import("./pages/settings/Integrations")),
+  staticData: { title: "Integrations" },
+});
 
 const routeTree = rootRoute.addChildren([
   helpRoute.addChildren([helpHomeRoute, helpCollectionRoute, helpArticleRoute, helpSearchRoute]),
@@ -498,6 +509,7 @@ const routeTree = rootRoute.addChildren([
       sAudit,
       sBilling,
       sAi,
+      sIntegrations,
     ]),
   ]),
 ]);

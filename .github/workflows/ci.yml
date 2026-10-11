@@ -467,7 +467,10 @@ jobs:
   neon-branch:
     name: Neon branch and migrations
     needs: [changes, go]
+    # Runs when the repository has a Neon project (NEON_PROJECT_ID variable and
+    # NEON_API_KEY secret), so forks and self-hosters' copies skip it.
     if: >-
+      vars.NEON_PROJECT_ID != '' &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       needs.changes.outputs.migrations == 'true'

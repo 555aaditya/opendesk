@@ -14,13 +14,13 @@ import { TagChip } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ContactCard } from "@/components/contacts/ContactCard";
-import { TicketAiPanel } from "@/components/ai/ticket/AiPanel";
+import { OlliePanel } from "@/components/ai/ticket/OlliePanel";
 import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, slaState, StatusIcon, statusOrder } from "../bits";
-import { OllieSuggestions } from "./OllieSuggestions";
 import { aiDecisions } from "@/lib/decisions";
 import { LabelPicker } from "./LabelPicker";
 import { SetByOllie, useAISet, useOllieNote } from "../ollie";
 import { FieldsSection } from "./FieldsSection";
+import { TicketLinks } from "./TicketLinks";
 import { useDisplay, type FieldPatch, type TicketWithFields } from "../fields";
 import { useUpdateTicket } from "../useTicketActions";
 
@@ -235,7 +235,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
             {t.tags.map((tag) => (
               <span key={tag.id} className="relative animate-pop-in motion-reduce:animate-none">
                 <TagChip name={tag.name} color={tag.color} onRemove={canEdit ? () => patch({ tags: tagNames.filter((n) => n !== tag.name) }) : undefined} />
-                {aiSet.tags.has(tag.name) && <SetByOllie note={note(t, decided?.type_label?.value === tag.id ? "type_label" : "label")} className="absolute -right-1 -top-1 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+                {aiSet.tags.has(tag.name) && <SetByOllie note={note(t, decided?.type_label?.value === tag.id ? "type_label" : "label")} size={10} className="absolute -right-1 -top-1 ring-1 ring-surface" />}
               </span>
             ))}
             {canEdit && (
@@ -255,16 +255,19 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
             )}
           </div>
         </div>
-        {canEdit && <OllieSuggestions t={t} />}
       </section>
 
       <FieldsSection
+        key={t.id}
+        collapseEmpty
         values={(t as TicketWithFields).fields ?? {}}
         disabled={!canEdit}
         onChange={(key, v) => update.mutate({ id: t.id, patch: { fields: { [key]: v } } as FieldPatch })}
       />
 
-      <TicketAiPanel t={t} />
+      <OlliePanel t={t} />
+
+      <TicketLinks ticketId={t.id} canEdit={canEdit} />
 
       <SlaTimers t={t} />
 

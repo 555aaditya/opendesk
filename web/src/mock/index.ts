@@ -11,6 +11,7 @@ import { registerAiTicket } from "./handlers/aiTicket";
 import { registerAssistant } from "./handlers/assistant";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
+import { registerIntegrations } from "./handlers/integrations";
 import { registerLabels } from "./handlers/labels";
 import { registerResources } from "./handlers/resources";
 import { registerTickets } from "./handlers/tickets";
@@ -51,6 +52,7 @@ export function installMock(): void {
   registerAi();
   registerAiTicket();
   registerAssistant();
+  registerIntegrations();
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);

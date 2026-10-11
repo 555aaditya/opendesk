@@ -163,6 +163,15 @@ AI features are on when a provider is configured. See [AI features](/guides/ai/)
 
 Semantic search needs the Postgres `vector` extension (pgvector). Without it, opendesk uses full-text search.
 
+## Integrations
+
+Connected products for Ollie (MCP servers). Most sign in without any setup; see [Integrations](/guides/integrations/).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `MCP_<KEY>_CLIENT_ID` | | An OAuth client registered in advance with a product that does not accept self-registration, for example `MCP_SLACK_CLIENT_ID`. Redirect URL: `<API_URL>/v1/integrations/oauth/callback`. |
+| `MCP_<KEY>_CLIENT_SECRET` | | That client's secret, when the product issued one. |
+
 ## Billing (Cloud only)
 
 Leave these empty on a self-hosted instance. Without `STRIPE_SECRET_KEY`, every workspace is on the `self_hosted` plan with no limits and unlimited AI.

@@ -1,13 +1,16 @@
 // Custom ticket fields in the sidebar, edited in place. Each type gets the
 // lightest control that fits: text inline, options in a picker, a checkbox for
 // yes/no. Changes save on Enter or blur and patch the ticket optimistically.
+// With `collapseEmpty`, empty optional fields wait behind one quiet link.
 
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { q } from "@/lib/queries";
 import { cn } from "@/lib/cn";
+import { ease } from "@/lib/motion";
 import { isTone, tone, toneFor } from "@/lib/tones";
 import { Picker } from "@/components/ui/picker";
 import { Avatar } from "@/components/ui/avatar";
@@ -199,6 +202,7 @@ export function FieldsSection({
   fields: fieldsOverride,
   className,
   labelWidth,
+  collapseEmpty,
 }: {
   values: Record<string, FieldValue>;
   onChange: (key: string, v: FieldValue | null) => void;
@@ -208,34 +212,47 @@ export function FieldsSection({
   className?: string;
   /** Width class for the name column; 76px by default. */
   labelWidth?: string;
+  /** Fold empty optional fields behind a "show" link. Required ones always show. */
+  collapseEmpty?: boolean;
 }) {
   const { t } = useTranslation("inbox");
+  const reduce = useReducedMotion();
   const { data: ticketFields } = useTicketFields();
   const fields = fieldsOverride ?? ticketFields;
   const focus = useFieldFocus();
   const section = useRef<HTMLElement>(null);
+  const [showAll, setShowAll] = useState(false);
+  // Fields shown when folded: filled, required, or asked for.
+  const [kept, setKept] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (focus.key) section.current?.querySelector(`[data-field="${focus.key}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [focus.key, focus.at]);
   if (!fields?.length) return null;
+  const visible = (f: CustomField) => !collapseEmpty || showAll || f.required_on_solve || hasValue(f, values[f.key]) || kept.has(f.key) || focus.key === f.key;
+  const hidden = fields.filter((f) => !visible(f)).length;
   return (
     <section ref={section} className={className ?? "border-b border-line-soft px-2.5 py-2.5"} aria-label={t("fields.title")}>
       <h3 className="label-caps px-1.5 pb-1.5 pt-1">{t("fields.title")}</h3>
-      {fields.map((f) => {
+      <AnimatePresence initial={false}>
+      {fields.filter(visible).map((f) => {
         const v = values[f.key];
         const missing = f.required_on_solve && !hasValue(f, v);
         // A focus request is for the ticket on screen now; a stale one (another
         // ticket, long ago) must not pop a picker open.
         const flagged = focus.key === f.key && Date.now() - focus.at < 3000;
         return (
-          <div
+          <motion.div
             key={f.id}
             data-field={f.key}
+            initial={reduce ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: ease.out }}
             className={cn("flex items-start gap-1 rounded-md transition-shadow duration-300", flagged && missing && "shadow-[0_0_0_2px_var(--tone-amber-solid)]")}
           >
             <Tooltip content={f.description || undefined}>
-              <span className={cn("flex min-h-7 shrink-0 items-center gap-1 pl-1.5 text-[12px] text-fg-3", labelWidth ?? "w-[76px]")}>
-                <span className="truncate">{f.name}</span>
+              <span className={cn("flex min-h-7 shrink-0 items-center gap-1 py-1.5 pl-1.5 text-[12px] leading-4 text-fg-3", labelWidth ?? "w-[76px]")}>
+                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{f.name}</span>
                 {f.required_on_solve && (
                   <span aria-label={t("fields.required")} title={t("fields.required")} className={cn("size-1 shrink-0 rounded-full", missing ? tone.amber.solid : "bg-fg-4")} />
                 )}
@@ -245,13 +262,25 @@ export function FieldsSection({
               <FieldControl key={flagged ? focus.at : "f"} field={f} value={v} disabled={disabled} autoOpen={flagged}
                 onSave={(nv) => {
                   if (focus.key === f.key) useFieldFocus.setState({ key: null });
+                  // A field someone just touched stays put, even if they cleared it.
+                  setKept((k) => new Set(k).add(f.key));
                   onChange(f.key, nv);
                 }}
               />
             </div>
-          </div>
+          </motion.div>
         );
       })}
+      </AnimatePresence>
+      {collapseEmpty && (hidden > 0 || showAll) && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="ml-1.5 mt-0.5 h-6 rounded-md px-1 text-[11.5px] text-fg-4 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+        >
+          {showAll ? t("fields.hideEmpty") : t("fields.showEmpty", { count: hidden })}
+        </button>
+      )}
     </section>
   );
 }

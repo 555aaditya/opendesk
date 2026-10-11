@@ -17,6 +17,7 @@ import {
   ListChecks,
   MessageCircle,
   MessageSquareText,
+  Plug,
   Shield,
   SlidersHorizontal,
   Shuffle,
@@ -52,7 +53,8 @@ type NavPath =
   | "/settings/webhooks"
   | "/settings/audit-log"
   | "/settings/billing"
-  | "/settings/ai";
+  | "/settings/ai"
+  | "/settings/integrations";
 
 const groups: { title: string; items: { to: NavPath; label: string; icon: ReactNode }[] }[] = [
   {
@@ -71,6 +73,7 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
       { to: "/settings/mailboxes", label: "Mailboxes", icon: <Inbox /> },
       { to: "/settings/billing", label: "Plan and billing", icon: <CreditCard /> },
       { to: "/settings/ai", label: "AI", icon: <Bot /> },
+      { to: "/settings/integrations", label: "Integrations", icon: <Plug /> },
     ],
   },
   {
