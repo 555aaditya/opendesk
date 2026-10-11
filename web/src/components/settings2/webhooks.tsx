@@ -47,7 +47,9 @@ export function eventSummary(events: string[]) {
 function validUrl(v: string): string | null {
   try {
     const u = new URL(v.trim());
-    if (u.protocol !== "https:") return "Use an https:// URL.";
+    // http is accepted only for a local receiver; the server allows it on development instances only.
+    const local = u.hostname === "localhost" || u.hostname === "[::1]" || /^127\.\d+\.\d+\.\d+$/.test(u.hostname);
+    if (u.protocol !== "https:" && !(u.protocol === "http:" && local)) return "Use an https:// URL.";
     return null;
   } catch {
     return "Enter a full URL, like https://example.com/hooks/opendesk.";
