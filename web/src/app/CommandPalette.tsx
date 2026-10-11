@@ -34,6 +34,9 @@ import { useTheme } from "@/lib/theme";
 import { shell, usePageCommands, useShell } from "./shellStore";
 import { useTranslation } from "react-i18next";
 import { AiIcon } from "@/components/ai/bits";
+import { WorkingBar } from "@/components/ai/ui/Thinking";
+import { cn } from "@/lib/cn";
+import { AI_TONE, tone } from "@/lib/tones";
 import { useDebounced } from "@/components/contacts/hooks";
 import { useAI } from "@/lib/ai";
 import type { SearchResults } from "@/lib/api/types";
@@ -96,15 +99,15 @@ export function CommandPalette() {
         >
           <D.Title className="sr-only">Command menu</D.Title>
           <Command loop shouldFilter={!aiMode} className="flex flex-col">
-            <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
+            <div className="relative flex h-12 items-center gap-2.5 border-b border-line px-4">
               {aiMode ? (
                 <button
                   type="button"
                   onClick={() => setAiMode(false)}
                   aria-label={t("palette.exit")}
-                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-sm border border-line bg-sunken px-1.5 text-[12px] font-medium text-fg-2 hover:text-fg"
+                  className={cn("inline-flex h-6 shrink-0 items-center gap-1.5 rounded-sm px-1.5 text-[12px] font-medium transition-opacity hover:opacity-80 animate-pop-in", tone[AI_TONE].chip)}
                 >
-                  <AiIcon className="size-3" />
+                  <AiIcon className="size-3 text-current" />
                   {t("palette.mode")}
                 </button>
               ) : (
@@ -124,9 +127,10 @@ export function CommandPalette() {
                   }
                 }}
                 placeholder={aiMode ? t("palette.placeholder") : "Search tickets, contacts, articles, or type a command"}
-                className="h-full flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-4"
+                className="h-full flex-1 bg-transparent text-[14px] text-fg outline-none placeholder:text-fg-4 focus-visible:shadow-none"
               />
-              {(aiMode ? aiSearch.isFetching : search.isFetching) && <Spinner className="size-3.5 text-fg-4" />}
+              {!aiMode && search.isFetching && <Spinner className="size-3.5 text-fg-4" />}
+              {aiMode && aiSearch.isFetching && <WorkingBar className="top-auto -bottom-px" />}
               <Kbd>esc</Kbd>
             </div>
             <Command.List className="max-h-[min(420px,60vh)] overflow-y-auto p-1.5">
@@ -136,6 +140,7 @@ export function CommandPalette() {
                   pending={query.trim() !== aiQuery || aiSearch.isFetching}
                   data={aiSearch.data}
                   error={!!aiSearch.error}
+                  onExample={setQuery}
                   onTicket={(id) => go(() => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "open", ticketId: id } }))}
                   onArticle={(id) => go(() => void navigate({ to: "/kb/articles/$articleId", params: { articleId: id }, search: { collection: undefined } }))}
                 />
@@ -356,8 +361,10 @@ function AiResults({
   error,
   onTicket,
   onArticle,
+  onExample,
 }: {
   query: string;
+  onExample: (q: string) => void;
   pending: boolean;
   data: SearchResults | undefined;
   error: boolean;
@@ -367,11 +374,20 @@ function AiResults({
   const { t } = useTranslation("ai");
   if (query.length < 2)
     return (
-      <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-        <span className="flex size-8 items-center justify-center rounded-md border border-line text-fg-3">
-          <AiIcon className="size-4" />
-        </span>
-        <p className="text-[13px] text-fg-3">{t("palette.start")}</p>
+      <div className="animate-fade-in">
+        <div className="flex items-center gap-2.5 px-2.5 pb-2 pt-2.5">
+          <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-sm", tone[AI_TONE].soft)}>
+            <AiIcon className="size-3.5" />
+          </span>
+          <p className="text-[12.5px] text-fg-3">{t("palette.start")}</p>
+        </div>
+        <Command.Group heading={t("palette.try")} className={groupCls}>
+          {(["palette.example_1", "palette.example_2", "palette.example_3"] as const).map((k) => (
+            <Item key={k} value={`ai example ${k}`} icon={<ArrowRight />} hint={<Kbd>enter</Kbd>} onSelect={() => onExample(t(k))}>
+              <span className="truncate text-fg-2">{t(k)}</span>
+            </Item>
+          ))}
+        </Command.Group>
       </div>
     );
   if (!data && pending)

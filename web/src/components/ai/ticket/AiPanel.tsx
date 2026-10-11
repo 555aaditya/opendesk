@@ -1,8 +1,10 @@
-// AI in the ticket side panel: a summary card, triage suggestions with apply,
-// and a copilot box to ask questions about the conversation.
+// AI in the ticket side panel: a summary insight card with its key points, a
+// triage recommendation with a confidence meter and per-change approval, and a
+// copilot box to ask questions about the conversation. Card patterns adapted
+// from Beautiful UI (MIT, see web/THIRD_PARTY_NOTICES.md and ../ui/).
 
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { ArrowUp, BookOpen, Check, RotateCw, X } from "lucide-react";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { ArrowRight, Check, RotateCw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AIAnswer, AISummary, Sentiment, Ticket, Triage } from "@/lib/api/types";
@@ -17,9 +19,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { TagChip } from "@/components/ui/badge";
+import { SentimentIcon } from "@/components/indicators";
 import { PriorityIcon, priorityLabel } from "@/components/tickets/bits";
 import { useUpdateTicket } from "@/components/tickets/useTicketActions";
 import { AiIcon, AiTooltip, useCreditLabel } from "../bits";
+import { AiCard, AiCardFooter, AiCardHeader, ContextList } from "../ui/Cards";
+import { ApprovalRows, Confidence, DonePill, type ApprovalRow, type Signal } from "../ui/Recommendation";
+import { SourceChips, StreamingHtml } from "../ui/StreamingText";
+import { ShimmerText, Thinking, formatElapsed, useElapsed } from "../ui/Thinking";
+import { PromptBar } from "../ui/PromptBar";
 import { creditsSpent, isAbort, reportAiError } from "./errors";
 import { languageName, streamTextToHtml } from "./text";
 
@@ -37,32 +45,17 @@ function patchCachedTicket(qc: QueryClient, t: Ticket, me: string) {
   qc.setQueriesData<Ticket>({ queryKey: ["tickets", "detail"] }, (old) => (old && old.id === t.id ? t : old));
 }
 
-const sentimentDot: Record<Sentiment, string> = {
-  positive: "bg-fg-3",
-  neutral: "bg-line-strong",
-  negative: "bg-fg-2",
-  frustrated: "bg-fg",
-};
-
 function SentimentLabel({ s }: { s: Sentiment }) {
   const { t } = useTranslation("aiTicket");
   return (
-    <span className="inline-flex items-center gap-1.5 text-fg-3">
-      <span className={cn("size-1.5 rounded-full", sentimentDot[s])} aria-hidden />
+    <span className="inline-flex items-center gap-1.5 text-fg-2">
+      <SentimentIcon sentiment={s} className="size-3.5" />
       {t(`sentiment.${s}`)}
     </span>
   );
 }
 
-function SectionHead({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="mb-2 flex h-5 items-center gap-1.5">
-      <AiIcon className="size-3 text-fg-4" />
-      <h3 className="label-caps flex-1">{title}</h3>
-      {children}
-    </div>
-  );
-}
+const iconBtn = "flex size-6 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-hover hover:text-fg disabled:opacity-40";
 
 function SummaryCard({ t: ticket }: { t: Ticket }) {
   const { t } = useTranslation("aiTicket");
@@ -86,65 +79,66 @@ function SummaryCard({ t: ticket }: { t: Ticket }) {
     }
   };
 
-  return (
-    <section className="border-b border-line-soft px-4 py-3.5" aria-busy={busy}>
-      <SectionHead title={t("summary.title")}>
-        {stored && (
-          <AiTooltip feature="summarize" label={t("summary.refresh")}>
-            <button
-              type="button"
-              aria-label={t("summary.refresh")}
-              onClick={() => void run()}
-              disabled={busy}
-              className="flex size-5 items-center justify-center rounded text-fg-4 hover:bg-hover hover:text-fg disabled:opacity-40"
-            >
-              <RotateCw className={cn("size-3", busy && "animate-spin")} />
-            </button>
-          </AiTooltip>
-        )}
-      </SectionHead>
-      {busy && !stored ? (
-        <div className="flex flex-col gap-1.5" aria-label={t("summary.working")}>
-          <Skeleton className="h-2.5 w-full" />
-          <Skeleton className="h-2.5 w-[86%]" />
-          <Skeleton className="h-2.5 w-[64%]" />
-        </div>
-      ) : stored ? (
-        <div className={cn("transition-opacity", busy && "opacity-50")} data-ph-mask>
-          <p className="text-[12.5px] leading-[19px] text-fg-2">{stored.summary}</p>
-          {stored.key_points.length > 0 && (
-            <ul className="mt-2 flex flex-col gap-1">
-              {stored.key_points.map((k, i) => (
-                <li key={i} className="flex gap-2 text-[12px] leading-[18px] text-fg-2">
-                  <span className="mt-[7px] size-1 shrink-0 rounded-full bg-fg-4" aria-hidden />
-                  <span>{k}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="mt-2.5 flex items-center gap-2 text-[11px] text-fg-4">
-            <SentimentLabel s={stored.sentiment} />
-            <span aria-hidden>·</span>
-            <Tooltip content={fullDate(stored.updated_at)}>
-              <span>{t("summary.updated", { when: relLong(stored.updated_at) })}</span>
-            </Tooltip>
+  if (!stored)
+    return (
+      <AiCard label={t("summary.title")} busy={busy}>
+        <AiCardHeader title={t("summary.title")} />
+        {busy ? (
+          <div className="flex flex-col gap-2 px-3 pb-3" aria-label={t("summary.working")}>
+            <Thinking working label={t("summary.working")} />
+            <Skeleton className="h-2.5 w-full" />
+            <Skeleton className="h-2.5 w-[86%]" />
+            <Skeleton className="h-2.5 w-[64%]" />
           </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3">
-          <p className="min-w-0 flex-1 text-[12px] leading-[17px] text-fg-3">{t("summary.empty")}</p>
-          <AiTooltip feature="summarize" label={t("summary.generate")}>
-            <Button size="xs" variant="secondary" loading={busy} onClick={() => void run()} aria-label={`${t("summary.generate")}${credits ? `, ${credits}` : ""}`}>
-              {t("summary.generate")}
-            </Button>
-          </AiTooltip>
-        </div>
-      )}
-    </section>
+        ) : (
+          <div className="flex items-center gap-3 px-3 pb-3">
+            <p className="min-w-0 flex-1 text-[12px] leading-[17px] text-fg-3">{t("summary.empty")}</p>
+            <AiTooltip feature="summarize" label={t("summary.generate")}>
+              <Button size="xs" variant="secondary" onClick={() => void run()} aria-label={`${t("summary.generate")}${credits ? `, ${credits}` : ""}`}>
+                {t("summary.generate")}
+              </Button>
+            </AiTooltip>
+          </div>
+        )}
+      </AiCard>
+    );
+
+  return (
+    <AiCard label={t("summary.title")} busy={busy}>
+      <AiCardHeader title={t("summary.title")} count={stored.key_points.length ? t("summary.points", { count: stored.key_points.length }) : undefined}>
+        <AiTooltip feature="summarize" label={t("summary.refresh")}>
+          <button type="button" aria-label={t("summary.refresh")} onClick={() => void run()} disabled={busy} className={iconBtn}>
+            <RotateCw className={cn("size-3", busy && "animate-spin")} />
+          </button>
+        </AiTooltip>
+      </AiCardHeader>
+      <div className={cn("px-3 pb-2 transition-opacity duration-200", busy && "opacity-50")} data-ph-mask>
+        <p className="text-[12.5px] leading-[19px] text-fg">{stored.summary}</p>
+        {stored.key_points.length > 0 && <ContextList className="mt-2" items={stored.key_points} />}
+      </div>
+      <AiCardFooter className="min-h-8 text-[11px] text-fg-4">
+        <SentimentLabel s={stored.sentiment} />
+        <span aria-hidden>·</span>
+        <Tooltip content={fullDate(stored.updated_at)}>
+          <span className="truncate">{t("summary.updated", { when: relLong(stored.updated_at) })}</span>
+        </Tooltip>
+      </AiCardFooter>
+    </AiCard>
   );
 }
 
-type Row = { key: "priority" | "tags"; pending: boolean };
+type ChangeKey = "priority" | "tags" | "new_tags";
+
+/** How sure the suggestion is: the server's score when it sends one, else how well it fits the workspace. */
+function triageSignal(r: Triage): Signal {
+  const c = (r as Triage & { confidence?: unknown }).confidence;
+  if (typeof c === "number") return c >= 0.8 ? 3 : c >= 0.5 ? 2 : 1;
+  let s = 3;
+  if (!r.tags.length) s--;
+  if (r.suggested_tags?.length) s--;
+  if (!r.category) s--;
+  return Math.max(1, s) as Signal;
+}
 
 function TriageCard({ t: ticket }: { t: Ticket }) {
   const { t } = useTranslation("aiTicket");
@@ -152,16 +146,27 @@ function TriageCard({ t: ticket }: { t: Ticket }) {
   const me = useSession((s) => s.user?.id ?? "");
   const update = useUpdateTicket();
   const [busy, setBusy] = useState(false);
-  const [applying, setApplying] = useState(false);
   const [result, setResult] = useState<Triage | null>(null);
+  const [off, setOff] = useState<Set<ChangeKey>>(new Set());
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // A new ticket gets a fresh suggestion.
-  useEffect(() => setResult(null), [ticket.id]);
+  useEffect(() => {
+    setResult(null);
+    setOff(new Set());
+  }, [ticket.id]);
+  useEffect(
+    () => () => {
+      if (clearTimer.current) clearTimeout(clearTimer.current);
+    },
+    [],
+  );
 
   const suggest = async () => {
     setBusy(true);
     try {
       setResult(await api.ai.triage(ticket.id, false));
+      setOff(new Set());
       creditsSpent(qc);
     } catch (e) {
       reportAiError(e, t("triage.failed"));
@@ -170,144 +175,187 @@ function TriageCard({ t: ticket }: { t: Ticket }) {
     }
   };
 
-  const current = new Set(ticket.tags.map((x) => x.name.toLowerCase()));
-  const newTags = result ? result.tags.filter((x) => !current.has(x.toLowerCase())) : [];
-  const rows: Row[] = result
-    ? [
-        { key: "priority", pending: result.priority !== ticket.priority },
-        { key: "tags", pending: newTags.length > 0 || (result.suggested_tags?.length ?? 0) > 0 },
-      ]
-    : [];
-  const anyPending = rows.some((r) => r.pending);
-
-  const applyRow = (key: Row["key"]) => {
-    if (!result) return;
-    if (key === "priority") update.mutate({ id: ticket.id, patch: { priority: result.priority } });
-    else update.mutate({ id: ticket.id, patch: { tags: [...ticket.tags.map((x) => x.name), ...newTags] } });
+  const settle = (r: Triage) => {
+    setResult({ ...r, applied: true });
+    clearTimer.current = setTimeout(() => setResult(null), 1600);
   };
 
-  const applyAll = async () => {
-    setApplying(true);
-    try {
+  const applyAll = useMutation({
+    mutationFn: async () => {
       const res = await api.ai.triage(ticket.id, true);
       creditsSpent(qc);
       const fresh = await api.tickets.get(ticket.id);
       patchCachedTicket(qc, fresh, me);
-      setResult({ ...res, applied: true });
-      setTimeout(() => setResult(null), 1600);
-    } catch (e) {
-      reportAiError(e, t("triage.failed"));
-    } finally {
-      setApplying(false);
-    }
-  };
+      return res;
+    },
+    onSuccess: settle,
+    onError: (e) => reportAiError(e, t("triage.failed")),
+  });
 
   if (!result)
     return (
-      <section className="border-b border-line-soft px-4 py-3">
-        <AiTooltip feature="triage" label={t("triage.suggest")}>
-          <button
-            type="button"
-            onClick={() => void suggest()}
-            disabled={busy}
-            className="group flex h-7 w-full items-center gap-2 rounded-md px-2 -mx-2 text-[12.5px] text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-60"
-          >
-            <AiIcon className={cn("size-3 text-fg-4 group-hover:text-fg-3", busy && "animate-pulse-soft")} />
-            <span className="flex-1 text-left">{busy ? t("triage.working") : t("triage.suggest")}</span>
-          </button>
-        </AiTooltip>
-      </section>
+      <AiTooltip feature="triage" label={t("triage.suggest")}>
+        <button
+          type="button"
+          onClick={() => void suggest()}
+          disabled={busy}
+          aria-busy={busy || undefined}
+          className="group flex h-9 w-full items-center gap-2 rounded-lg border border-dashed border-line-strong px-3 text-[12.5px] text-fg-2 transition-colors hover:border-solid hover:border-line hover:bg-hover hover:text-fg disabled:cursor-default disabled:border-solid disabled:border-line disabled:bg-surface"
+        >
+          <AiIcon className={cn("size-3.5", busy && "animate-pulse-soft")} />
+          <span className="flex-1 text-left">{busy ? <ShimmerText>{t("triage.working")}</ShimmerText> : t("triage.suggest")}</span>
+          {!busy && <ArrowRight className="size-3.5 text-fg-4 opacity-0 transition-opacity group-hover:opacity-100" />}
+        </button>
+      </AiTooltip>
     );
 
+  const current = new Set(ticket.tags.map((x) => x.name.toLowerCase()));
+  const addTags = result.tags.filter((x) => !current.has(x.toLowerCase()));
+  const createTags = (result.suggested_tags ?? []).filter((x) => !current.has(x.toLowerCase()));
+  const pending: ChangeKey[] = [
+    ...(result.priority !== ticket.priority ? (["priority"] as const) : []),
+    ...(addTags.length ? (["tags"] as const) : []),
+    ...(createTags.length ? (["new_tags"] as const) : []),
+  ];
+  const chosen = pending.filter((k) => !off.has(k));
+  const all = chosen.length === pending.length;
+  const signal = triageSignal(result);
+
+  const rows: ApprovalRow[] = pending.map((key) => ({
+    key,
+    checked: !off.has(key),
+    disabled: applyAll.isPending,
+    label: t(`triage.${key === "new_tags" ? "newTags" : key}`),
+    value:
+      key === "priority" ? (
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-1 text-fg-3">
+            <PriorityIcon priority={ticket.priority} muted />
+            <span className="sr-only">{priorityLabel[ticket.priority]}</span>
+          </span>
+          <ArrowRight className="size-3 text-fg-4" aria-hidden />
+          <PriorityIcon priority={result.priority} />
+          {priorityLabel[result.priority]}
+        </span>
+      ) : key === "tags" ? (
+        addTags.map((x) => <TagChip key={x} name={x} color={ticket.tags.find((g) => g.name.toLowerCase() === x.toLowerCase())?.color} />)
+      ) : (
+        createTags.map((x) => (
+          <Tooltip key={x} content={t("triage.newTag")}>
+            <span className="inline-flex h-[18px] items-center rounded-sm border border-dashed border-line-strong px-1.5 text-[11px] text-fg-3">+ {x}</span>
+          </Tooltip>
+        ))
+      ),
+  }));
+
+  const applyChosen = () => {
+    if (all) return applyAll.mutate();
+    const patch: { priority?: Triage["priority"]; tags?: string[] } = {};
+    if (chosen.includes("priority")) patch.priority = result.priority;
+    const extra = [...(chosen.includes("tags") ? addTags : []), ...(chosen.includes("new_tags") ? createTags : [])];
+    if (extra.length) patch.tags = [...ticket.tags.map((x) => x.name), ...extra];
+    update.mutate({ id: ticket.id, patch }, { onSuccess: () => settle(result) });
+  };
+
+  const facts: [string, React.ReactNode][] = [
+    ...(pending.includes("priority")
+      ? []
+      : ([[t("triage.priority"), (
+          <span className="flex items-center gap-1.5">
+            <PriorityIcon priority={result.priority} />
+            {priorityLabel[result.priority]}
+            <Check className="size-3 text-fg-4" aria-label={t("triage.applied")} />
+          </span>
+        )]] as [string, React.ReactNode][])),
+    [t("triage.sentiment"), <SentimentLabel key="s" s={result.sentiment} />],
+    [t("triage.language"), languageName(result.language)],
+    ...(result.category ? ([[t("triage.category"), <span key="c" className="truncate">{result.category}</span>]] as [string, React.ReactNode][]) : []),
+  ];
+
   return (
-    <section className="border-b border-line-soft px-4 py-3.5 animate-fade-in" aria-label={t("triage.title")}>
-      <SectionHead title={t("triage.title")}>
+    <AiCard label={t("triage.title")}>
+      <AiCardHeader title={t("triage.title")}>
         <Tooltip content={t("triage.dismiss")}>
-          <button type="button" aria-label={t("triage.dismiss")} onClick={() => setResult(null)} className="flex size-5 items-center justify-center rounded text-fg-4 hover:bg-hover hover:text-fg">
+          <button type="button" aria-label={t("triage.dismiss")} onClick={() => setResult(null)} className={iconBtn}>
             <X className="size-3" />
           </button>
         </Tooltip>
-      </SectionHead>
-      <dl className="flex flex-col gap-1.5 text-[12px]">
-        <div className="flex min-h-6 items-center gap-2">
-          <dt className="w-[70px] shrink-0 text-fg-3">{t("triage.priority")}</dt>
-          <dd className="flex min-w-0 flex-1 items-center gap-1.5 text-fg">
-            <PriorityIcon priority={result.priority} />
-            {priorityLabel[result.priority]}
-          </dd>
-          <ApplyButton pending={rows[0].pending} onClick={() => applyRow("priority")} />
-        </div>
-        <div className="flex min-h-6 items-start gap-2">
-          <dt className="w-[70px] shrink-0 pt-1 text-fg-3">{t("triage.tags")}</dt>
-          <dd className="flex min-w-0 flex-1 flex-wrap items-center gap-1 pt-0.5">
-            {result.tags.map((x) => (
-              <span key={x} className={cn(!current.has(x.toLowerCase()) ? "" : "opacity-50")}>
-                <TagChip name={x} />
-              </span>
-            ))}
-            {(result.suggested_tags ?? []).map((x) => (
-              <Tooltip key={`new-${x}`} content={t("triage.newTag")}>
-                <span className="rounded-sm border border-dashed border-line-strong px-1 text-[11.5px] text-fg-3">+ {x}</span>
-              </Tooltip>
-            ))}
-          </dd>
-          <ApplyButton pending={rows[1].pending} onClick={() => applyRow("tags")} />
-        </div>
-        <div className="flex min-h-6 items-center gap-2">
-          <dt className="w-[70px] shrink-0 text-fg-3">{t("triage.sentiment")}</dt>
-          <dd className="text-fg">
-            <SentimentLabel s={result.sentiment} />
-          </dd>
-        </div>
-        <div className="flex min-h-6 items-center gap-2">
-          <dt className="w-[70px] shrink-0 text-fg-3">{t("triage.language")}</dt>
-          <dd className="text-fg-2">{languageName(result.language)}</dd>
-        </div>
-        {result.category && (
-          <div className="flex min-h-6 items-center gap-2">
-            <dt className="w-[70px] shrink-0 text-fg-3">{t("triage.category")}</dt>
-            <dd className="truncate text-fg-2">{result.category}</dd>
+      </AiCardHeader>
+      {result.summary && (
+        <p className="px-3 pb-2 text-[12.5px] leading-[19px] text-fg" data-ph-mask>
+          {result.summary}
+        </p>
+      )}
+      <dl className="flex flex-col gap-1 px-3 pb-2.5 text-[12px]">
+        {facts.map(([k, v]) => (
+          <div key={k} className="flex min-h-5 items-center gap-2.5">
+            <dt className="w-[62px] shrink-0 text-fg-3">{k}</dt>
+            <dd className="flex min-w-0 items-center text-fg-2">{v}</dd>
           </div>
-        )}
+        ))}
       </dl>
-      <div className="mt-3 flex items-center gap-2">
+      {pending.length > 0 && !result.applied && (
+        <div className="border-t border-line-soft px-3 pb-1.5 pt-2">
+          <p className="label-caps pb-1">{t("triage.changes")}</p>
+          <ApprovalRows rows={rows} onToggle={(k, v) => setOff((s) => { const n = new Set(s); if (v) n.delete(k as ChangeKey); else n.add(k as ChangeKey); return n; })} />
+        </div>
+      )}
+      <AiCardFooter>
         {result.applied ? (
-          <span className="flex items-center gap-1.5 text-[12px] text-fg-2">
-            <Check className="size-3.5" /> {t("triage.appliedToast")}
-          </span>
-        ) : anyPending ? (
-          <>
-            <Button size="xs" variant="primary" loading={applying} onClick={() => void applyAll()}>
-              {t("triage.applyAll")}
-            </Button>
-            <Button size="xs" variant="ghost" onClick={() => setResult(null)}>
-              {t("triage.dismiss")}
-            </Button>
-          </>
+          <DonePill>{t("triage.appliedToast")}</DonePill>
         ) : (
-          <span className="text-[12px] text-fg-3">{t("triage.nothing")}</span>
+          <>
+            <Tooltip content={t("triage.confidenceHint")}>
+              <span className="min-w-0">
+                <Confidence signal={signal} label={t(`triage.confidence.${signal}`)} />
+              </span>
+            </Tooltip>
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              {pending.length > 0 ? (
+                <Button size="xs" variant="primary" loading={applyAll.isPending} disabled={!chosen.length} onClick={applyChosen}>
+                  {all ? t("triage.applyAll") : t("triage.applySome", { count: chosen.length })}
+                </Button>
+              ) : (
+                <span className="text-[11.5px] text-fg-3">{t("triage.nothing")}</span>
+              )}
+            </span>
+          </>
         )}
-      </div>
-    </section>
+      </AiCardFooter>
+    </AiCard>
   );
 }
 
-function ApplyButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
+type Turn = { id: number; question: string; text: string; answer: AIAnswer | null; error?: boolean; started: number; took?: number };
+
+function TurnView({ x }: { x: Turn }) {
   const { t } = useTranslation("aiTicket");
-  if (!pending)
-    return (
-      <span className="flex h-5 shrink-0 items-center gap-1 text-[11px] text-fg-4">
-        <Check className="size-3" /> {t("triage.applied")}
-      </span>
-    );
+  const working = !x.answer && !x.error;
+  const elapsed = useElapsed(working);
   return (
-    <button type="button" onClick={onClick} className="h-5 shrink-0 rounded px-1.5 text-[11px] font-medium text-fg-2 hover:bg-hover hover:text-fg">
-      {t("triage.apply")}
-    </button>
+    <div className="flex flex-col gap-1.5">
+      <p className="max-w-[88%] self-end rounded-md bg-hover px-2 py-1 text-[12px] text-fg" data-ph-mask>
+        {x.question}
+      </p>
+      {x.error ? (
+        <p className="text-[12px] text-danger-fg">{t("ask.failed")}</p>
+      ) : x.answer ? (
+        <>
+          <Thinking working={false} label={t("ask.thinking")} doneLabel={t("ask.answered", { time: formatElapsed(x.took ?? 0) })} />
+          <StreamingHtml html={sanitizeHtml(x.answer.answer_html)} />
+          <SourceChips sources={x.answer.sources} label={t("ask.sources")} className="mt-0.5" />
+        </>
+      ) : x.text ? (
+        <>
+          <Thinking working label={t("ask.writing")} trailing={<span className="mono text-[10.5px] tabular-nums text-fg-4">{formatElapsed(elapsed)}</span>} />
+          <StreamingHtml html={streamTextToHtml(x.text)} streaming />
+        </>
+      ) : (
+        <Thinking working label={t("ask.thinking")} trailing={<span className="mono text-[10.5px] tabular-nums text-fg-4">{formatElapsed(elapsed)}</span>} />
+      )}
+    </div>
   );
 }
-
-type Turn = { id: number; question: string; text: string; answer: AIAnswer | null; error?: boolean };
 
 function AskBox({ t: ticket }: { t: Ticket }) {
   const { t } = useTranslation("aiTicket");
@@ -328,7 +376,7 @@ function AskBox({ t: ticket }: { t: Ticket }) {
     if (!qn || busy) return;
     const id = Date.now();
     setQuestion("");
-    setTurns((x) => [...x.slice(-2), { id, question: qn, text: "", answer: null }]);
+    setTurns((x) => [...x.slice(-2), { id, question: qn, text: "", answer: null, started: id }]);
     const ac = new AbortController();
     abort.current = ac;
     try {
@@ -336,7 +384,8 @@ function AskBox({ t: ticket }: { t: Ticket }) {
         signal: ac.signal,
         onDelta: (_d, soFar) => setTurns((x) => x.map((y) => (y.id === id ? { ...y, text: soFar } : y))),
       });
-      setTurns((x) => x.map((y) => (y.id === id ? { ...y, answer } : y)));
+      const took = (Date.now() - id) / 1000;
+      setTurns((x) => x.map((y) => (y.id === id ? { ...y, answer, took } : y)));
       creditsSpent(qc);
     } catch (e) {
       setTurns((x) => (isAbort(e) ? x.filter((y) => y.id !== id) : x.map((y) => (y.id === id ? { ...y, error: true } : y))));
@@ -347,76 +396,35 @@ function AskBox({ t: ticket }: { t: Ticket }) {
   };
 
   return (
-    <section className="border-b border-line-soft px-4 py-3.5">
-      <SectionHead title={t("ask.title")}>
+    <AiCard>
+      <AiCardHeader title={t("ask.title")}>
         {turns.length > 0 && !busy && (
-          <button type="button" onClick={() => setTurns([])} className="text-[11px] text-fg-4 hover:text-fg">
+          <button type="button" onClick={() => setTurns([])} className="h-6 rounded-md px-1.5 text-[11px] text-fg-4 transition-colors hover:bg-hover hover:text-fg">
             {t("ask.clear")}
           </button>
         )}
-      </SectionHead>
+      </AiCardHeader>
       {turns.length > 0 && (
-        <div className="mb-2.5 flex flex-col gap-3" aria-live="polite">
+        <div className="flex flex-col gap-3.5 px-3 pb-3" aria-live="polite">
           {turns.map((x) => (
-            <div key={x.id} className="flex flex-col gap-1.5 animate-fade-in">
-              <p className="self-end rounded-md bg-hover px-2 py-1 text-[12px] text-fg" data-ph-mask>
-                {x.question}
-              </p>
-              {x.error ? (
-                <p className="text-[12px] text-fg-3">{t("ask.failed")}</p>
-              ) : x.answer ? (
-                <>
-                  <div className="prose-od text-[12.5px] leading-[19px] [&_li]:my-0.5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4" data-ph-mask dangerouslySetInnerHTML={{ __html: sanitizeHtml(x.answer.answer_html) }} />
-                  {x.answer.sources.length > 0 && (
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10.5px] text-fg-4">{t("ask.sources")}</span>
-                      {x.answer.sources.map((s) => (
-                        <a key={s.article_id} href={s.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-fg-2 hover:text-fg hover:underline">
-                          <BookOpen className="size-3 shrink-0 text-fg-4" />
-                          <span className="truncate">{s.title}</span>
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : x.text ? (
-                <div className="prose-od text-[12.5px] leading-[19px] [&_li]:my-0.5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4" data-ph-mask dangerouslySetInnerHTML={{ __html: streamTextToHtml(x.text) }} />
-              ) : (
-                <span className="flex items-center gap-1.5 text-[12px] text-fg-3">
-                  <AiIcon className="size-3 animate-pulse-soft" /> {t("ask.thinking")}
-                </span>
-              )}
-            </div>
+            <TurnView key={x.id} x={x} />
           ))}
         </div>
       )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void ask();
-        }}
-        className="flex h-8 items-center gap-1 rounded-md border border-line bg-surface pl-2.5 pr-1 focus-within:border-fg-4 focus-within:shadow-[0_0_0_3px_var(--focus)]"
-      >
-        <input
+      <div className="px-2 pb-2">
+        <PromptBar
           value={question}
-          onChange={(e) => setQuestion(e.target.value)}
+          onChange={setQuestion}
+          onSubmit={() => void ask()}
           placeholder={t("ask.placeholder")}
-          aria-label={t("ask.title")}
+          label={t("ask.title")}
+          sendLabel={t("ask.send")}
+          sendHint={credits ? `${t("ask.send")} · ${credits}` : t("ask.send")}
+          busy={busy}
           maxLength={500}
-          className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-fg-4"
         />
-        <Tooltip content={credits ? `${t("ask.send")} · ${credits}` : t("ask.send")}>
-          <button
-            type="submit"
-            aria-label={t("ask.send")}
-            disabled={!question.trim() || busy}
-            className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-inverse text-inverse-fg transition-opacity disabled:opacity-25"
-          >
-            <ArrowUp className="size-3.5" />
-          </button>
-        </Tooltip>
-      </form>
-    </section>
+      </div>
+    </AiCard>
   );
 }
 
@@ -427,10 +435,10 @@ export function TicketAiPanel({ t }: { t: Ticket }) {
   if (!ai.enabled) return null;
   const agent = atLeast(role, "agent");
   return (
-    <>
+    <div className="flex flex-col gap-2.5 border-b border-line-soft px-4 py-3.5">
       <SummaryCard t={t} />
       {agent && <TriageCard t={t} />}
       <AskBox t={t} />
-    </>
+    </div>
   );
 }

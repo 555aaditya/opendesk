@@ -9,6 +9,8 @@ import { api } from "@/lib/api/endpoints";
 import { useAI } from "@/lib/ai";
 import { q } from "@/lib/queries";
 import { useRole, atLeast } from "@/lib/session";
+import { cn } from "@/lib/cn";
+import { AI_TONE, tone } from "@/lib/tones";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { AiIcon, AiTooltip } from "../bits";
@@ -118,8 +120,8 @@ export function AiAuthorLabel({ m }: { m: Message }) {
   if (!isAiMessage(m)) return null;
   return (
     <Tooltip content={t("message.aiHint")}>
-      <span className="inline-flex h-4 shrink-0 items-center gap-1 rounded-sm border border-line px-1 text-[10px] font-medium text-fg-3">
-        <AiIcon className="size-2.5" />
+      <span className={cn("inline-flex h-4 shrink-0 items-center gap-1 rounded-sm px-1 text-[10px] font-medium", tone[AI_TONE].chip)}>
+        <AiIcon className="size-2.5 text-current" />
         {t("message.aiLabel")}
       </span>
     </Tooltip>

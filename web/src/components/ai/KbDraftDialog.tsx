@@ -1,10 +1,11 @@
 // "Draft article from tickets" (contracts/ai.md, POST /v1/kb/articles/ai/draft,
 // 5 credits). Pick conversations and/or describe a topic; the draft is handed
-// back to the editor, never saved here.
+// back to the editor, never saved here. Progress shows as task rows adapted
+// from Beautiful UI (MIT, see web/THIRD_PARTY_NOTICES.md and ./ui/TaskRows).
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -15,6 +16,7 @@ import { api } from "@/lib/api/endpoints";
 import { errorMessage, isPlanLimit } from "@/lib/api/client";
 import type { KBArticleDraft, Ticket } from "@/lib/api/types";
 import { AiIcon, useCreditLabel } from "./bits";
+import { TaskRows, type TaskRow, type TaskStatus } from "./ui/TaskRows";
 
 /** The server drafts from at most 10 tickets. */
 const MAX_TICKETS = 10;
@@ -37,6 +39,8 @@ export function KbDraftDialog({
   const [topic, setTopic] = useState("");
   const [query, setQuery] = useState("");
   const [tried, setTried] = useState(false);
+  // Which step the progress rows show as running; -1 before the first run.
+  const [stage, setStage] = useState(-1);
 
   const search = useQuery({
     queryKey: ["ai", "kb-draft-tickets", query],
@@ -55,15 +59,41 @@ export function KbDraftDialog({
       setPicked([]);
       setTopic("");
       setTried(false);
+      setStage(-1);
     },
   });
+
+  const pending = draft.isPending;
+  useEffect(() => {
+    if (!pending) return;
+    // The server answers once; the first two steps settle on a gentle clock and the
+    // last one stays running until the draft arrives.
+    const a = setTimeout(() => setStage(1), 900);
+    const b = setTimeout(() => setStage(2), 2200);
+    return () => {
+      clearTimeout(a);
+      clearTimeout(b);
+    };
+  }, [pending]);
 
   const empty = !picked.length && !topic.trim();
   const submit = () => {
     setTried(true);
     if (empty || draft.isPending) return;
+    setStage(0);
     draft.mutate();
   };
+
+  const failed = !!draft.error && !pending;
+  const statusAt = (i: number): TaskStatus => (i < stage ? "done" : i > stage ? "pending" : failed ? "failed" : "running");
+  const steps: TaskRow[] = [
+    picked.length
+      ? { key: "read", label: t("kb_draft.step_read", { count: picked.length }), meta: picked.length, status: statusAt(0) }
+      : { key: "read", label: t("kb_draft.step_topic"), status: statusAt(0) },
+    { key: "find", label: t("kb_draft.step_find"), status: statusAt(1) },
+    { key: "write", label: t("kb_draft.step_write"), status: statusAt(2) },
+  ];
+  const showSteps = stage >= 0 && (pending || failed);
 
   return (
     <Dialog
@@ -71,7 +101,7 @@ export function KbDraftDialog({
       onOpenChange={(o) => !draft.isPending && onOpenChange(o)}
       title={
         <span className="flex items-center gap-2">
-          <AiIcon className="text-fg-3" />
+          <AiIcon />
           {t("kb_draft.title")}
         </span>
       }
@@ -139,12 +169,11 @@ export function KbDraftDialog({
           <Label htmlFor="kb-draft-topic">{t("kb_draft.topic")}</Label>
           <TextInput id="kb-draft-topic" value={topic} maxLength={200} placeholder={t("kb_draft.topic_placeholder")} onChange={(e) => setTopic(e.target.value)} />
         </div>
-        {draft.isPending && (
-          <div aria-live="polite" className="flex flex-col gap-2 rounded-md border border-line-soft px-3 py-3">
-            <span className="skeleton h-2.5 w-2/3" />
-            <span className="skeleton h-2.5 w-full" />
-            <span className="skeleton h-2.5 w-5/6" />
-          </div>
+        {showSteps && (
+          <TaskRows
+            rows={steps}
+            labels={{ pending: t("kb_draft.status_pending"), running: t("kb_draft.status_running"), done: t("kb_draft.status_done"), failed: t("kb_draft.status_failed") }}
+          />
         )}
         {tried && empty && <p className="text-[12.5px] text-danger-fg">{t("kb_draft.need_input")}</p>}
         {draft.error && !isPlanLimit(draft.error) && <p className="text-[12.5px] text-danger-fg">{errorMessage(draft.error)}</p>}

@@ -1,11 +1,13 @@
 // AI in the reply composer: draft a reply (streamed), rewrite the draft or the
 // selection, translate the draft into the customer's language. Every change is
-// undoable; credits are shown in the menu, never as colour.
+// undoable: drafts by toast, rewrites and translations from a diff review.
+// Credits are shown in the menu. Status, sources and diff patterns adapted
+// from Beautiful UI (MIT, see web/THIRD_PARTY_NOTICES.md and ../ui/).
 
 import { useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu as M, Popover as P } from "radix-ui";
-import { BookOpen, Languages, PenLine, Square, X } from "lucide-react";
-import { useCallback, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Languages, PenLine, Square, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { AIFeature, KBSource, RewriteMode, Ticket } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
@@ -20,18 +22,30 @@ import { toast } from "@/components/ui/toast";
 import { useConfirm } from "@/components/ui/confirm";
 import type { RichEditorHandle } from "@/components/editor/RichEditor";
 import { AiIcon, useCreditLabel } from "../bits";
+import { DiffView } from "../ui/DiffView";
+import { htmlToPlain } from "../ui/diff";
+import { SourceChips } from "../ui/StreamingText";
+import { ShimmerText, WorkingBar, formatElapsed, useElapsed } from "../ui/Thinking";
 import { creditsSpent, isAbort, reportAiError } from "./errors";
 import { isForeign, languageName, streamTextToHtml, ticketLanguage } from "./text";
 
 export const REWRITE_MODES: RewriteMode[] = ["friendlier", "more_formal", "shorter", "longer", "fix_grammar", "simplify"];
 
-type Busy = { kind: "draft" | "rewrite" | "translate"; selection?: boolean; preview?: string } | null;
+type Busy = { kind: "draft" | "rewrite" | "translate"; selection?: boolean; preview?: string; started: number; writing?: boolean } | null;
+
+/** A finished rewrite or translation, shown as a diff until kept, undone or edited. */
+export type AiReview = { id: number; title: string; before: string; after: string; prev: string };
 
 export type ComposerAi = {
   available: boolean;
   busy: Busy;
   sources: KBSource[];
+  /** Hides the sources and any pending review (after sending, for example). */
   dismissSources: () => void;
+  hideSources: () => void;
+  review: AiReview | null;
+  keepReview: () => void;
+  undoReview: () => void;
   draft: (instructions?: string) => void;
   rewrite: (mode: RewriteMode) => void;
   translate: () => void;
@@ -52,6 +66,7 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
   const confirm = useConfirm();
   const [busy, setBusy] = useState<Busy>(null);
   const [sources, setSources] = useState<KBSource[]>([]);
+  const [review, setReview] = useState<AiReview | null>(null);
   const abort = useRef<AbortController | null>(null);
   const lang = ticketLanguage(ticket);
   const target = mode === "reply" && lang && isForeign(lang) ? lang : null;
@@ -67,16 +82,39 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
   const undoToast = (message: string, prev: string) =>
     toast.info(message, { action: { label: t("undo"), onClick: () => restore(prev) } });
 
+  // Typing after a rewrite makes the diff stale: drop the review on the next edit.
+  useEffect(() => {
+    const ed = editor.current?.editor;
+    if (!review || !ed) return;
+    const drop = () => setReview(null);
+    ed.on("update", drop);
+    return () => {
+      ed.off("update", drop);
+    };
+  }, [review, editor]);
+
   const runDraft = async (instructions: string | undefined, prev: string) => {
     const ac = new AbortController();
     abort.current = ac;
-    setBusy({ kind: "draft" });
+    const started = Date.now();
+    setBusy({ kind: "draft", started });
     setSources([]);
+    setReview(null);
     try {
+      let writing = false;
       const res = await api.ai.draft(
         ticket.id,
         { instructions: instructions?.trim() || undefined },
-        { signal: ac.signal, onDelta: (_d, soFar) => editor.current?.setHtml(streamTextToHtml(soFar)) },
+        {
+          signal: ac.signal,
+          onDelta: (_d, soFar) => {
+            if (!writing) {
+              writing = true;
+              setBusy({ kind: "draft", started, writing: true });
+            }
+            editor.current?.setHtml(streamTextToHtml(soFar));
+          },
+        },
       );
       editor.current?.setHtml(res.body_html);
       setSources(res.sources ?? []);
@@ -115,14 +153,16 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
     const html = selection ? streamTextToHtml(ed.state.doc.textBetween(from, to, "\n\n")) : prev;
     const ac = new AbortController();
     abort.current = ac;
-    setBusy({ kind: "rewrite", selection });
+    const started = Date.now();
+    setBusy({ kind: "rewrite", selection, started });
+    setReview(null);
     try {
       const res = await api.ai.rewrite(
         { html, mode: m },
         {
           signal: ac.signal,
           onDelta: (_d, soFar) => {
-            if (selection) setBusy({ kind: "rewrite", selection, preview: soFar });
+            if (selection) setBusy({ kind: "rewrite", selection, preview: soFar, started, writing: true });
             else editor.current?.setHtml(streamTextToHtml(soFar));
           },
         },
@@ -130,7 +170,13 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
       if (selection) ed.chain().focus().insertContentAt({ from, to }, res.html).run();
       else editor.current?.setHtml(res.html);
       creditsSpent(qc);
-      undoToast(t(selection ? "composer.rewroteSelection" : "composer.rewrote", { mode: t(`rewrite.${m}`).toLowerCase() }), prev);
+      setReview({
+        id: Date.now(),
+        title: t(selection ? "composer.rewroteSelection" : "composer.rewrote", { mode: t(`rewrite.${m}`).toLowerCase() }),
+        before: htmlToPlain(html),
+        after: htmlToPlain(res.html),
+        prev,
+      });
     } catch (e) {
       if (!isAbort(e)) {
         restore(prev);
@@ -145,12 +191,14 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
   const translate = async () => {
     const prev = currentHtml(editor.current);
     if (busy || !prev || !target) return;
-    setBusy({ kind: "translate" });
+    setBusy({ kind: "translate", started: Date.now() });
+    setReview(null);
     try {
       const res = await api.ai.translate({ html: prev, target });
-      editor.current?.setHtml(res.html ?? streamTextToHtml(res.text ?? ""));
+      const next = res.html ?? streamTextToHtml(res.text ?? "");
+      editor.current?.setHtml(next);
       creditsSpent(qc);
-      undoToast(t("composer.translated", { language: languageName(target) }), prev);
+      setReview({ id: Date.now(), title: t("composer.translated", { language: languageName(target) }), before: htmlToPlain(prev), after: htmlToPlain(next), prev });
     } catch (e) {
       reportAiError(e, t("composer.translateFailed"));
     } finally {
@@ -162,7 +210,19 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
     available: ai.enabled,
     busy,
     sources,
-    dismissSources: () => setSources([]),
+    dismissSources: () => {
+      setSources([]);
+      setReview(null);
+    },
+    hideSources: () => setSources([]),
+    review,
+    keepReview: () => setReview(null),
+    undoReview: () => {
+      if (!review) return;
+      const prev = review.prev;
+      setReview(null);
+      restore(prev);
+    },
     draft,
     rewrite: (m) => void rewrite(m),
     translate: () => void translate(),
@@ -291,20 +351,36 @@ export function ComposerAiMenu({ ai, hasDraft, disabled }: { ai: ComposerAi; has
 
 /** A thin, calm progress row shown while AI writes into the composer. */
 export function ComposerAiStatus({ ai }: { ai: ComposerAi }) {
-  const { t } = useTranslation("aiTicket");
   if (!ai.busy) return null;
+  return <StatusRow key={ai.busy.started} ai={ai} busy={ai.busy} />;
+}
+
+function StatusRow({ ai, busy }: { ai: ComposerAi; busy: NonNullable<Busy> }) {
+  const { t } = useTranslation("aiTicket");
+  const elapsed = useElapsed(true);
   const label =
-    ai.busy.kind === "draft" ? t("composer.drafting") : ai.busy.kind === "translate" ? t("composer.translating") : ai.busy.selection ? t("composer.rewritingSelection") : t("composer.rewriting");
+    busy.kind === "draft"
+      ? busy.writing
+        ? t("composer.drafting")
+        : t("composer.reading")
+      : busy.kind === "translate"
+        ? t("composer.translating")
+        : busy.selection
+          ? t("composer.rewritingSelection")
+          : t("composer.rewriting");
   return (
     <div className="relative border-t border-line-soft">
-      <div className="absolute inset-x-0 -top-px h-px overflow-hidden" aria-hidden>
-        <div className="h-full w-1/3 bg-fg-3" style={{ animation: "pending-bar 1.4s ease-in-out infinite" }} />
-      </div>
-      <div role="status" aria-live="polite" className="flex h-9 items-center gap-2 px-3 text-[12px] text-fg-3">
+      <WorkingBar />
+      <div role="status" aria-live="polite" className="flex h-9 items-center gap-2 px-3 text-[12px]">
         <AiIcon className="animate-pulse-soft" />
-        <span className="shrink-0">{label}</span>
-        {ai.busy.preview && <span className="min-w-0 flex-1 truncate text-fg-4" data-ph-mask>{ai.busy.preview}</span>}
-        {ai.busy.kind !== "translate" && (
+        <span className="shrink-0 font-medium">
+          <ShimmerText>{label}</ShimmerText>
+        </span>
+        <span className="mono shrink-0 text-[10.5px] tabular-nums text-fg-4" aria-hidden>
+          {formatElapsed(elapsed)}
+        </span>
+        {busy.preview && <span className="min-w-0 flex-1 truncate text-fg-4" data-ph-mask>{busy.preview}</span>}
+        {busy.kind !== "translate" && (
           <Button size="xs" variant="ghost" className="ml-auto" icon={<Square className="size-2.5 fill-current" />} onClick={ai.stop}>
             {t("composer.stop")}
           </Button>
@@ -314,30 +390,40 @@ export function ComposerAiStatus({ ai }: { ai: ComposerAi }) {
   );
 }
 
-/** Knowledge base articles a draft was based on. */
+/** Knowledge base articles a draft was based on, and the diff of the last rewrite or translation. */
 export function ComposerSources({ ai }: { ai: ComposerAi }) {
   const { t } = useTranslation("aiTicket");
-  if (!ai.sources.length || ai.busy) return null;
+  if (ai.busy || (!ai.sources.length && !ai.review)) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 animate-fade-in">
-      <span className="text-[11px] text-fg-4">{t("composer.basedOn")}</span>
-      {ai.sources.map((s) => (
-        <a
-          key={s.article_id}
-          href={s.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-5 max-w-[220px] items-center gap-1 rounded-sm border border-line bg-surface px-1.5 text-[11px] text-fg-2 hover:border-line-strong hover:text-fg"
-        >
-          <BookOpen className="size-3 shrink-0 text-fg-4" />
-          <span className="truncate">{s.title}</span>
-        </a>
-      ))}
-      <Tooltip content={t("composer.hideSources")}>
-        <button type="button" aria-label={t("composer.hideSources")} onClick={ai.dismissSources} className="flex size-5 items-center justify-center rounded text-fg-4 hover:bg-hover hover:text-fg">
-          <X className="size-3" />
-        </button>
-      </Tooltip>
+    <div className="flex flex-col gap-2 px-3 pb-2.5">
+      {ai.review && (
+        <DiffView
+          key={ai.review.id}
+          before={ai.review.before}
+          after={ai.review.after}
+          title={
+            <span className="flex items-center gap-1.5">
+              <AiIcon className="size-3" />
+              {ai.review.title}
+            </span>
+          }
+          labels={{ before: t("composer.diffBefore"), after: t("composer.diffAfter") }}
+          summary={({ added, removed }) => t("composer.diffSummary", { added, removed })}
+          actions={
+            <>
+              <Button size="xs" variant="ghost" icon={<Undo2 />} onClick={ai.undoReview}>
+                {t("undo")}
+              </Button>
+              <Button size="xs" variant="secondary" onClick={ai.keepReview}>
+                {t("composer.keep")}
+              </Button>
+            </>
+          }
+        />
+      )}
+      {!!ai.sources.length && (
+        <SourceChips sources={ai.sources} label={t("composer.basedOn")} onDismiss={ai.hideSources} dismissLabel={t("composer.hideSources")} className="animate-fade-in" />
+      )}
     </div>
   );
 }

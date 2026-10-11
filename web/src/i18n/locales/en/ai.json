@@ -93,7 +93,16 @@
     "replace_body": "The draft replaces the current title, excerpt and body. You can still discard before saving.",
     "replace_confirm": "Replace",
     "done": "Draft ready. Review it before publishing.",
-    "remove_ticket": "Remove {{subject}}"
+    "remove_ticket": "Remove {{subject}}",
+    "step_read_one": "Reading {{count}} conversation",
+    "step_read_other": "Reading {{count}} conversations",
+    "step_topic": "Gathering context on the topic",
+    "step_find": "Finding what the answers have in common",
+    "step_write": "Writing the draft",
+    "status_pending": "Queued",
+    "status_running": "Working",
+    "status_done": "Done",
+    "status_failed": "Failed"
   },
   "palette": {
     "ask": "Ask AI",
@@ -108,6 +117,11 @@
     "start": "Describe what you're looking for in plain words.",
     "exit": "Back to search",
     "error": "Couldn't search right now. Try again in a moment.",
-    "tab_hint": "Tab to ask AI"
+    "tab_hint": "Tab to ask AI",
+    "try": "Try asking",
+    "send": "Search by meaning",
+    "example_1": "Customers who were charged twice",
+    "example_2": "Sign-in problems after a password reset",
+    "example_3": "Requests to export data"
   }
 }

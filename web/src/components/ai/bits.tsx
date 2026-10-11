@@ -1,5 +1,5 @@
-// Shared AI affordances. AI is marked by a small sparkle and a quiet credit
-// cost in the tooltip, never by colour.
+// Shared AI affordances. AI is marked by a small violet sparkle (AI_TONE, so
+// every AI surface reads as one family) and a quiet credit cost in the tooltip.
 
 import { Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
@@ -7,10 +7,11 @@ import { useTranslation } from "react-i18next";
 import type { AIFeature } from "@/lib/api/types";
 import { useAI } from "@/lib/ai";
 import { cn } from "@/lib/cn";
+import { AI_TONE, tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export function AiIcon({ className }: { className?: string }) {
-  return <Sparkles aria-hidden className={cn("size-3.5 shrink-0", className)} strokeWidth={1.75} />;
+  return <Sparkles aria-hidden className={cn("size-3.5 shrink-0", tone[AI_TONE].text, className)} strokeWidth={1.75} />;
 }
 
 /** "3 credits", for tooltips and menus. Empty when the cost is unknown or AI is unlimited. */

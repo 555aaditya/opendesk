@@ -26,7 +26,12 @@
     "rewriteFailed": "Couldn't rewrite the draft",
     "translated": "Translated to {{language}}",
     "translateFailed": "Couldn't translate the draft",
-    "command": "Draft a reply with AI"
+    "command": "Draft a reply with AI",
+    "reading": "Reading the conversation",
+    "keep": "Keep",
+    "diffBefore": "Before",
+    "diffAfter": "After",
+    "diffSummary": "+{{added}} -{{removed}} words"
   },
   "rewrite": {
     "friendlier": "Friendlier",
@@ -43,7 +48,9 @@
     "refresh": "Refresh summary",
     "updated": "Updated {{when}}",
     "failed": "Couldn't summarize this ticket",
-    "working": "Reading the conversation"
+    "working": "Reading the conversation",
+    "points_one": "{{count}} point",
+    "points_other": "{{count}} points"
   },
   "sentiment": {
     "label": "Sentiment",
@@ -68,7 +75,18 @@
     "dismiss": "Dismiss",
     "nothing": "Everything already matches the suggestion.",
     "appliedToast": "Applied the triage suggestion",
-    "failed": "Couldn't triage this ticket"
+    "failed": "Couldn't triage this ticket",
+    "newTags": "New tags",
+    "changes": "Proposed changes",
+    "applySome_one": "Apply {{count}} change",
+    "applySome_other": "Apply {{count}} changes",
+    "confidenceHint": "How well the suggestion fits your existing tags and categories",
+    "confidence": {
+      "0": "No signal",
+      "1": "Low confidence",
+      "2": "Worth a check",
+      "3": "High confidence"
+    }
   },
   "ask": {
     "title": "Ask about this ticket",
@@ -77,7 +95,9 @@
     "thinking": "Thinking",
     "sources": "Sources",
     "failed": "Couldn't answer that",
-    "clear": "Clear"
+    "clear": "Clear",
+    "writing": "Writing the answer",
+    "answered": "Answered in {{time}}"
   },
   "message": {
     "translate": "Translate",
