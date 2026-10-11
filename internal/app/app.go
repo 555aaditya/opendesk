@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -171,7 +172,13 @@ func Router(d *deps.Deps) http.Handler {
 }
 
 func webCSP(cfg *config.Config) string {
-	connect := []string{"'self'", cfg.APIURL, cfg.GatewayURL, "https://*.posthog.com", "https://challenges.cloudflare.com"}
+	connect := []string{"'self'"}
+	for _, u := range []string{cfg.APIURL, cfg.GatewayURL} {
+		if o := cspOrigin(u); o != "" {
+			connect = append(connect, o)
+		}
+	}
+	connect = append(connect, "https://*.posthog.com", "https://challenges.cloudflare.com")
 	return strings.Join([]string{
 		"default-src 'self'",
 		"script-src 'self' https://challenges.cloudflare.com https://*.posthog.com",
@@ -184,6 +191,16 @@ func webCSP(cfg *config.Config) string {
 		"base-uri 'self'",
 		"form-action 'self'",
 	}, "; ")
+}
+
+// cspOrigin is a URL's scheme and host. A CSP source with a path matches only that
+// exact path, which would block the socket at <gateway>/socket/websocket.
+func cspOrigin(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // Serve runs the configured role until ctx is canceled.
