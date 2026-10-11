@@ -95,6 +95,7 @@ type Config struct {
 	StripePriceProYear  string // optional recurring per-seat price, yearly
 	StripePriceCredits  string // one-time price for an AI credit pack
 	StripeTax           bool   // Stripe Tax automatic tax on Checkout
+	StripeAPIURL        string // development only: a local Stripe fake or stripe-mock instead of api.stripe.com
 
 	// AI. AIProvider: anthropic | openai (any OpenAI-compatible endpoint, e.g. Ollama) | none.
 	AIProvider       string
@@ -179,6 +180,7 @@ func Load() (*Config, error) {
 		StripePriceProYear:  env("STRIPE_PRICE_PRO_YEARLY", ""),
 		StripePriceCredits:  env("STRIPE_PRICE_CREDITS", ""),
 		StripeTax:           envBool("STRIPE_TAX", true),
+		StripeAPIURL:        env("STRIPE_API_URL", ""),
 
 		AIProvider:       env("AI_PROVIDER", ""),
 		AnthropicAPIKey:  env("ANTHROPIC_API_KEY", ""),
@@ -259,6 +261,9 @@ func Load() (*Config, error) {
 
 	if c.IsProduction() && c.NATSURL == "" && c.NATSToken == "" && !strings.HasPrefix(c.NATSListen, "127.0.0.1") {
 		return nil, errors.New("NATS_TOKEN is required when the embedded NATS server listens beyond localhost")
+	}
+	if c.IsProduction() && c.StripeAPIURL != "" {
+		return nil, errors.New("STRIPE_API_URL is for development only; production talks to Stripe directly")
 	}
 	if c.BillingEnabled() && (c.StripeWebhookSecret == "" || c.StripePricePro == "") {
 		return nil, errors.New("STRIPE_WEBHOOK_SECRET and STRIPE_PRICE_PRO are required when STRIPE_SECRET_KEY is set")

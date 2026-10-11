@@ -91,8 +91,12 @@ func newSvc(d *deps.Deps) *svc {
 			LeveledLogger:     &stripe.LeveledLogger{Level: stripe.LevelNull},
 			MaxNetworkRetries: stripe.Int64(2),
 		}
-		if stripeBackendURL != "" {
-			cfg.URL = stripe.String(stripeBackendURL)
+		backend := stripeBackendURL
+		if backend == "" {
+			backend = d.Cfg.StripeAPIURL // development only (config refuses it in production)
+		}
+		if backend != "" {
+			cfg.URL = stripe.String(backend)
 			cfg.MaxNetworkRetries = stripe.Int64(0)
 		}
 		s.sc = stripe.NewClient(d.Cfg.StripeSecretKey, stripe.WithBackends(stripe.NewBackendsWithConfig(cfg)))

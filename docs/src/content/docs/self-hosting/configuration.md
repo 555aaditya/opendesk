@@ -163,6 +163,7 @@ Leave these empty on a self-hosted instance. Without `STRIPE_SECRET_KEY`, every 
 | `STRIPE_PRICE_PRO_YEARLY` | | Optional yearly per-seat price. |
 | `STRIPE_PRICE_CREDITS` | | One-time price for an AI credit pack. |
 | `STRIPE_TAX` | `true` | Automatic tax on Checkout. |
+| `STRIPE_API_URL` | | Development only: a local Stripe fake or stripe-mock. Refused when `OPENDESK_ENV=production`. |
 
 ## Realtime gateway
 
