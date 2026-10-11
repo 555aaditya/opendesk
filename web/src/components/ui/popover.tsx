@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export const floatingPanel =
-  "z-50 origin-[var(--radix-popper-transform-origin)] rounded-lg border border-line bg-raised text-fg shadow-pop outline-none data-[state=open]:animate-pop-in";
+  "z-50 origin-[var(--radix-popper-transform-origin)] rounded-lg border border-line bg-raised text-fg shadow-pop outline-none data-[state=open]:animate-pop-in data-[state=closed]:animate-pop-out";
 
 export function Popover({
   trigger,

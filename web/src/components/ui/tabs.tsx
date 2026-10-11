@@ -1,8 +1,31 @@
+import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { Tabs as T } from "radix-ui";
-import type { ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-export const Tabs = T.Root;
+const spring = { type: "spring", stiffness: 520, damping: 42, mass: 0.7 } as const;
+const TabsCtx = createContext<{ value?: string; id: string }>({ id: "" });
+
+/** Radix tabs that know the active value, so the indicator can slide between triggers. */
+export function Tabs({ value, defaultValue, onValueChange, ...rest }: ComponentProps<typeof T.Root>) {
+  const id = useId();
+  const [inner, setInner] = useState(defaultValue);
+  const current = value ?? inner;
+  return (
+    <TabsCtx.Provider value={{ value: current, id }}>
+      <LayoutGroup id={id}>
+        <T.Root
+          value={current}
+          onValueChange={(v) => {
+            setInner(v);
+            onValueChange?.(v);
+          }}
+          {...rest}
+        />
+      </LayoutGroup>
+    </TabsCtx.Provider>
+  );
+}
 export const TabsContent = T.Content;
 
 export function TabsList({ children, className }: { children: ReactNode; className?: string }) {
@@ -10,6 +33,9 @@ export function TabsList({ children, className }: { children: ReactNode; classNa
 }
 
 export function TabsTrigger({ value, children, icon, count }: { value: string; children: ReactNode; icon?: ReactNode; count?: number }) {
+  const ctx = useContext(TabsCtx);
+  const reduce = useReducedMotion();
+  const active = ctx.value === value;
   return (
     <T.Trigger
       value={value}
@@ -18,7 +44,13 @@ export function TabsTrigger({ value, children, icon, count }: { value: string; c
       {icon}
       {children}
       {count !== undefined && <span className="mono text-[11px] text-fg-4">{count}</span>}
-      <span className="absolute inset-x-1.5 -bottom-px h-[1.5px] rounded-full bg-transparent transition-colors group-data-[state=active]:bg-fg" />
+      {active && (
+        <motion.span
+          layoutId={reduce ? undefined : "tab-indicator"}
+          transition={spring}
+          className="absolute inset-x-1.5 -bottom-px h-[1.5px] rounded-full bg-fg"
+        />
+      )}
     </T.Trigger>
   );
 }
@@ -37,6 +69,8 @@ export function Segmented<V extends string>({
   className?: string;
   size?: "xs" | "sm";
 }) {
+  const id = useId();
+  const reduce = useReducedMotion();
   return (
     <div role="radiogroup" className={cn("inline-flex items-center rounded-md bg-hover p-0.5", className)}>
       {options.map((o) => (
@@ -47,13 +81,22 @@ export function Segmented<V extends string>({
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md font-medium text-fg-3 transition-[color,background-color,box-shadow] duration-100 hover:text-fg [&_svg]:size-3.5",
+            "relative inline-flex items-center gap-1.5 rounded-md font-medium text-fg-3 transition-colors duration-100 hover:text-fg [&_svg]:size-3.5",
             size === "xs" ? "h-6 px-2 text-xs" : "h-[26px] px-2.5 text-[12.5px]",
-            value === o.value && "bg-surface text-fg shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/0.06)]",
+            value === o.value && "text-fg",
           )}
         >
-          {o.icon}
-          {o.label}
+          {value === o.value && (
+            <motion.span
+              layoutId={reduce ? undefined : `seg-${id}`}
+              transition={spring}
+              className="absolute inset-0 rounded-md bg-surface shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/0.06)]"
+            />
+          )}
+          <span className="relative inline-flex items-center gap-1.5">
+            {o.icon}
+            {o.label}
+          </span>
         </button>
       ))}
     </div>

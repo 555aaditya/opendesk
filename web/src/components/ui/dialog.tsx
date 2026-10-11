@@ -30,12 +30,12 @@ export function Dialog({
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-50 bg-scrim backdrop-blur-[1.5px] data-[state=open]:animate-fade-in" />
+        <D.Overlay className="fixed inset-0 z-50 bg-scrim backdrop-blur-[1.5px] data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <D.Content
           onEscapeKeyDown={onEscapeKeyDown}
           onInteractOutside={onInteractOutside}
           className={cn(
-            "fixed left-1/2 top-[12vh] z-50 flex max-h-[76vh] w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-float outline-none data-[state=open]:animate-dialog-in",
+            "fixed left-1/2 top-[12vh] z-50 flex max-h-[76vh] w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-float outline-none data-[state=open]:animate-dialog-in data-[state=closed]:animate-dialog-out",
             w,
             className,
           )}
@@ -87,7 +87,7 @@ export function Drawer({
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-40 bg-scrim/50 data-[state=open]:animate-fade-in" />
+        <D.Overlay className="fixed inset-0 z-40 bg-scrim/50 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <D.Content
           style={{ width: `min(${width}px, calc(100vw - 16px))` }}
           onEscapeKeyDown={onEscapeKeyDown}
@@ -99,7 +99,7 @@ export function Drawer({
             (el?.querySelector<HTMLElement>("[data-autofocus]") ?? el)?.focus({ preventScroll: true });
           }}
           tabIndex={-1}
-          className="fixed inset-y-2 right-2 z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-float outline-none data-[state=open]:animate-slide-in-right max-sm:inset-0 max-sm:rounded-none"
+          className="fixed inset-y-2 right-2 z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-float outline-none data-[state=open]:animate-slide-in-right data-[state=closed]:animate-slide-out-right max-sm:inset-0 max-sm:rounded-none"
         >
           <D.Title className="sr-only">{title}</D.Title>
           <D.Description className="sr-only">{title}</D.Description>
