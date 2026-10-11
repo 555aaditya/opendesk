@@ -61,9 +61,10 @@ Self-hosted = `opendesk` + `realtime` + `postgres` behind Caddy on one domain: `
 - Writes that others should see run in one transaction with `events.Publish`. Follow-up
   work is enqueued with `d.Jobs.InsertTx` in that same transaction. Job args live in
   `internal/jobs/args.go`.
-- Migrations: next six-digit number, `.up.sql` and `.down.sql`. Ranges while areas are
-  built in parallel: core `0001xx`, email `0002xx`, helpdesk `0003xx`, billing `0004xx`,
-  ai `0005xx`.
+- Migrations: `.up.sql` and `.down.sql`, numbered above the highest existing migration
+  whatever the area (a lower number is never applied to an existing database). The first
+  build used per-area ranges: core `0001xx`, email `0002xx`, helpdesk `0003xx`, billing
+  `0004xx`, ai `0005xx`; those are closed.
 - Run `gofmt -w` on touched files, then `go build ./... && go vet ./...`.
 
 ## Cloud and self-hosted
