@@ -26,8 +26,9 @@ When no AI provider is configured, `GET /v1/ai/config` reports `enabled: false` 
   "provider": "anthropic",
   "models": { "default": "claude-sonnet-5-5", "fast": "claude-haiku-4-5-20251001" },
   "embeddings": true,
-  "features": { "enabled": true, "auto_triage": false, "auto_summarize": false, "widget_answers": false, "tone": "friendly", "reply_language": "customer", "instructions": "" },
-  "costs": { "summarize": 1, "rewrite": 1, "translate": 1, "triage": 1, "copilot": 2, "draft_reply": 3, "answer": 3, "kb_draft": 5 }
+  "features": { "enabled": true, "auto_triage": false, "auto_summarize": false, "widget_answers": false, "assistant": true, "tone": "friendly", "reply_language": "customer", "instructions": "" },
+  "costs": { "summarize": 1, "rewrite": 1, "translate": 1, "triage": 1, "copilot": 2, "draft_reply": 3, "answer": 3, "kb_draft": 5, "assistant": 2 },
+  "assistant_name": "Jev"
 }
 ```
 

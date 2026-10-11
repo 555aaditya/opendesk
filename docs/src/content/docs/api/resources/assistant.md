@@ -1,0 +1,82 @@
+---
+title: Assistant (Jev)
+description: Conversations with Jev, streamed runs, approvals and tips.
+---
+
+Jev's routes are for signed-in people only: an API key gets `403`. They need AI on the instance and in the workspace, and `settings.ai.assistant` on (`403 assistant_off`). The assistant's display name comes from `assistant_name` in [`GET /v1/ai/config`](/api/resources/ai/).
+
+| Method | Path | Min role | Credits | Description |
+| --- | --- | --- | --- | --- |
+| `GET` | `/v1/assistant/sessions` | viewer | 0 | Your conversations, newest first |
+| `POST` | `/v1/assistant/sessions` | viewer | 0 | Start a conversation |
+| `GET` | `/v1/assistant/sessions/{id}` | viewer | 0 | Transcript and any pending approval |
+| `PATCH` | `/v1/assistant/sessions/{id}` | viewer | 0 | Rename |
+| `DELETE` | `/v1/assistant/sessions/{id}` | viewer | 0 | Delete |
+| `POST` | `/v1/assistant/sessions/{id}/messages` | viewer | 2 per model turn | Send a message and run Jev |
+| `POST` | `/v1/assistant/actions/{id}/decision` | viewer | 2 per model turn | Approve or deny a proposed change |
+| `GET` | `/v1/assistant/tips` | viewer | 0 | Short tips from queue counts |
+
+Conversations are private to their user: another user's id answers `404`.
+
+## Send a message
+
+```http
+POST /v1/assistant/sessions/{id}/messages
+Accept: text/event-stream
+
+{ "text": "Who should take this?", "context": { "page": "ticket", "ticket_id": "0190…" } }
+```
+
+`context` describes the page the user is on (`path`, `page`, `folder`, `view_id`, `ticket_id`, `filters`), so "this" means the open ticket. Text is 1 to 8,000 characters.
+
+With `Accept: text/event-stream` the run streams:
+
+| Event | Data |
+| --- | --- |
+| `session` | The conversation (its title is set from the first message) |
+| `text` | `{ "text": "…" }`, a piece of Jev's markdown answer |
+| `tool` | A step: `{ id, tool, label, status, summary?, refs?, action_id? }`, sent when it starts and when it ends |
+| `approval` | `{ action_id, call_id, tool, preview, token, expires_at }` |
+| `done` | `{ "status": "complete" }` or `{ "status": "awaiting_approval" }` |
+| `error` | A problem body; the stream ends |
+
+Without it, the same run comes back as one JSON object: `{ session, text, steps, approval, status }`.
+
+A step's `status` is `running`, `done`, `error`, `awaiting_approval`, `approved`, `denied` or `expired`. `refs` link tickets (`kind: "ticket"`, with `number`), contacts, articles, views and automations.
+
+Errors: `402 no_credits` before anything is stored, `409 assistant_busy` while the conversation is already running, `429` past 30 messages a minute, `501 ai_unsupported` when the provider has no tool use.
+
+## Approvals
+
+Jev never changes anything on its own. A change arrives as an `approval` event with a `preview`:
+
+```json
+{
+  "title": "Update #42",
+  "summary": "Refund for duplicate charge",
+  "changes": [{ "field": "Assignee", "from": "Unassigned", "to": "Alex Morgan" }],
+  "targets": [{ "kind": "ticket", "id": "0190…", "label": "Refund for duplicate charge", "number": 42 }],
+  "external": false
+}
+```
+
+`body` holds the markdown of a reply or note, `total` the number of matching tickets for a bulk change, and `external: true` marks a reply that reaches the customer.
+
+```http
+POST /v1/assistant/actions/{action_id}/decision
+Accept: text/event-stream
+
+{ "decision": "approve", "token": "<approval token>" }
+```
+
+The token is bound to the action, the user, the sign-in session and the workspace, and lasts 15 minutes. A decision runs once: a second answers `409 approval_not_pending`, a wrong token `403 approval_invalid`. Sending a new message expires the pending change. The response is a run, as above, in which Jev continues.
+
+An approved change goes through the regular API with the user's permissions. Ticket activities record it with `actor_type: "ai"` and the user in `actor.user`, shown as Jev, and the audit log records `assistant.action`.
+
+## Tips
+
+```json
+{ "tips": [{ "key": "sla_due_soon", "text": "3 tickets breach SLA within the hour.", "prompt": "Which tickets breach SLA in the next hour?", "severity": "high", "count": 3 }] }
+```
+
+Tips are computed from counts without the model and cost nothing. Keys: `sla_breached`, `sla_due_soon`, `unassigned_old`, `mine_waiting`.
