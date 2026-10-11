@@ -9,8 +9,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..", "brand");
 export const INK = "#0A0A0A";
 export const PAPER = "#FFFFFF";
 
-// Mark: the "o" of opendesk drawn as a speech bubble, on a 64-unit grid.
-const MARK = "M8 56V32A24 24 0 1 1 32 56Z M32 22a10 10 0 1 0 0 20a10 10 0 1 0 0-20Z";
+// Mark: "Module", a 2x2 grid with one piece reshaped, on a 64-unit grid.
+const MARK = "M11 4h12a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-12a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7Z M47 4a13 13 0 1 1 0 26a13 13 0 1 1 0-26Z M11 34h12a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-12a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7Z M41 34h12a7 7 0 0 1 7 7v12a7 7 0 0 1-7 7h-12a7 7 0 0 1-7-7v-12a7 7 0 0 1 7-7Z";
 
 // Wordmark: "opendesk" in Geist SemiBold, -4% tracking, 100px, outlined (438 x 86).
 const WORDMARK = [
@@ -37,10 +37,10 @@ const LOCKUP_W = 88 + 36 + WM_W;
 const lockup = (fill) => mark(0, 0, 88, fill) + wordmark(124, 1, 1, fill);
 const STACK_W = WM_W, STACK_H = 140 + 32 + WM_H;
 const stacked = (fill) => mark((WM_W - 140) / 2, 0, 140, fill) + wordmark(0, 172, 1, fill);
-// App icon: mark at 56% of a squircle-ish tile (radius 22.5%).
+// App icon: mark at 56% of a rounded tile (radius 22.5%).
 const tile = (size, bg, fg) =>
   svg(size, size, `<rect width="${size}" height="${size}" rx="${size * 0.225}" fill="${bg}"/>` +
-    mark(size * 0.2, size * 0.2, size * 0.6, fg));
+    mark(size * 0.22, size * 0.22, size * 0.56, fg));
 
 const files = {
   "logo/mark.svg": svg(64, 64, mark(0, 0, 64, INK)),

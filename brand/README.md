@@ -1,6 +1,6 @@
 # opendesk brand
 
-Monochrome, geometric and quiet. The mark is the "o" of opendesk drawn as a speech bubble.
+Monochrome, geometric and quiet. The mark, "Module", is a 2×2 grid with one piece reshaped into a circle: modular, extensible, open to plugins.
 
 Figma source: https://www.figma.com/design/JfEIfmFuwLsDJCSRXOUQGH/Branding
 
@@ -23,7 +23,7 @@ Regenerate the SVGs with `node scripts/build-brand.mjs`.
 ## Rules
 
 - **Colour:** ink `#0A0A0A` on paper `#FFFFFF`, or the reverse. No gradients, tints, outlines or shadows.
-- **Clear space:** at least ¼ of the mark's height on every side.
+- **Clear space:** at least ¼ of the mark's height on every side. Never close or change the gaps between modules.
 - **Minimum size:** mark 16px; lockup 80px wide.
 - **Type:** Geist SemiBold at −4% tracking for headlines, Geist Regular for body, Geist Mono for code and labels.
 - **Name:** always lowercase: `opendesk`. Use `opendesk.sh` only when you mean the domain.
