@@ -14,7 +14,7 @@ it exists, and this file is the contract the parts are built against.
   body; request bodies refuse unknown members (`422 validation_failed`).
 - Lists: `?limit=` (default 50, max 100) and `?cursor=`; response
   `{ "data": [...], "next_cursor": "..." | null }`.
-- Workspace-scoped routes need `OD-Workspace: <id>` (agents) or an API key.
+- Workspace-scoped routes need `OD-Workspace: <id>` (agents) or an API key. An `OD-Workspace` the caller is not a member of (or that no longer exists) is treated as absent: `400 workspace_required`, the same answer either way.
 - PATCH bodies: an omitted or `null` member is left unchanged. Clear an optional reference with `""`
   (mailbox `team_id`, KB article `collection_id`) unless the route documents `null` (ticket PATCH, contact `company_id`).
 - Idempotency: `Idempotency-Key` header on POST create routes (24h).
