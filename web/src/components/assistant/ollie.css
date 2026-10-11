@@ -88,6 +88,9 @@
 .ollie-muted .ollie-shine { opacity: 0.55; }
 .ollie-muted .ollie-eye { opacity: 0.8; }
 
+/* A still mark, for small badges that repeat down a list. */
+.ollie-still .ollie, .ollie-still .ollie * { animation: none !important; }
+
 .ollie-host:hover .ollie { scale: 1.08; }
 .ollie-host:active .ollie { scale: 0.9; }
 .ollie.ollie-squish { animation: ollie-squish 0.62s cubic-bezier(0.34, 1.56, 0.64, 1); }

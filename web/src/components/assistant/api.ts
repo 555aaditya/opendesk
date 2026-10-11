@@ -14,7 +14,8 @@ export type PageContext = {
   filters?: Record<string, string>;
 };
 
-export type RefKind = "ticket" | "contact" | "article" | "view" | "automation" | "member";
+/** `external`: something in a connected product; `id` is its https link. */
+export type RefKind = "ticket" | "contact" | "article" | "view" | "automation" | "member" | "external";
 export type AssistantRef = { kind: RefKind; id: string; label: string; number?: number };
 
 export type StepStatus = "running" | "done" | "error" | "awaiting_approval" | "approved" | "denied" | "expired";
@@ -37,6 +38,8 @@ export type Preview = {
   targets?: AssistantRef[];
   total?: number;
   external?: boolean;
+  /** The connected product the change runs in ("Linear"). */
+  system?: string;
 };
 export type Approval = { action_id: string; call_id: string; tool: string; preview: Preview; token: string; expires_at: string };
 

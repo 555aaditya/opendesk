@@ -37,6 +37,8 @@ type Preview struct {
 	Total int `json:"total,omitempty"`
 	// External marks a change a customer will see (a reply).
 	External bool `json:"external,omitempty"`
+	// System names the connected tool the change runs in ("Linear").
+	System string `json:"system,omitempty"`
 }
 
 // Change is one field of a diff.
@@ -54,6 +56,9 @@ type runCtx struct {
 	page *PageContext
 	// members is loaded once per run, for assignee names.
 	members []member
+	// ext are the workspace's connected tools, loaded once per run.
+	ext      map[string]*tool
+	extOrder []string
 }
 
 type tool struct {

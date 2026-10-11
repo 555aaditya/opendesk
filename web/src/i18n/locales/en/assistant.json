@@ -50,6 +50,7 @@
     "approve": "Approve",
     "deny": "Deny",
     "external": "Sends to the customer",
+    "system": "Runs in {{system}}",
     "more": "and {{count}} more",
     "expires": "Waiting for you",
     "denied": "You declined this change",

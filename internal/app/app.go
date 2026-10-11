@@ -36,6 +36,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/helpdesk"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/idempotency"
+	"github.com/useopendesk/opendesk/internal/integrations"
 	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/mailer"
 	"github.com/useopendesk/opendesk/internal/natsx"
@@ -58,6 +59,7 @@ var areas = []area{
 	{helpdesk.Register, helpdesk.RegisterWorkers, helpdesk.Periodic, helpdesk.Background},
 	{billing.Register, billing.RegisterWorkers, billing.Periodic, billing.Background},
 	{ai.Register, ai.RegisterWorkers, ai.Periodic, ai.Background},
+	{integrations.Register, integrations.RegisterWorkers, integrations.Periodic, integrations.Background},
 	{assistant.Register, assistant.RegisterWorkers, assistant.Periodic, assistant.Background},
 }
 

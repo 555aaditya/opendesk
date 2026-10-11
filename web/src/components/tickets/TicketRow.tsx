@@ -144,7 +144,7 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
     <Tooltip content={aiSet ? `${tr("row.priority", { priority: display.priority(t.priority) })} · ${note(t, "priority")}` : tr("row.priority", { priority: display.priority(t.priority) })}>
       <span className="relative flex size-4 shrink-0 items-center justify-center">
         <PriorityIcon priority={t.priority} />
-        {aiSet && <SetByOllie className="absolute -right-1.5 -top-1.5 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+        {aiSet && <SetByOllie size={10} className="absolute -right-1.5 -top-1.5 ring-1 ring-surface" />}
       </span>
     </Tooltip>
   );

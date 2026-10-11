@@ -38,6 +38,9 @@ export const qk = {
   apiKeys: ["api-keys"] as const,
   webhooks: ["webhooks"] as const,
   webhookDeliveries: (id: string) => ["webhooks", "deliveries", id] as const,
+  integrations: ["integrations"] as const,
+  integrationCatalog: ["integrations", "catalog"] as const,
+  ticketLinks: (id: string) => ["tickets", "links", id] as const,
   auditLogs: ["audit-logs"] as const,
   notifications: ["notifications"] as const,
   kbCollections: ["kb", "collections"] as const,
@@ -63,8 +66,8 @@ export const qk = {
   onboarding: ["onboarding"] as const,
 };
 
-const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R>>) =>
-  queryOptions({ queryKey: key, queryFn: async () => rows(await fn()) });
+const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R> | { data: R[] }>, opts: { staleTime?: number } = {}) =>
+  queryOptions({ queryKey: key, queryFn: async () => rows(await fn()), ...opts });
 
 export const q = {
   authConfig: () => queryOptions({ queryKey: qk.authConfig, queryFn: api.auth.config, staleTime: 5 * 60_000 }),
@@ -113,6 +116,9 @@ export const q = {
   apiKeys: () => list(qk.apiKeys, () => api.apiKeys.list({ limit: 100 })),
   webhooks: () => list(qk.webhooks, () => api.webhooks.list({ limit: 100 })),
   webhookDeliveries: (id: string) => list(qk.webhookDeliveries(id), () => api.webhooks.deliveries(id, { limit: 50 })),
+  integrations: () => list(qk.integrations, () => api.integrations.list()),
+  integrationCatalog: () => list(qk.integrationCatalog, () => api.integrations.catalog(), { staleTime: 60 * 60_000 }),
+  ticketLinks: (id: string) => list(qk.ticketLinks(id), () => api.tickets.links(id)),
   auditLogs: () =>
     infiniteQueryOptions({
       queryKey: qk.auditLogs,

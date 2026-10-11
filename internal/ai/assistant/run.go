@@ -22,6 +22,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/integrations"
 )
 
 // MessageInput is the body of POST /v1/assistant/sessions/{id}/messages.
@@ -362,6 +363,11 @@ func (s *Service) loop(ctx context.Context, rc *runCtx, sid uuid.UUID, emit emit
 	p := rc.p
 	system := s.system(ctx, p)
 	specs := s.specs(p.Role)
+	ext := rc.external(ctx)
+	for _, name := range rc.extOrder {
+		t := ext[name]
+		specs = append(specs, ai.ToolSpec{Name: t.Name, Description: t.Description, Schema: t.Schema})
+	}
 	for step := 0; step < maxSteps; step++ {
 		turns, err := loadTurns(ctx, s.d.DB.Pool, p.WorkspaceID, sid)
 		if err != nil {
@@ -384,7 +390,7 @@ func (s *Service) loop(ctx context.Context, rc *runCtx, sid uuid.UUID, emit emit
 		var results []storedResult
 		var prop *proposal
 		for _, c := range resp.Calls {
-			t := s.tools[c.Name]
+			t := rc.lookup(ctx, c.Name)
 			if t == nil || !p.Role.AtLeast(t.MinRole) {
 				results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID, Content: "There is no such tool for this user.", IsError: true}})
 				continue
@@ -404,7 +410,7 @@ func (s *Service) loop(ctx context.Context, rc *runCtx, sid uuid.UUID, emit emit
 				st.Label = t.Done
 				if err != nil {
 					st.Status, st.Summary = "error", toolErrorText(err)
-					results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID, Content: "Error: " + toolErrorText(err), IsError: true}})
+					results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID, Content: "Error: " + toolErrorContent(err), IsError: true}})
 				} else {
 					st.Status, st.Summary, st.Refs = "done", out.Summary, out.Refs
 					results = append(results, storedResult{ToolResult: ai.ToolResult{CallID: c.ID, Content: out.Content}})
@@ -463,8 +469,22 @@ func (s *Service) loop(ctx context.Context, rc *runCtx, sid uuid.UUID, emit emit
 	return nil
 }
 
+// toolErrorContent is toolErrorText, with a connected tool's own account of the
+// failure (inside its data block) for the model.
+func toolErrorContent(err error) string {
+	var tf *toolFailure
+	if errors.As(err, &tf) {
+		return tf.Content
+	}
+	return toolErrorText(err)
+}
+
 // toolErrorText is a safe, short reason for the model and the panel.
 func toolErrorText(err error) string {
+	var tf *toolFailure
+	if errors.As(err, &tf) {
+		return tf.Summary
+	}
 	var ae *apiError
 	if errors.As(err, &ae) {
 		switch ae.Status {
@@ -527,7 +547,7 @@ func (s *Service) decide(ctx context.Context, id uuid.UUID, in DecisionInput, em
 		return err
 	}
 	rc := s.newRun(ctx, p, nil)
-	t := s.tools[a.Tool]
+	t := rc.lookup(ctx, a.Tool)
 	st := Step{ID: a.CallID, Tool: a.Tool, Label: a.Preview.Title, ActionID: &a.ID}
 	content := "The user declined this change, so it was not made. Do not retry it unless they ask."
 	final := "denied"
@@ -540,9 +560,11 @@ func (s *Service) decide(ctx context.Context, id uuid.UUID, in DecisionInput, em
 			out, err = t.Apply(ctx, rc, newCaller(s.api, p, true), a.Args, "assistant-"+a.ID.String())
 		} else if t != nil {
 			err = &apiError{Status: http.StatusForbidden}
+		} else if integrations.IsTool(a.Tool) {
+			err = httpx.Validation("This connected tool is turned off or disconnected now.")
 		}
 		if err != nil {
-			final, content = "failed", "The user approved, but it failed: "+toolErrorText(err)
+			final, content = "failed", "The user approved, but it failed: "+toolErrorContent(err)
 			st.Status, st.Summary = "error", toolErrorText(err)
 		} else {
 			final, content = "done", out.Content

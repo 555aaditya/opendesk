@@ -201,6 +201,18 @@ export const api = {
       http.get<T.Page<T.WebhookDelivery>>(`/v1/webhooks/${id}/deliveries`, { query: q }),
     test: (id: string) => http.post<T.WebhookDelivery>(`/v1/webhooks/${id}/test`),
   },
+  integrations: {
+    catalog: () => http.get<{ data: T.IntegrationProvider[] }>("/v1/integrations/catalog"),
+    list: () => http.get<{ data: T.Integration[] }>("/v1/integrations"),
+    /** OAuth answers `authorize_url`, to open in this browser (the call sets its cookie). */
+    create: (b: { provider: string; name?: string; url?: string; auth?: "oauth" | "token" | "none"; token?: string }) =>
+      http.create<{ integration: T.Integration; authorize_url?: string }>("/v1/integrations", b),
+    authorize: (id: string) => http.post<{ integration: T.Integration; authorize_url: string }>(`/v1/integrations/${id}/authorize`),
+    sync: (id: string) => http.post<T.Integration>(`/v1/integrations/${id}/sync`),
+    update: (id: string, b: { name?: string; enabled?: boolean; disabled_tools?: string[]; token?: string }) =>
+      http.patch<T.Integration>(`/v1/integrations/${id}`, b),
+    remove: (id: string) => http.del(`/v1/integrations/${id}`),
+  },
   auditLogs: (q?: ListQuery & { action?: string; entity_type?: string }) => http.get<T.Page<T.AuditLog>>("/v1/audit-logs", { query: q }),
   events: (since: number, limit = 500) => http.get<T.EventsPage>("/v1/events", { query: { since, limit } }),
   realtimeToken: () => http.post<{ token: string; url: string; expires_at: string }>("/v1/realtime/token"),
@@ -222,6 +234,9 @@ export const api = {
     messages: (id: string) => http.get<T.Page<T.Message>>(`/v1/tickets/${id}/messages`),
     send: (id: string, b: SendMessageBody) => http.create<T.Message>(`/v1/tickets/${id}/messages`, b),
     activities: (id: string) => http.get<T.Page<T.Activity>>(`/v1/tickets/${id}/activities`),
+    links: (id: string) => http.get<{ data: T.TicketLink[] }>(`/v1/tickets/${id}/links`),
+    addLink: (id: string, b: { url: string; title?: string; integration_id?: string }) => http.create<T.TicketLink>(`/v1/tickets/${id}/links`, b),
+    removeLink: (id: string, linkId: string) => http.del(`/v1/tickets/${id}/links/${linkId}`),
   },
   messages: {
     original: (id: string) => http.get<{ full_html: string }>(`/v1/messages/${id}/original`),
@@ -337,7 +352,7 @@ function crud<R, B>(base: string) {
 }
 
 /** Lists may come back bare or wrapped; read either. */
-export function rows<R>(r: R[] | T.Page<R> | undefined | null): R[] {
+export function rows<R>(r: R[] | T.Page<R> | { data: R[] } | undefined | null): R[] {
   if (!r) return [];
   return Array.isArray(r) ? r : r.data;
 }

@@ -127,6 +127,7 @@ export default defineConfig({
             { label: 'Notifications', slug: 'guides/notifications' },
             { label: 'AI features', slug: 'guides/ai' },
             { label: 'Ollie, the assistant', slug: 'guides/ollie' },
+            { label: 'Integrations', slug: 'guides/integrations' },
             { label: 'Cloud plans and billing', slug: 'guides/billing' },
             { label: 'Keyboard shortcuts', slug: 'guides/keyboard-shortcuts' },
           ],

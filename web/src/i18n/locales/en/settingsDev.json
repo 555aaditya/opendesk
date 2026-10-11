@@ -254,5 +254,105 @@
     "avatarHint": "Shown in the widget header next to your workspace name.",
     "launcher": "Launcher icon",
     "launcherHint": "Replaces the chat bubble on the round button visitors click."
+  },
+  "integrations": {
+    "title": "Integrations",
+    "description": "Connect the tools your team works in. Ollie can then look things up there and, once someone approves, create and update things for you.",
+    "connectedTitle": "Connected",
+    "connectedHint": "Ollie uses these for everyone in the workspace. Open one to choose its tools.",
+    "catalogTitle": "Add an integration",
+    "catalogHint": "Each one is the product's own server. Sign in once for the whole workspace.",
+    "adminsOnly": "Ask a workspace admin to connect more.",
+    "toggle": "Let Ollie use {{name}}",
+    "actions": "Actions for {{name}}",
+    "sync": "Check for new tools",
+    "signIn": "Sign in",
+    "signInAgain": "Sign in again",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect {{name}}?",
+    "disconnectBody": "Ollie stops using {{name}} and its sign-in is deleted. Links already on tickets stay.",
+    "disconnected": "{{name}} disconnected",
+    "synced_one": "Up to date, {{count}} tool",
+    "synced_other": "Up to date, {{count}} tools",
+    "syncError": "Couldn't reach the server",
+    "updateError": "Couldn't save that change",
+    "connectedToast": "Connected. Ollie can use it now.",
+    "connectedNamed_one": "{{name}} connected with {{count}} tool",
+    "connectedNamed_other": "{{name}} connected with {{count}} tools",
+    "connectFailed": "Couldn't finish connecting. Try again.",
+    "oauthErrors": {
+      "oauth_state": "The sign-in expired or was started in another browser. Try again.",
+      "access_denied": "The sign-in was cancelled.",
+      "forbidden": "Only admins can connect integrations.",
+      "not_found": "That integration was removed while you were signing in.",
+      "provider_error": "The service refused the sign-in. Try again.",
+      "sync_failed": "Signed in, but the server's tools couldn't be loaded. Try checking for tools again."
+    },
+    "state": {
+      "connected": "Connected",
+      "pending": "Needs sign-in",
+      "error": "Needs attention",
+      "off": "Off"
+    },
+    "row": {
+      "pending": "Finish signing in to use it",
+      "tools_one": "{{count}} tool, {{asks}} ask before acting",
+      "tools_other": "{{count}} tools, {{asks}} ask before acting",
+      "synced": "checked {{when}}"
+    },
+    "tools": {
+      "none": "This server offers no tools yet.",
+      "lookup": "Looks up",
+      "asks": "Asks first",
+      "toggle": "Let Ollie use {{name}}",
+      "more_one": "Show {{count}} more",
+      "more_other": "Show {{count}} more",
+      "fewer": "Show fewer"
+    },
+    "category": {
+      "all": "All",
+      "issues": "Issues",
+      "docs": "Docs",
+      "chat": "Chat",
+      "crm": "CRM",
+      "payments": "Payments",
+      "files": "Files",
+      "automation": "Automation"
+    },
+    "auth": {
+      "oauth": "Sign in",
+      "token": "Access token",
+      "none": "No sign-in"
+    },
+    "connect": {
+      "title": "Connect {{name}}",
+      "connect": "Connect",
+      "signIn": "Continue to {{name}}",
+      "token": "Access token",
+      "tokenHint": "Stored encrypted. Only the server sees it.",
+      "tokenRequired": "Paste the access token.",
+      "createToken": "Create one",
+      "oauthHint": "You'll sign in to {{name}} and come back here. The sign-in is shared by the workspace.",
+      "leaving": "Opening {{name}}…",
+      "approval": "Ollie only looks things up on its own. Anything that creates or changes something waits for the person who asked to approve it."
+    },
+    "custom": {
+      "add": "Add by URL",
+      "name": "MCP server",
+      "server": "the server",
+      "title": "Connect an MCP server",
+      "description": "Any server that speaks the Model Context Protocol over HTTP.",
+      "url": "Server URL",
+      "urlHint": "Usually ends in /mcp or /sse.",
+      "nameLabel": "Name",
+      "namePlaceholder": "Shown to your team and in Ollie's approvals",
+      "auth": "Sign-in",
+      "cardTitle": "Any MCP server",
+      "cardBody": "Connect an internal tool or another product by its server URL."
+    },
+    "via": {
+      "oauth": "Account sign-in",
+      "token": "Access token"
+    }
   }
 }
