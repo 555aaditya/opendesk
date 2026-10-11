@@ -19,6 +19,9 @@ const (
 	// ceremony by jti; each ceremony is finished at most once.
 	PurposePasskeyLogin    = "passkey_login"
 	PurposePasskeyRegister = "passkey_register"
+	// PurposeAssistantApproval approves one proposed assistant action (jti), for the
+	// user (sub) and session (sid) it was proposed to; the action runs at most once.
+	PurposeAssistantApproval = "assistant_approval"
 )
 
 const (

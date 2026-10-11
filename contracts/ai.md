@@ -30,6 +30,7 @@ interface AISettings {
   assign_after_triage: boolean     // assign a ticket after auto-triage, attributed to ai (contracts/api.md "Triage"), default false
   auto_summarize: boolean          // keep a summary on tickets with 5+ messages, default false
   widget_answers: boolean          // answer bot in the chat widget, default false
+  assistant: boolean               // Jev, the assistant panel, default true
   tone: string                     // "friendly" | "professional" | "concise" | free text up to 200 chars
   reply_language: "customer" | "workspace"  // reply in the customer's language (default) or the workspace's
   instructions: string             // extra guidance for drafts, up to 2,000 chars
@@ -47,7 +48,7 @@ means English unless `instructions` name another language.
 
 | method | path | min role | credits | body → response |
 | --- | --- | --- | --- | --- |
-| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast}, embeddings: boolean, features: AISettings, costs: Record<string, number>}` |
+| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast}, embeddings: boolean, features: AISettings, costs: Record<string, number>, assistant_name: "Jev"}` |
 | PATCH | `/v1/ai/settings` | admin | 0 | `Partial<AISettings>` → `AISettings` |
 | POST | `/v1/tickets/{id}/ai/draft` | agent | 3 | `{instructions?: string, tone?: string}` → `{body_html, body_text, sources: KBSource[]}`; uses the thread, contact, saved replies and the top KB matches |
 | POST | `/v1/tickets/{id}/ai/summary` | viewer | 1 | `{}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; stored on the ticket (`custom.ai_summary`) and published as `ticket.updated` |
@@ -114,6 +115,92 @@ A summary also sets `custom.ai_sentiment`. `custom.ai_summary` is
 
 Messages and tickets also get `language` detection for free when triage runs
 (`custom.language`), which the web app uses for a "Translate" affordance.
+
+## Jev (the assistant)
+
+The AI has one name, **Jev**, exposed once as `assistant_name` in `GET /v1/ai/config`
+(`ai.AssistantName` in Go). The web app and emails read it from there. Everything the AI
+does is attributed to Jev: the assistant, auto-triage, widget answers and AI automation
+actions. Activities with `actor_type = "ai"` render as "Jev set priority to High" with the
+Jev mark as the actor avatar; when the AI acted for a person (`actor.user` set), the line
+still names Jev.
+
+Jev is an agent loop over tool use (Anthropic tool use; OpenAI-compatible `tools` as the
+fallback; a provider without tool support answers `501 ai_unsupported`). It needs a signed-in
+user (`kind = user`; API keys get `403`), viewer or above, AI on and `settings.ai.assistant`
+on (`403 assistant_off`). Conversations belong to one user in one workspace.
+
+| method | path | credits | body → response |
+| --- | --- | --- | --- |
+| GET | `/v1/assistant/sessions` | 0 | `?limit` → `{data: Session[]}` (the caller's, newest first) |
+| POST | `/v1/assistant/sessions` | 0 | `{title?}` → `Session` |
+| GET | `/v1/assistant/sessions/{id}` | 0 | → `{session, items: Item[], approval: Approval \| null}` |
+| PATCH | `/v1/assistant/sessions/{id}` | 0 | `{title}` → `Session` |
+| DELETE | `/v1/assistant/sessions/{id}` | 0 | → 204 |
+| POST | `/v1/assistant/sessions/{id}/messages` | 2 per model turn | `{text /* 1..8000 */, context?: PageContext}` → run (below) |
+| POST | `/v1/assistant/actions/{id}/decision` | 2 per model turn | `{decision: "approve" \| "deny", token}` → run |
+| GET | `/v1/assistant/tips` | 0 | → `{tips: Tip[]}` (counts only, never the model; 30/min, `Cache-Control: private, max-age=60`) |
+
+```ts
+interface Session { id: string; title: string; created_at: string; updated_at: string }
+interface PageContext { path?: string; page?: "inbox"|"view"|"ticket"|"contacts"|"kb"|"reports"|"settings"|"other";
+  folder?: string; view_id?: string; ticket_id?: string; filters?: Record<string, string> }
+interface Step { id: string; tool: string; label: string;
+  status: "running"|"done"|"error"|"awaiting_approval"|"approved"|"denied"|"expired";
+  summary?: string; refs?: Ref[]; action_id?: string }
+interface Ref { kind: "ticket"|"contact"|"article"|"view"|"automation"|"member"; id: string; label: string; number?: number }
+interface Preview { title: string; summary?: string; changes?: {field: string; from: string; to: string}[];
+  body?: string /* markdown, a reply or note */; targets?: Ref[]; total?: number; external?: boolean /* reaches a customer */ }
+interface Approval { action_id: string; call_id: string; tool: string; preview: Preview; token: string; expires_at: string }
+interface Item { role: "user"|"assistant"; text: string; steps: Step[]; context?: PageContext }
+interface Tip { key: string; text: string; prompt: string; severity: "high"|"medium"|"low"; count: number }
+```
+
+A run answers `text/event-stream` when asked (`Accept: text/event-stream`), otherwise one
+JSON `{session, text, steps, approval, status}`. Events, in order:
+
+| event | data |
+| --- | --- |
+| `session` | `Session` (messages only; the title is set from the first message) |
+| `text` | `{text}`, a delta of Jev's markdown |
+| `tool` | `Step`, sent when a tool starts and again when it ends (same `id`) |
+| `approval` | `Approval` |
+| `done` | `{status: "complete" \| "awaiting_approval"}` |
+| `error` | problem JSON; the stream ends |
+
+Limits: 30 messages per user per minute (`429`), at most 8 model steps and one write
+proposal per run, one run per conversation at a time (`409 assistant_busy`). Credits are
+checked before anything is stored (`402 no_credits`).
+
+Tools. Reads run directly; writes only propose. Every tool runs **through the public API
+in process, as the user**, so it gets exactly the user's role checks, validation, events
+and activities:
+
+- read: `search_tickets`, `get_ticket` (with its thread), `search_contacts`, `search_kb`,
+  `list_views` (views and queue counts), `get_report`, `list_labels_and_fields`, `list_team`
+  (members and open workload).
+- write (agent+): `update_ticket` (assignee, status, priority, labels, fields),
+  `bulk_update_tickets` (resolved to exact ticket ids when proposed, at most 50),
+  `add_note`, `draft_reply` (sent only on approval; `external: true`), `create_kb_draft`
+  (saved as a draft), `create_view` (personal); admin: `create_automation_draft` (saved
+  disabled). Tools the user's role cannot use are not offered to the model.
+
+Approvals:
+- A write is stored as an `assistant_actions` row (`pending`, 15 minutes) and the client
+  gets an `assistant_approval` token (`contracts/tokens.md`) bound to the action, the
+  user, the sign-in session and the workspace. The token reaches only the browser,
+  never the model, so a run cannot approve itself.
+- A decision claims the row atomically (`pending` and not expired), so it runs once
+  (`409 approval_not_pending` after); a wrong token is `403 approval_invalid`.
+- A new message expires a pending proposal; the model is told it was not made.
+- An approved write runs with the user's permissions, attributed `actor_type = "ai"` with
+  `actor.user` = the user, and is audit-logged as `assistant.action` (tool and status, not
+  content) with `data.actor = "ai"`. POSTs carry the idempotency key `assistant-<action id>`.
+
+Data: tool outputs are wrapped in `<tool_output>` data blocks and the page in a
+`<page_context>` block, with the same delimiter escaping as every other feature.
+Conversations are stored per user (`assistant_sessions`, `assistant_turns`); usage rows
+hold counts only.
 
 ## Automations
 

@@ -20,6 +20,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/opendesk/opendesk/internal/ai"
+	"github.com/opendesk/opendesk/internal/ai/assistant"
 	"github.com/opendesk/opendesk/internal/analytics"
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/billing"
@@ -57,6 +58,7 @@ var areas = []area{
 	{helpdesk.Register, helpdesk.RegisterWorkers, helpdesk.Periodic, helpdesk.Background},
 	{billing.Register, billing.RegisterWorkers, billing.Periodic, billing.Background},
 	{ai.Register, ai.RegisterWorkers, ai.Periodic, ai.Background},
+	{assistant.Register, assistant.RegisterWorkers, assistant.Periodic, assistant.Background},
 }
 
 // NewLogger returns a JSON logger in production and a text logger in development.

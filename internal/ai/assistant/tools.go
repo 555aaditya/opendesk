@@ -1,0 +1,448 @@
+package assistant
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/opendesk/opendesk/internal/ai"
+	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/opendesk/opendesk/internal/httpx"
+)
+
+// output is a tool's answer: Content for the model (always inside a data block),
+// Summary and Refs for the panel.
+type output struct {
+	Content string
+	Summary string
+	Refs    []Ref
+}
+
+// Preview is exactly what an approval card shows before a write runs.
+type Preview struct {
+	Title   string   `json:"title"`
+	Summary string   `json:"summary,omitempty"`
+	Changes []Change `json:"changes,omitempty"`
+	// Body is the text a note, reply or article will carry (markdown).
+	Body    string `json:"body,omitempty"`
+	Targets []Ref  `json:"targets,omitempty"`
+	// Total is how many tickets matched a bulk filter (Targets holds the capped set).
+	Total int `json:"total,omitempty"`
+	// External marks a change a customer will see (a reply).
+	External bool `json:"external,omitempty"`
+}
+
+// Change is one field of a diff.
+type Change struct {
+	Field string `json:"field"`
+	From  string `json:"from"`
+	To    string `json:"to"`
+}
+
+// runCtx is one run's view of the workspace, as the calling user.
+type runCtx struct {
+	svc  *Service
+	p    *auth.Principal
+	read *caller
+	page *PageContext
+	// members is loaded once per run, for assignee names.
+	members []member
+}
+
+type tool struct {
+	Name        string
+	Description string
+	Schema      map[string]any
+	// Write tools run only after an approval.
+	Write   bool
+	MinRole auth.Role
+	// Labels for the panel while running and when done.
+	Active, Done string
+	Read         func(ctx context.Context, rc *runCtx, in json.RawMessage) (output, error)
+	// Propose validates and resolves a write's arguments and describes it. It reads
+	// only; the stored args are what Apply later runs.
+	Propose func(ctx context.Context, rc *runCtx, in json.RawMessage) (any, Preview, error)
+	Apply   func(ctx context.Context, rc *runCtx, w *caller, args json.RawMessage, key string) (output, error)
+}
+
+// BulkCap is the most tickets one approved bulk action changes.
+const BulkCap = 50
+
+// --- schema helpers ----------------------------------------------------------------
+
+func obj(props map[string]any, required ...string) map[string]any {
+	m := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
+	if len(required) > 0 {
+		m["required"] = required
+	}
+	return m
+}
+func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
+func enum(desc string, vals ...string) map[string]any {
+	return map[string]any{"type": "string", "description": desc, "enum": vals}
+}
+func arr(desc string, items map[string]any) map[string]any {
+	return map[string]any{"type": "array", "description": desc, "items": items}
+}
+func integer(desc string, lo, hi int) map[string]any {
+	return map[string]any{"type": "integer", "description": desc, "minimum": lo, "maximum": hi}
+}
+
+var statuses = []string{"open", "pending", "on_hold", "solved", "closed"}
+var priorities = []string{"low", "normal", "high", "urgent"}
+
+func ticketFilterProps() map[string]any {
+	return map[string]any{
+		"query":          str("Full-text search over subjects and messages, or #number."),
+		"status":         arr("Statuses to include.", enum("", statuses...)),
+		"priority":       arr("Priorities to include.", enum("", priorities...)),
+		"assignee":       str(`"me", "none" for unassigned, or a teammate's name, email or user id.`),
+		"label":          str("A label name."),
+		"channel":        enum("Channel.", "email", "chat", "api", "portal"),
+		"created_after":  str("Only tickets created at or after this time: RFC 3339 or YYYY-MM-DD."),
+		"created_before": str("Only tickets created before this time: RFC 3339 or YYYY-MM-DD."),
+		"sla":            enum(`"breached" for tickets past an SLA target, "due_soon" for targets in the next hour.`, "breached", "due_soon"),
+		"view_id":        str("Apply a saved view's filters."),
+	}
+}
+
+// --- API shapes the tools read ----------------------------------------------------
+
+type userRef struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+type member struct {
+	User userRef `json:"user"`
+	Role string  `json:"role"`
+}
+
+type tagRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type ticket struct {
+	ID       string `json:"id"`
+	Number   int64  `json:"number"`
+	Subject  string `json:"subject"`
+	Status   string `json:"status"`
+	Priority string `json:"priority"`
+	Channel  string `json:"channel"`
+	Contact  *struct {
+		ID    string  `json:"id"`
+		Name  string  `json:"name"`
+		Email *string `json:"email"`
+	} `json:"contact"`
+	Assignee *userRef       `json:"assignee"`
+	TeamID   *string        `json:"team_id"`
+	Tags     []tagRef       `json:"tags"`
+	Fields   map[string]any `json:"fields"`
+	SLA      *struct {
+		FirstResponseDueAt *time.Time `json:"first_response_due_at"`
+		ResolutionDueAt    *time.Time `json:"resolution_due_at"`
+		Breached           bool       `json:"breached"`
+	} `json:"sla"`
+	FirstRespondedAt *time.Time     `json:"first_responded_at"`
+	LastMessageAt    time.Time      `json:"last_message_at"`
+	Preview          string         `json:"last_message_preview"`
+	MessageCount     int            `json:"message_count"`
+	CreatedAt        time.Time      `json:"created_at"`
+	Custom           map[string]any `json:"custom"`
+}
+
+type page[T any] struct {
+	Data       []T     `json:"data"`
+	NextCursor *string `json:"next_cursor"`
+}
+
+func (t ticket) ref() Ref {
+	return Ref{Kind: "ticket", ID: t.ID, Number: t.Number, Label: t.Subject}
+}
+
+// nextDue is the earliest open SLA target, and whether it has passed.
+func (t ticket) nextDue() (*time.Time, bool) {
+	if t.SLA == nil {
+		return nil, false
+	}
+	var due *time.Time
+	if t.FirstRespondedAt == nil && t.SLA.FirstResponseDueAt != nil {
+		due = t.SLA.FirstResponseDueAt
+	}
+	if t.SLA.ResolutionDueAt != nil && (due == nil || t.SLA.ResolutionDueAt.Before(*due)) {
+		due = t.SLA.ResolutionDueAt
+	}
+	return due, t.SLA.Breached || (due != nil && due.Before(time.Now()))
+}
+
+func (t ticket) line() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#%d [%s, %s, %s] %q", t.Number, t.Status, t.Priority, t.Channel, t.Subject)
+	if t.Contact != nil {
+		fmt.Fprintf(&b, "; customer: %s", t.Contact.Name)
+		if t.Contact.Email != nil && *t.Contact.Email != "" {
+			fmt.Fprintf(&b, " <%s>", *t.Contact.Email)
+		}
+	}
+	if t.Assignee != nil {
+		fmt.Fprintf(&b, "; assignee: %s", t.Assignee.Name)
+	} else {
+		b.WriteString("; unassigned")
+	}
+	if len(t.Tags) > 0 {
+		names := make([]string, 0, len(t.Tags))
+		for _, tg := range t.Tags {
+			names = append(names, tg.Name)
+		}
+		fmt.Fprintf(&b, "; labels: %s", strings.Join(names, ", "))
+	}
+	fmt.Fprintf(&b, "; created %s; last message %s", t.CreatedAt.UTC().Format(time.RFC3339), t.LastMessageAt.UTC().Format(time.RFC3339))
+	if due, breached := t.nextDue(); due != nil {
+		if breached {
+			fmt.Fprintf(&b, "; SLA breached (due %s)", due.UTC().Format(time.RFC3339))
+		} else {
+			fmt.Fprintf(&b, "; SLA due %s", due.UTC().Format(time.RFC3339))
+		}
+	}
+	fmt.Fprintf(&b, "; id %s", t.ID)
+	return b.String()
+}
+
+// --- helpers ------------------------------------------------------------------------
+
+func decode[T any](in json.RawMessage) (T, error) {
+	var v T
+	if len(in) == 0 {
+		in = json.RawMessage(`{}`)
+	}
+	if err := json.Unmarshal(in, &v); err != nil {
+		return v, httpx.Validation("the tool arguments are not valid: " + err.Error())
+	}
+	return v, nil
+}
+
+func parseTime(s string, endOfDay bool) (*time.Time, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return &t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		if endOfDay {
+			t = t.Add(24 * time.Hour)
+		}
+		return &t, nil
+	}
+	return nil, httpx.Validation("times must be RFC 3339 or YYYY-MM-DD: " + s)
+}
+
+func (rc *runCtx) loadMembers(ctx context.Context) ([]member, error) {
+	if rc.members != nil {
+		return rc.members, nil
+	}
+	var pg page[member]
+	if err := rc.read.get(ctx, "/v1/members", nil, &pg); err != nil {
+		return nil, err
+	}
+	rc.members = pg.Data
+	return rc.members, nil
+}
+
+// resolveAssignee turns "me", "none", a name, an email or an id into a user id
+// ("" for unassigned).
+func (rc *runCtx) resolveAssignee(ctx context.Context, raw string) (id string, name string, err error) {
+	v := strings.TrimSpace(raw)
+	switch strings.ToLower(v) {
+	case "":
+		return "", "", httpx.Validation("assignee is empty")
+	case "none", "unassigned", "nobody", "null":
+		return "", "Unassigned", nil
+	case "me", "myself":
+		v = rc.p.UserID.String()
+	}
+	ms, err := rc.loadMembers(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	lv := strings.ToLower(v)
+	var hits []member
+	for _, m := range ms {
+		if m.User.ID == v || strings.EqualFold(m.User.Email, v) || strings.EqualFold(m.User.Name, v) {
+			return m.User.ID, m.User.Name, nil
+		}
+		if strings.Contains(strings.ToLower(m.User.Name), lv) {
+			hits = append(hits, m)
+		}
+	}
+	if len(hits) == 1 {
+		return hits[0].User.ID, hits[0].User.Name, nil
+	}
+	if len(hits) > 1 {
+		return "", "", httpx.Validation(fmt.Sprintf("%q matches more than one teammate; use their email", raw))
+	}
+	return "", "", httpx.Validation(fmt.Sprintf("no teammate matches %q", raw))
+}
+
+func (rc *runCtx) getTicket(ctx context.Context, raw string) (ticket, error) {
+	ref, err := ticketRef(raw)
+	if err != nil {
+		return ticket{}, err
+	}
+	var t ticket
+	err = rc.read.get(ctx, "/v1/tickets/"+ref, nil, &t)
+	return t, err
+}
+
+type ticketFilter struct {
+	Query         string   `json:"query"`
+	Status        []string `json:"status"`
+	Priority      []string `json:"priority"`
+	Assignee      string   `json:"assignee"`
+	Label         string   `json:"label"`
+	Channel       string   `json:"channel"`
+	CreatedAfter  string   `json:"created_after"`
+	CreatedBefore string   `json:"created_before"`
+	SLA           string   `json:"sla"`
+	ViewID        string   `json:"view_id"`
+}
+
+func (f ticketFilter) empty() bool {
+	return f.Query == "" && len(f.Status) == 0 && len(f.Priority) == 0 && f.Assignee == "" && f.Label == "" &&
+		f.Channel == "" && f.CreatedAfter == "" && f.CreatedBefore == "" && f.SLA == "" && f.ViewID == ""
+}
+
+// findTickets lists tickets matching f through GET /v1/tickets, applying the time and
+// SLA filters the list route does not have. It scans at most scanMax tickets and
+// returns up to limit plus the number that matched in the scan.
+func (rc *runCtx) findTickets(ctx context.Context, f ticketFilter, limit, scanMax int) ([]ticket, int, error) {
+	q := url.Values{}
+	if s := strings.TrimSpace(f.Query); s != "" {
+		q.Set("q", s)
+	}
+	if len(f.Status) > 0 {
+		q.Set("status", strings.Join(f.Status, ","))
+	}
+	if len(f.Priority) > 0 {
+		q.Set("priority", strings.Join(f.Priority, ","))
+	}
+	if f.Assignee != "" {
+		switch strings.ToLower(strings.TrimSpace(f.Assignee)) {
+		case "me":
+			q.Set("assignee", "me")
+		case "none", "unassigned":
+			q.Set("assignee", "none")
+		default:
+			id, _, err := rc.resolveAssignee(ctx, f.Assignee)
+			if err != nil {
+				return nil, 0, err
+			}
+			q.Set("assignee", id)
+		}
+	}
+	if f.Label != "" {
+		q.Set("tag", f.Label)
+	}
+	if f.Channel != "" {
+		q.Set("channel", f.Channel)
+	}
+	if f.ViewID != "" {
+		id, err := idRef(f.ViewID, "view_id")
+		if err != nil {
+			return nil, 0, err
+		}
+		q.Set("view_id", id)
+	}
+	after, err := parseTime(f.CreatedAfter, false)
+	if err != nil {
+		return nil, 0, err
+	}
+	before, err := parseTime(f.CreatedBefore, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	if after != nil || before != nil {
+		q.Set("sort", "created_at")
+	}
+	q.Set("limit", "100")
+	var out []ticket
+	matched, scanned := 0, 0
+	for scanned < scanMax {
+		var pg page[ticket]
+		if err := rc.read.get(ctx, "/v1/tickets", q, &pg); err != nil {
+			return nil, 0, err
+		}
+		stop := false
+		for _, t := range pg.Data {
+			scanned++
+			if after != nil && t.CreatedAt.Before(*after) {
+				stop = true // sorted by created_at desc: everything after is older
+				break
+			}
+			if before != nil && !t.CreatedAt.Before(*before) {
+				continue
+			}
+			if f.SLA != "" {
+				due, breached := t.nextDue()
+				if t.Status == "solved" || t.Status == "closed" {
+					continue
+				}
+				if f.SLA == "breached" && !breached {
+					continue
+				}
+				if f.SLA == "due_soon" && (breached || due == nil || due.After(time.Now().Add(time.Hour))) {
+					continue
+				}
+			}
+			matched++
+			if len(out) < limit {
+				out = append(out, t)
+			}
+		}
+		if stop || pg.NextCursor == nil || len(pg.Data) == 0 {
+			break
+		}
+		q.Set("cursor", *pg.NextCursor)
+	}
+	return out, matched, nil
+}
+
+func block(tool string, body string) string {
+	return ai.DataBlock("tool_output", []string{"tool", tool}, body)
+}
+
+func clip(s string, n int) string {
+	r := []rune(strings.TrimSpace(s))
+	if len(r) <= n {
+		return string(r)
+	}
+	return strings.TrimSpace(string(r[:n])) + " […]"
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
+}
+
+func validEnum(vals []string, allowed []string, field string) error {
+	for _, v := range vals {
+		if !slices.Contains(allowed, v) {
+			return httpx.Validation(field + " must be one of " + strings.Join(allowed, ", "))
+		}
+	}
+	return nil
+}
+
+func uuidOK(s string) bool { _, err := uuid.Parse(s); return err == nil }

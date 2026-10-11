@@ -81,11 +81,16 @@ func (o *OpenAI) body(req Request, stream bool, mode int32) map[string]any {
 // do posts with retries on 429 and 5xx. A 400 on a JSON request steps the JSON mode
 // down (some servers support only json_object, or no response_format) and retries.
 func (o *OpenAI) do(ctx context.Context, req Request, stream bool) (*http.Response, error) {
+	return o.send(ctx, func(mode int32) map[string]any { return o.body(req, stream, mode) }, req.JSONSchema != nil, stream)
+}
+
+// send posts the body build returns for the current JSON mode, with retries.
+func (o *OpenAI) send(ctx context.Context, build func(mode int32) map[string]any, jsonReq, stream bool) (*http.Response, error) {
 	attempt := 0
 	for {
 		attempt++
 		mode := o.jsonMode.Load()
-		raw, _ := json.Marshal(o.body(req, stream, mode))
+		raw, _ := json.Marshal(build(mode))
 		hr, err := http.NewRequestWithContext(ctx, http.MethodPost, o.baseURL+"/chat/completions", bytes.NewReader(raw))
 		if err != nil {
 			return nil, ErrUnavailable
@@ -116,7 +121,7 @@ func (o *OpenAI) do(ctx context.Context, req Request, stream bool) (*http.Respon
 		}
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
 		res.Body.Close()
-		if res.StatusCode == http.StatusBadRequest && req.JSONSchema != nil && mode > 0 {
+		if res.StatusCode == http.StatusBadRequest && jsonReq && mode > 0 {
 			o.jsonMode.CompareAndSwap(mode, mode-1)
 			continue
 		}

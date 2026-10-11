@@ -63,6 +63,10 @@ type Principal struct {
 	Verified    bool      // visitors: identity signed by the customer's backend
 	IP          string
 	UserAgent   string
+	// Assistant marks a request the assistant makes for this user after they approved
+	// it: it runs with the user's own role and checks, and is attributed to ai on
+	// behalf of the user.
+	Assistant bool
 }
 
 func (p *Principal) HasScope(s string) bool { return slices.Contains(p.Scopes, s) }

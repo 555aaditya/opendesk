@@ -29,6 +29,10 @@ type Actor struct {
 }
 
 func actorOf(p *auth.Principal) Actor {
+	if p.Kind == auth.KindUser && p.Assistant {
+		uid := p.UserID
+		return Actor{Type: "ai", UserID: &uid}
+	}
 	if p.Kind == auth.KindUser {
 		uid := p.UserID
 		return Actor{Type: "user", UserID: &uid}

@@ -17,6 +17,16 @@ func Log(ctx context.Context, tx pgx.Tx, p *auth.Principal, wid uuid.UUID, actio
 	if data == nil {
 		data = map[string]any{}
 	}
+	if p != nil && p.Assistant {
+		// The assistant acted for the user, who approved it: the actor is ai, on
+		// behalf of actor_user_id.
+		tagged := make(map[string]any, len(data)+1)
+		for k, v := range data {
+			tagged[k] = v
+		}
+		tagged["actor"] = "ai"
+		data = tagged
+	}
 	var userID, keyID *uuid.UUID
 	ip := ""
 	if p != nil {

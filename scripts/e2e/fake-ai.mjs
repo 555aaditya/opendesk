@@ -1,5 +1,5 @@
 // A tiny OpenAI-compatible server for end-to-end runs: /v1/chat/completions
-// (plain, json_schema and SSE streaming) and /v1/embeddings. Answers are
+// (plain, json_schema, SSE streaming and tool calls) and /v1/embeddings. Answers are
 // deterministic and plausible, so every AI feature can be exercised without a
 // real provider. Usage: node fake-ai.mjs [port]  (default 9900)
 
@@ -77,6 +77,122 @@ function chunks(s) {
   return out;
 }
 
+// --- Tool calls (the assistant) ---------------------------------------------------
+// A request with `tools` gets a scripted agent: the user's words pick a tool call, and
+// tool results turn into a short markdown answer that cites what the tools returned.
+
+function textOf(m) {
+  if (typeof m?.content === "string") return m.content;
+  if (Array.isArray(m?.content)) return m.content.map((p) => p.text ?? "").join("");
+  return "";
+}
+
+function daysAgo(n) {
+  const d = new Date(Date.now() - n * 86400000);
+  return d.toISOString().slice(0, 10);
+}
+
+function planCall(user, tools) {
+  const has = (n) => tools.includes(n);
+  const said = user.replace(/<page_context>[\s\S]*?<\/page_context>/, "").toLowerCase();
+  const open = user.match(/open ticket: #(\d+)/)?.[1];
+  const num = said.match(/#(\d+)/)?.[1] ?? open;
+  if (/\blabel\b|\btag\b/.test(said) && has("bulk_update_tickets")) {
+    const label = said.match(/label (?:all )?(\w+)/)?.[1] ?? "billing";
+    return { name: "bulk_update_tickets", args: { filter: { query: label === "all" ? "billing" : label, created_after: daysAgo(7) }, changes: { add_labels: [label === "all" ? "billing" : label] } } };
+  }
+  if (/\bassign\b|take this/.test(said) && num && has("update_ticket")) {
+    return { name: "update_ticket", args: { ticket: `#${num}`, assignee: "me", priority: "high" } };
+  }
+  if (/\breply\b|\brespond\b|\bdraft\b/.test(said) && num && has("draft_reply")) {
+    return { name: "draft_reply", args: { ticket: `#${num}`, body: "Hi there,\n\nThanks for your patience. I have looked into this and **a fix is on its way**. I will follow up as soon as it is live.\n\nThanks again", status: "pending" } };
+  }
+  if (/\bnote\b/.test(said) && num && has("add_note")) {
+    return { name: "add_note", args: { ticket: `#${num}`, body: "Checked with billing: the duplicate charge is refunded within 3 to 5 days." } };
+  }
+  if (/who should/.test(said)) return { name: "list_team", args: {} };
+  if (/summar|this ticket|what.*about/.test(said) && num) return { name: "get_ticket", args: { ticket: `#${num}` } };
+  if (/sla|breach|urgent/.test(said)) return { name: "search_tickets", args: { status: ["open", "pending"], sla: /breach/.test(said) ? "breached" : undefined, priority: /urgent/.test(said) ? ["urgent", "high"] : undefined, limit: 8 } };
+  if (/unassigned/.test(said)) return { name: "search_tickets", args: { assignee: "none", status: ["open"], limit: 8 } };
+  if (/report|stat|how are we|volume|csat/.test(said)) return { name: "get_report", args: {} };
+  if (/article|knowledge|kb/.test(said)) return { name: "search_kb", args: { query: said.replace(/[^a-z ]/g, "").split(" ").filter((w) => w.length > 3).slice(-2).join(" ") || "password" } };
+  if (/customer|contact/.test(said)) return { name: "search_contacts", args: { query: said.match(/(?:customer|contact) (\w+)/)?.[1] ?? "a" } };
+  if (/hello|hi\b|hey|thanks/.test(said)) return null;
+  return { name: "search_tickets", args: { query: said.replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 3).slice(0, 2).join(" "), limit: 8 } };
+}
+
+function answerFrom(results) {
+  const all = results.join("\n");
+  if (/declined/.test(all)) return "No problem, I left it as it was. Want me to try something else?";
+  if (/not made/.test(all)) return "Got it, I dropped that change.";
+  if (/failed:/.test(all)) return `That did not go through: ${all.match(/failed: ([^\n<]*)/)?.[1] ?? "an error"}.`;
+  if (/^Error:|Not proposed:/m.test(all)) return `I could not do that: ${all.match(/(?:Error|Not proposed): ([^\n<]*)/)?.[1] ?? "an error"}`;
+  const done = all.match(/(Updated[^\n<]*|Added a note[^\n<]*|Sent the reply[^\n<]*|Created[^\n<]*)/);
+  if (done) return `Done. ${done[1].split(";")[0].replace(/^Updated: /, "Updated ").replace(/ \[[^\]]*\]/, "")}.`;
+  const rows = [...all.matchAll(/#(\d+) \[([^\]]+)\] "([^"]*)"(?:; customer: ([^;<]+))?/g)].slice(0, 5);
+  const team = [...all.matchAll(/^(.+?) <[^>]+>(?: \(the user\))?, (\w+): (\d+) open/gm)];
+  if (team.length) {
+    const least = [...team].sort((a, b) => Number(a[3]) - Number(b[3]))[0];
+    return `**${least[1]}** has the lightest queue right now (${least[3]} open), so they are a good fit.\n\n${team.slice(0, 4).map((t) => `- ${t[1]}: ${t[3]} open`).join("\n")}`;
+  }
+  if (/--- (message|internal note)/.test(all) && rows.length) {
+    const r = rows[0];
+    return `**#${r[1]} ${r[3]}** is ${r[2].split(",")[0]} with ${r[2].split(",")[1]?.trim()} priority${r[4] ? `, from ${r[4].trim()}` : ""}.\n\n- The customer is waiting on a clear next step.\n- Nothing in the thread is blocked on them.\n\nWant me to draft a reply?`;
+  }
+  if (rows.length) {
+    const n = all.match(/(\d+) tickets matched/)?.[1] ?? rows.length;
+    return `I found **${n}** matching tickets. The top ones:\n\n${rows.map((r) => `- #${r[1]} ${r[3]} (${r[2].split(",").slice(0, 2).map((x) => x.trim()).join(", ")})`).join("\n")}`;
+  }
+  if (/overview:/.test(all)) {
+    const created = all.match(/"created":(\d+)/)?.[1] ?? "0";
+    const solved = all.match(/"solved":(\d+)/)?.[1] ?? "0";
+    return `In the last 30 days you received **${created}** tickets and solved **${solved}**.`;
+  }
+  if (/No (contacts|articles) matched/.test(all)) return "I did not find anything for that.";
+  return "Here is what I found. Anything you want me to do with it?";
+}
+
+function agentTurn(j) {
+  const msgs = j.messages ?? [];
+  const tools = (j.tools ?? []).map((t) => t.function?.name);
+  const last = msgs[msgs.length - 1];
+  if (last?.role === "tool") {
+    const results = [];
+    for (let i = msgs.length - 1; i >= 0 && msgs[i].role === "tool"; i--) results.unshift(textOf(msgs[i]));
+    return { text: answerFrom(results) };
+  }
+  const call = planCall(textOf(last), tools);
+  if (!call) return { text: "Hi! I am Jev. Ask me about your queue, a ticket or your numbers." };
+  const lead = { get_ticket: "Let me read that ticket.", list_team: "Checking the team's workload.", bulk_update_tickets: "I will prepare that change.", update_ticket: "Preparing the change.", draft_reply: "Here is a draft.", add_note: "Adding a note." }[call.name] ?? "Let me look.";
+  return { text: lead, call: { id: `call_${Math.random().toString(36).slice(2, 10)}`, ...call } };
+}
+
+async function sendAgent(res, j) {
+  const turn = agentTurn(j);
+  if (!j.stream) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    const message = { role: "assistant", content: turn.text };
+    if (turn.call) message.tool_calls = [{ id: turn.call.id, type: "function", function: { name: turn.call.name, arguments: JSON.stringify(turn.call.args) } }];
+    res.end(JSON.stringify({ model: j.model, choices: [{ index: 0, message, finish_reason: turn.call ? "tool_calls" : "stop" }], usage: { prompt_tokens: 300, completion_tokens: 60 } }));
+    return;
+  }
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+  for (const c of chunks(turn.text)) {
+    res.write(`data: ${JSON.stringify({ model: j.model, choices: [{ index: 0, delta: { content: c } }] })}\n\n`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  if (turn.call) {
+    const args = JSON.stringify(turn.call.args);
+    res.write(`data: ${JSON.stringify({ model: j.model, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: turn.call.id, type: "function", function: { name: turn.call.name, arguments: "" } }] } }] })}\n\n`);
+    for (let i = 0; i < args.length; i += 20) {
+      res.write(`data: ${JSON.stringify({ model: j.model, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: args.slice(i, i + 20) } }] } }] })}\n\n`);
+    }
+  }
+  res.write(`data: ${JSON.stringify({ model: j.model, choices: [{ index: 0, delta: {}, finish_reason: turn.call ? "tool_calls" : "stop" }] })}\n\n`);
+  res.write(`data: ${JSON.stringify({ model: j.model, choices: [], usage: { prompt_tokens: 300, completion_tokens: 60 } })}\n\n`);
+  res.end("data: [DONE]\n\n");
+}
+
 const server = http.createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
@@ -95,6 +211,10 @@ const server = http.createServer((req, res) => {
     }
     if (!req.url?.endsWith("/chat/completions")) {
       res.writeHead(404).end();
+      return;
+    }
+    if (Array.isArray(j.tools) && j.tools.length) {
+      await sendAgent(res, j);
       return;
     }
     const messages = j.messages ?? [];

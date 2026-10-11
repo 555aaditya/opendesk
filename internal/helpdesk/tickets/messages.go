@@ -210,7 +210,11 @@ func postMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 	if err := hd.CheckAttachments(ctx, tx, wid, attIDs, nil); err != nil {
 		return domain.Message{}, err
 	}
-	nm := domain.NewMessage{WorkspaceID: wid, TicketID: tid, Kind: b.Kind, Direction: "outbound", AuthorType: actor.Type,
+	authorType := actor.Type
+	if authorType == "ai" {
+		authorType = "user" // the assistant writes on the user's behalf, after their approval
+	}
+	nm := domain.NewMessage{WorkspaceID: wid, TicketID: tid, Kind: b.Kind, Direction: "outbound", AuthorType: authorType,
 		AuthorUserID: actor.UserID, BodyHTML: bodyHTML, BodyText: bodyText, Subject: replySubject(subject), AttachmentIDs: attIDs}
 	if b.Kind == "reply" && channel == domain.ChannelEmail {
 		if contactEmail == nil || *contactEmail == "" {

@@ -32,6 +32,9 @@ type AIConfig struct {
 	Embeddings bool           `json:"embeddings"`
 	Features   hd.AISettings  `json:"features"`
 	Costs      map[string]int `json:"costs"`
+	// AssistantName is the name AI acts under: the assistant, and the actor of every
+	// change AI makes.
+	AssistantName string `json:"assistant_name"`
 }
 
 func (s *Service) register(api huma.API) {
@@ -48,7 +51,7 @@ func (s *Service) register(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			out := AIConfig{Enabled: s.Enabled(), Provider: "none", Features: st.AI(), Costs: map[string]int{}}
+			out := AIConfig{Enabled: s.Enabled(), Provider: "none", Features: st.AI(), Costs: map[string]int{}, AssistantName: AssistantName}
 			for k, v := range plan.Costs {
 				out.Costs[k] = v
 			}

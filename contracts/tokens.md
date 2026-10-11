@@ -13,6 +13,7 @@ and a consumer accepts exactly one purpose. `exp` is required.
 | `oauth_state`| OAuth start endpoints         | 10 min   | OAuth callbacks                 |
 | `passkey_login` | `POST /v1/auth/passkey/login/begin` | 5 min | `POST /v1/auth/passkey/login/finish` |
 | `passkey_register` | `POST /v1/me/passkeys/register/begin` | 5 min | `POST /v1/me/passkeys/register/finish` |
+| `assistant_approval` | a Jev run's `approval` event | 15 min | `POST /v1/assistant/actions/{id}/decision` |
 
 ## Claims
 
@@ -28,6 +29,7 @@ and a consumer accepts exactly one purpose. `exp` is required.
 // passkey_register is bound to the user (sub) and the session (sid) that began it.
 { "purpose": "passkey_login", "jti": "<uuid>", "iat": 0, "exp": 0 }
 { "purpose": "passkey_register", "sub": "<user_id>", "sid": "<session_id>", "jti": "<uuid>", "iat": 0, "exp": 0 }
+{ "purpose": "assistant_approval", "sub": "<user_id>", "sid": "<session_id>", "wid": "<workspace_id>", "jti": "<action_id>", "iat": 0, "exp": 0 }
 
 // ws (agent / API-key socket)
 { "purpose": "ws", "sub": "<user_id or api_key_id>", "kind": "user" | "api_key",

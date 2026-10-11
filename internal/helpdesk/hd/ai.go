@@ -22,10 +22,12 @@ import (
 
 // AISettings lives in workspaces.settings.ai (contracts/ai.md).
 type AISettings struct {
-	Enabled       bool   `json:"enabled"`
-	AutoTriage    bool   `json:"auto_triage"`
-	AutoSummarize bool   `json:"auto_summarize"`
-	WidgetAnswers bool   `json:"widget_answers"`
+	Enabled       bool `json:"enabled"`
+	AutoTriage    bool `json:"auto_triage"`
+	AutoSummarize bool `json:"auto_summarize"`
+	WidgetAnswers bool `json:"widget_answers"`
+	// Assistant offers the assistant panel (Jev) to the workspace's members.
+	Assistant     bool   `json:"assistant"`
 	Tone          string `json:"tone"`
 	ReplyLanguage string `json:"reply_language" enum:"customer,workspace"`
 	Instructions  string `json:"instructions"`
@@ -33,7 +35,7 @@ type AISettings struct {
 
 // DefaultAISettings apply to keys a workspace has not set.
 func DefaultAISettings() AISettings {
-	return AISettings{Enabled: true, Tone: "friendly", ReplyLanguage: "customer"}
+	return AISettings{Enabled: true, Assistant: true, Tone: "friendly", ReplyLanguage: "customer"}
 }
 
 // AI returns the workspace's AI settings with defaults for unset keys.
@@ -51,6 +53,7 @@ func (s Settings) AI() AISettings {
 			field("auto_triage", &a.AutoTriage)
 			field("auto_summarize", &a.AutoSummarize)
 			field("widget_answers", &a.WidgetAnswers)
+			field("assistant", &a.Assistant)
 			field("tone", &a.Tone)
 			field("reply_language", &a.ReplyLanguage)
 			field("instructions", &a.Instructions)
@@ -71,6 +74,7 @@ type AISettingsPatch struct {
 	AutoTriage    *bool   `json:"auto_triage,omitempty"`
 	AutoSummarize *bool   `json:"auto_summarize,omitempty"`
 	WidgetAnswers *bool   `json:"widget_answers,omitempty"`
+	Assistant     *bool   `json:"assistant,omitempty"`
 	Tone          *string `json:"tone,omitempty" maxLength:"200" doc:"friendly, professional, concise, or free text up to 200 characters"`
 	ReplyLanguage *string `json:"reply_language,omitempty" enum:"customer,workspace"`
 	Instructions  *string `json:"instructions,omitempty" maxLength:"2000"`
@@ -93,6 +97,9 @@ func ValidateAIPatch(p AISettingsPatch) (map[string]any, error) {
 	}
 	if p.WidgetAnswers != nil {
 		out["widget_answers"] = *p.WidgetAnswers
+	}
+	if p.Assistant != nil {
+		out["assistant"] = *p.Assistant
 	}
 	if p.Tone != nil {
 		t := strings.Join(strings.Fields(*p.Tone), " ")

@@ -181,7 +181,7 @@ func (s *Service) WidgetAnswer(ctx context.Context, a jobs.AIWidgetAnswerArgs) e
 		}
 		m, err := domain.AddMessage(ctx, tx, s.d.Jobs, domain.NewMessage{WorkspaceID: a.WorkspaceID, TicketID: a.TicketID,
 			Kind: "reply", Direction: "outbound", AuthorType: "system", BodyHTML: body, BodyText: hd.HTMLToText(body),
-			Subject: t.Subject, Trigger: "none", AI: true})
+			Subject: t.Subject, Trigger: "none", AI: true, FromName: AssistantName})
 		if err != nil {
 			return err
 		}
