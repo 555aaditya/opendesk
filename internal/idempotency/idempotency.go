@@ -51,6 +51,7 @@ const (
 var skipPrefixes = []string{
 	"/v1/auth/",
 	"/v1/me/password",
+	"/v1/me/passkeys/register/",
 	"/v1/realtime/token",
 	"/v1/inbound/",
 	"/v1/billing/stripe/",

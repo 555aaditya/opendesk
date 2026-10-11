@@ -48,6 +48,7 @@ type coreAuthConfig struct {
 	Providers        []coreAuthProvider `json:"providers"`
 	PasswordLogin    bool               `json:"password_login"`
 	SignupEnabled    bool               `json:"signup_enabled"`
+	Passkeys         bool               `json:"passkeys" doc:"Passkey sign-in is available"`
 	TurnstileSiteKey *string            `json:"turnstile_site_key"`
 }
 
@@ -71,7 +72,8 @@ func (s *svc) registerAuth(api huma.API) {
 	register(s, api, huma.Operation{OperationID: "auth-config", Method: http.MethodGet, Path: "/v1/auth/config",
 		Summary: "Sign-in options", Tags: tags, Security: []map[string][]string{}},
 		func(ctx context.Context, _ *struct{}) (*struct{ Body coreAuthConfig }, error) {
-			c := coreAuthConfig{Providers: []coreAuthProvider{}, PasswordLogin: true, SignupEnabled: s.d.Cfg.SignupEnabled}
+			c := coreAuthConfig{Providers: []coreAuthProvider{}, PasswordLogin: true, SignupEnabled: s.d.Cfg.SignupEnabled,
+				Passkeys: s.webauthn != nil}
 			for _, p := range s.oauth.list {
 				c.Providers = append(c.Providers, coreAuthProvider{ID: p.id, Name: p.name})
 			}

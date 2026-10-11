@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
@@ -24,11 +25,13 @@ type svc struct {
 	oauth  *oauthProviders
 	hooks  *http.Client // SSRF-guarded client for webhook deliveries
 	devURL bool         // development instance: webhooks may target http://localhost
+	// webauthn is the passkey relying party derived from APP_URL; nil turns passkeys off.
+	webauthn *webauthn.WebAuthn
 }
 
 func newSvc(d *deps.Deps) *svc {
 	dev := !d.Cfg.IsProduction()
-	return &svc{d: d, oauth: newOAuthProviders(d.Cfg), hooks: webhookClient(dev), devURL: dev}
+	return &svc{d: d, oauth: newOAuthProviders(d.Cfg), hooks: webhookClient(dev), devURL: dev, webauthn: newWebAuthn(d.Cfg)}
 }
 
 // reqInfo is what anonymous handlers need from the raw request.

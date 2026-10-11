@@ -193,6 +193,7 @@ func (w *cleanupWorker) Work(ctx context.Context, _ *river.Job[cleanupArgs]) err
 		`DELETE FROM invitations WHERE expires_at < now() - interval '30 days'`,
 		`DELETE FROM webhook_deliveries WHERE created_at < now() - interval '30 days'`,
 		`DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`,
+		`DELETE FROM passkey_challenges WHERE expires_at < now()`,
 	} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			return err

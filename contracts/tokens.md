@@ -11,12 +11,23 @@ and a consumer accepts exactly one purpose. `exp` is required.
 | `widget_ws`  | `POST /v1/widget/session`     | 5 min    | Elixir gateway (socket connect) |
 | `mfa`        | login when TOTP is enabled    | 5 min    | `POST /v1/auth/mfa`             |
 | `oauth_state`| OAuth start endpoints         | 10 min   | OAuth callbacks                 |
+| `passkey_login` | `POST /v1/auth/passkey/login/begin` | 5 min | `POST /v1/auth/passkey/login/finish` |
+| `passkey_register` | `POST /v1/me/passkeys/register/begin` | 5 min | `POST /v1/me/passkeys/register/finish` |
 
 ## Claims
 
 ```jsonc
 // access
 { "purpose": "access", "sub": "<user_id>", "sid": "<session_id>", "mfa": true, "iat": 0, "exp": 0 }
+
+// access.mfa is true when the session passed a second factor: TOTP or a recovery code
+// after the first factor, or a user-verified passkey on its own.
+
+// passkey_login / passkey_register: jti names the pending WebAuthn ceremony stored
+// server-side (challenge, expiry); finishing deletes it, so each token works once.
+// passkey_register is bound to the user (sub) and the session (sid) that began it.
+{ "purpose": "passkey_login", "jti": "<uuid>", "iat": 0, "exp": 0 }
+{ "purpose": "passkey_register", "sub": "<user_id>", "sid": "<session_id>", "jti": "<uuid>", "iat": 0, "exp": 0 }
 
 // ws (agent / API-key socket)
 { "purpose": "ws", "sub": "<user_id or api_key_id>", "kind": "user" | "api_key",

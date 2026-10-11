@@ -1,7 +1,7 @@
 // Package core is the core area. Register wires its HTTP routes, RegisterWorkers its
 // River workers, Periodic its scheduled jobs and Background its long-running loops.
 //
-// Core owns accounts and sign-in (password, OAuth/OIDC, TOTP), sessions, workspaces,
+// Core owns accounts and sign-in (password, OAuth/OIDC, TOTP, passkeys), sessions, workspaces,
 // members, invitations, teams, API keys, webhooks, the audit log, notifications, the
 // events replay API and realtime tokens.
 package core
@@ -24,6 +24,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	s.registerAuth(api)
 	s.registerOAuth(api, r)
 	s.registerTOTP(api)
+	s.registerPasskeys(api)
 	s.registerMe(api)
 	s.registerWorkspaces(api)
 	s.registerMembers(api)

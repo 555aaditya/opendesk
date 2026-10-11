@@ -21,7 +21,7 @@ it exists, and this file is the contract the parts are built against.
   workspace and principal. A retry with the same key, route and body replays the stored response with
   `Idempotent-Replayed: true`; a different body or route is `422 idempotency_key_reused`, a retry while the first
   is running `409 idempotency_in_progress`. `5xx`, `429`, streamed and >1 MiB responses are not stored. Not
-  applied to `/v1/auth/*`, `/v1/me/password`, `/v1/realtime/token`, inbound, Stripe, widget and public routes.
+  applied to `/v1/auth/*`, `/v1/me/password`, `/v1/me/passkeys/register/*`, `/v1/realtime/token`, inbound, Stripe, widget and public routes.
 - Rate limits: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` headers.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
   (mailboxes, members, api keys, webhooks, automations, sla, widget settings) need `admin`.
@@ -103,7 +103,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 ### Auth and account (owner: backend-core)
 | method | path | body → response |
 | --- | --- | --- |
-| GET | `/v1/auth/config` | → `{ providers: [{id:"google"|"microsoft"|"github"|"oidc", name}], password_login: bool, signup_enabled: bool, turnstile_site_key: string \| null }` |
+| GET | `/v1/auth/config` | → `{ providers: [{id:"google"|"microsoft"|"github"|"oidc", name}], password_login: bool, signup_enabled: bool, passkeys: bool, turnstile_site_key: string \| null }`. `passkeys` is true when passkey sign-in is available |
 | POST | `/v1/auth/register` | `{email,password,name,turnstile_token?,invite_token?}` → `{access_token, expires_in, user}` + refresh cookie. `409 email_taken`. With signup off, only a valid `invite_token` for the same email may register (`403 signup_disabled`); an invite token also marks the email verified |
 | POST | `/v1/auth/login` | `{email,password,turnstile_token?}` → `{access_token, expires_in, user}` or `{mfa_required:true, mfa_token}` |
 | POST | `/v1/auth/mfa` | `{mfa_token, code}` → `{access_token, expires_in, user, redirect_to?}`. `code` is a 6-digit TOTP code or a recovery code (`xxxx-xxxx-xxxx-xxxx`) |
@@ -117,6 +117,8 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/auth/oauth/{provider}/callback` | → 302 to `APP_URL/auth/callback?code=<one-time>` or `?error=` |
 | POST | `/v1/auth/oauth/exchange` | `{code}` → `{access_token, expires_in, user, redirect_to?}` or `{mfa_required, mfa_token, redirect_to?}` or `{link_required: true, link_token, email, redirect_to?}` when the provider's verified email belongs to an existing password account |
 | POST | `/v1/auth/oauth/link` | `{link_token, password}` → same as exchange (tokens or `mfa_required`). Binds the provider identity after the account password is presented; `401 invalid_credentials` on a wrong password (the link token stays usable for 10 min) |
+| POST | `/v1/auth/passkey/login/begin` | `{}` → `{options: PublicKeyCredentialRequestOptionsJSON, passkey_token}`. Discoverable (no `allowCredentials`), so no email is needed and conditional UI works. `passkey_token` is single use, 5 min |
+| POST | `/v1/auth/passkey/login/finish` | `{passkey_token, credential: AuthenticationResponseJSON}` → same as `/v1/auth/login` (`{access_token, expires_in, user}` + refresh cookie). A user-verified passkey is a complete multi-factor sign-in (the session counts as having passed 2FA); without user verification an account with 2FA on answers `{mfa_required:true, mfa_token}`. `401 invalid_credentials` for every refused attempt (unknown passkey, bad signature, spent or wrong token, sign counter not advancing) |
 | POST | `/v1/auth/totp/setup` | → `{secret, otpauth_url}` |
 | POST | `/v1/auth/totp/enable` | `{code}` → `{recovery_codes: string[]}` |
 | POST | `/v1/auth/totp/disable` | `{code}` → 204 |
@@ -124,6 +126,11 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | PATCH | `/v1/me` | `{name?, avatar_url?}` → `User` |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
 | GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current}]` / revoke |
+| GET | `/v1/me/passkeys` | paginated `Passkey[]`, newest first. `Passkey = {id, name, created_at, last_used_at: string \| null, backed_up: bool}` |
+| POST | `/v1/me/passkeys/register/begin` | `{}` → `{options: PublicKeyCredentialCreationOptionsJSON, passkey_token}` (resident key required, user verification preferred, no attestation, the account's passkeys in `excludeCredentials`). Same gate as owner-level operations (`403 mfa_required`, `403 reauth_required`); `409 passkey_limit` at 25 passkeys |
+| POST | `/v1/me/passkeys/register/finish` | `{passkey_token, credential: RegistrationResponseJSON, name?}` → 201 `Passkey`. `name` defaults to `"Passkey"`. `400 invalid_passkey` when the token is spent, expired or from another session, or the credential does not verify; `409 passkey_exists` |
+| PATCH | `/v1/me/passkeys/{id}` | `{name}` → `Passkey` |
+| DELETE | `/v1/me/passkeys/{id}` | → 204 |
 | DELETE | `/v1/me` | `{password?, code?}` → 204. `password` when the account has one, `code` when 2FA is on. Deletes the account and every workspace it solely owns (`409 sole_owner` while owner of a workspace with other members) |
 
 ### Workspace (owner: backend-core)
@@ -159,6 +166,11 @@ Core notes:
 - Owner-level operations (`DELETE /v1/workspace`, `/v1/workspace/transfer`, `/v1/workspace/widget-secret/rotate`,
   `/v1/auth/totp/disable`) answer `403 mfa_required` when 2FA is on but this session did not pass it, and
   `403 reauth_required` when the session is older than 12 hours (sign in again).
+- Passkeys: the relying party ID is the host of `APP_URL` and the accepted origin is `APP_URL`'s scheme and host. Options and
+  responses use the WebAuthn JSON forms (base64url without padding), as `@simplewebauthn/browser` sends and expects. The
+  user handle is the user id's 16 bytes. Passkey ids from other accounts answer `404`. Adding and removing a passkey is
+  audit-logged (`passkey.added`, `passkey.removed`); a passkey sign-in logs `login` with `method: "passkey"`, a refused one
+  `login.failed`. Deleting the account deletes its passkeys.
 - Member rules: owners change and remove anyone but themselves; admins manage agents and viewers; only the owner grants
   `admin`; `owner` moves only by transfer. `DELETE /v1/members/{own id}` leaves (owner: `409 owner_cannot_leave`).
 - `POST /v1/invitations/accept` needs the signed-in user's email to equal the invited one (`403 invitation_email_mismatch`).

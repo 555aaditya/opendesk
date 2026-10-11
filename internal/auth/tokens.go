@@ -15,6 +15,10 @@ const (
 	PurposeWidgetWS   = "widget_ws"
 	PurposeMFA        = "mfa"
 	PurposeOAuthState = "oauth_state"
+	// PurposePasskeyLogin and PurposePasskeyRegister reference a pending WebAuthn
+	// ceremony by jti; each ceremony is finished at most once.
+	PurposePasskeyLogin    = "passkey_login"
+	PurposePasskeyRegister = "passkey_register"
 )
 
 const (
@@ -23,6 +27,7 @@ const (
 	WSTTL         = 5 * time.Minute
 	MFATTL        = 5 * time.Minute
 	OAuthStateTTL = 10 * time.Minute
+	PasskeyTTL    = 5 * time.Minute
 )
 
 // Claims is the union of fields used across purposes.
