@@ -1,0 +1,20 @@
+# Secret scanning for CI. Extends the default rules and allows only the
+# documentation placeholders and fixtures below; anything else fails the build.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation placeholders and test fixtures"
+regexes = [
+  '''od_live_(\.\.\.|3q2\.\.\.xYz)''',
+  '''fn_live_\.\.\.''',
+  '''\$\$S3_ACCESS_KEY_ID:\$\$S3_SECRET_ACCESS_KEY''',
+  '''eyJhbGciOiJIUzI1NiIs\.\.\.''',
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
+  '''6f1c9a2e-8a8e-4c4e-9f0b-2b6a1d7e4c10''',
+  '''6f1c2b7e-0d4a-4f8e-9b1a-2c3d4e5f6a7b''',
+]
+paths = [
+  '''internal/auth/passwords/breached\.txt''',
+  '''(^|/)pnpm-lock\.yaml$''',
+]

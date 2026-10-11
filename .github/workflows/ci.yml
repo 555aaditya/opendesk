@@ -126,6 +126,7 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://opendesk:opendesk@127.0.0.1:5432/opendesk_test?sslmode=disable
       OPENDESK_TEST_DATABASE_URL: postgres://opendesk:opendesk@127.0.0.1:5432/opendesk_test?sslmode=disable
+      BILLING_TEST_DATABASE_URL: postgres://opendesk:opendesk@127.0.0.1:5432/opendesk_test?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -147,13 +148,26 @@ jobs:
         run: go vet ./...
       - name: go build
         run: go build ./...
+      # The packages share one test database, so they run one at a time.
       - name: go test
-        run: go test -race -count=1 ./...
+        run: go test -race -p 1 -count=1 ./...
       - name: govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
         with:
           go-version-file: go.mod
           go-package: ./...
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # The CLI from the official image, so no licence key is needed for an org.
+      - name: gitleaks
+        run: docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.28.0 git /repo --no-banner --redact --config /repo/.gitleaks.toml
 
   migrations:
     name: Migrations
@@ -495,7 +509,7 @@ jobs:
   ci-status:
     name: CI status
     runs-on: ubuntu-latest
-    needs: [changes, go, migrations, web, site, docs, realtime, images, installer, terraform, cloudflare, neon-branch]
+    needs: [changes, secrets, go, migrations, web, site, docs, realtime, images, installer, terraform, cloudflare, neon-branch]
     if: always()
     steps:
       # The one check to require in branch protection. Skipped jobs pass;
