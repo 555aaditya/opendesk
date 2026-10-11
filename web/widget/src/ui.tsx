@@ -42,10 +42,32 @@ export function App({ c }: { c: Controller }) {
   const [live, setLive] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [drag, setDrag] = useState(false);
+  // The panel stays mounted for its exit, so closing eases out instead of vanishing.
+  const [shown, setShown] = useState(s.open);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     c.announce = setLive;
   }, [c]);
+
+  useEffect(() => {
+    if (s.open) {
+      setShown(true);
+      setLeaving(false);
+      return;
+    }
+    if (!shown) return;
+    if (reducedMotion()) {
+      setShown(false);
+      return;
+    }
+    setLeaving(true);
+    const id = setTimeout(() => {
+      setShown(false);
+      setLeaving(false);
+    }, 160);
+    return () => clearTimeout(id);
+  }, [s.open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Focus moves into the panel when it opens and back to the launcher when it closes.
   const wasOpen = useRef(false);
@@ -94,11 +116,12 @@ export function App({ c }: { c: Controller }) {
       <div class="sr" aria-live="polite">
         {live}
       </div>
-      {s.open && (
+      {(s.open || shown) && (
         <div
           ref={panel}
-          class="panel"
+          class={`panel${!s.open && leaving ? " leaving" : ""}`}
           role="dialog"
+          aria-hidden={!s.open || undefined}
           aria-label={t("chatWith", { name: s.config?.workspace_name ?? t("support") })}
           onKeyDown={onKey}
           onDragOver={(e) => {
@@ -241,11 +264,35 @@ function Thread({
   const scroller = useRef<HTMLDivElement>(null);
   const needsEmail = c.needsEmail();
   const target = msgs ? handoffTarget(msgs) : null;
+  const done = handedOff(conv) || (!!s.active && s.handoff[s.active] === "done");
+  const since = s.active ? s.awaiting[s.active] : undefined;
+  const [now, setNow] = useState(Date.now());
+  // While the answer bot may be working on the visitor's message: it is on (or has
+  // answered here before), nobody from the team has replied, and no one asked for a person.
+  const thinking =
+    !!msgs &&
+    since !== undefined &&
+    now - since < THINK_MS &&
+    !typing &&
+    !done &&
+    (s.config?.ai_answers === true || msgs.some(isAiAnswer)) &&
+    msgs[msgs.length - 1]?.direction === "inbound" &&
+    !msgs.some((m) => m.direction === "outbound" && m.author.type === "user") &&
+    msgs.filter(isAiAnswer).length < 3;
+
+  useEffect(() => {
+    if (since === undefined) return;
+    setNow(Date.now());
+    const left = since + THINK_MS - Date.now();
+    if (left <= 0) return;
+    const id = setTimeout(() => setNow(Date.now()), left + 20);
+    return () => clearTimeout(id);
+  }, [since]);
 
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [msgs?.length, typing]);
+  }, [msgs?.length, typing, thinking]);
 
   return (
     <>
@@ -289,7 +336,6 @@ function Thread({
                 prev.author.type === m.author.type &&
                 prev.author.user?.id === m.author.user?.id &&
                 Date.parse(m.created_at) - Date.parse(prev.created_at) < 5 * 60_000;
-              const done = handedOff(conv) || (!!s.active && s.handoff[s.active] === "done");
               const offer = ai && s.active && m.id === target?.id ? (done ? "done" : target.answered ? null : (s.handoff[s.active] ?? "idle")) : null;
               return (
                 <Fragment key={m.id}>
@@ -304,14 +350,29 @@ function Thread({
             })}
           </div>
         )}
+        {thinking && (
+          <div class="thread thread-tail">
+            <div class="row them gap ai thinking" role="status">
+              <div class="who">
+                <span class="av ai-av" aria-hidden="true">
+                  {Sparkle(11)}
+                </span>
+                {s.config?.workspace_name ?? t("support")}
+                <span class="ai-pill" aria-hidden="true">
+                  {t("ai")}
+                </span>
+              </div>
+              <div class="msg think">
+                <Dots />
+                <span class="shimmer">{t("thinking")}</span>
+              </div>
+            </div>
+          </div>
+        )}
         {typing && (
-          <div class="typing" style={{ padding: "0 14px 10px" }} aria-label={t("typing", { name: typing })}>
-            <span class="dots" aria-hidden="true">
-              <span />
-              <span />
-              <span />
-            </span>
-            {typing}
+          <div class="typing" role="status" aria-label={t("typing", { name: typing })}>
+            <Dots />
+            <span aria-hidden="true">{typing}</span>
           </div>
         )}
       </div>
@@ -319,6 +380,18 @@ function Thread({
     </>
   );
 }
+
+const THINK_MS = 15_000;
+
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const Dots = () => (
+  <span class="dots" aria-hidden="true">
+    <span />
+    <span />
+    <span />
+  </span>
+);
 
 function Bubble({ m, me, grouped, onRetry }: { m: UiMessage; me: boolean; grouped: boolean; onRetry: () => void }) {
   const who = m.author.user?.name ?? (m.author.type === "system" ? t("automated") : t("support"));
@@ -499,7 +572,7 @@ function Composer({
           ))}
         </div>
       )}
-      <div class="cbar">
+      <div class={`cbar${disabled ? " off" : ""}`}>
         <textarea
           ref={ta}
           class="input"

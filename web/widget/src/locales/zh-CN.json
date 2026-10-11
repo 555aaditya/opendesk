@@ -42,5 +42,6 @@
   "sources": "参考来源",
   "talkToPerson": "联系人工客服",
   "handoffDone": "我们已通知团队，稍后会有人在这里回复你。",
-  "handoffFailed": "暂时无法联系团队，请重试。"
+  "handoffFailed": "暂时无法联系团队，请重试。",
+  "thinking": "正在查找答案…"
 }

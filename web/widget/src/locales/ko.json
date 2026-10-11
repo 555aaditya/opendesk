@@ -42,5 +42,6 @@
   "sources": "참고 자료",
   "talkToPerson": "상담원과 대화하기",
   "handoffDone": "팀에 알렸어요. 곧 여기에서 답변드릴게요.",
-  "handoffFailed": "팀에 연결하지 못했어요. 다시 시도해 주세요."
+  "handoffFailed": "팀에 연결하지 못했어요. 다시 시도해 주세요.",
+  "thinking": "답변을 찾고 있어요…"
 }

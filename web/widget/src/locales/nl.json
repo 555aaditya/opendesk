@@ -42,5 +42,6 @@
   "sources": "Bronnen",
   "talkToPerson": "Met een medewerker praten",
   "handoffDone": "We hebben het team ingelicht. Iemand reageert hier.",
-  "handoffFailed": "Het team is niet bereikbaar. Probeer het opnieuw."
+  "handoffFailed": "Het team is niet bereikbaar. Probeer het opnieuw.",
+  "thinking": "Antwoord zoeken…"
 }

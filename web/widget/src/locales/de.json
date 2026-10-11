@@ -42,5 +42,6 @@
   "sources": "Quellen",
   "talkToPerson": "Mit einem Menschen sprechen",
   "handoffDone": "Wir haben das Team informiert. Jemand antwortet Ihnen hier.",
-  "handoffFailed": "Das Team ist gerade nicht erreichbar. Bitte erneut versuchen."
+  "handoffFailed": "Das Team ist gerade nicht erreichbar. Bitte erneut versuchen.",
+  "thinking": "Antwort wird gesucht…"
 }

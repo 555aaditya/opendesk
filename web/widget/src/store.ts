@@ -21,6 +21,8 @@ export type State = {
   lang: string;
   /** conversation id -> "Talk to a person" request state. */
   handoff: Record<string, "pending" | "done" | "failed">;
+  /** conversation id -> when the visitor's last message was delivered, until a reply arrives. */
+  awaiting: Record<string, number>;
 };
 
 let state: State = {
@@ -37,6 +39,7 @@ let state: State = {
   booting: true,
   lang: "en",
   handoff: {},
+  awaiting: {},
 };
 
 const subs = new Set<() => void>();

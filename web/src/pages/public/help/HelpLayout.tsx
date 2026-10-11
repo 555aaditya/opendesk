@@ -4,11 +4,12 @@ import { Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Lockup } from "@/components/brand";
 import { EmptyState } from "@/components/ui/empty";
-import { HelpSearchBox } from "@/components/help/parts";
+import { HelpGlyph, HelpSearchBox } from "@/components/help/parts";
 import { LanguageSwitcher, usePublicLocale } from "@/components/help/locale";
 import "@/components/help/help.css";
 import { useDocumentTitle } from "@/app/RootLayout";
 import { q } from "@/lib/queries";
+import { cn } from "@/lib/cn";
 import { useTheme } from "@/lib/theme";
 
 const route = getRouteApi("/help/$slug");
@@ -26,13 +27,16 @@ export default function HelpLayout() {
 
   return (
     <div data-public-page className="flex min-h-dvh flex-col bg-surface text-fg">
-      <header className="sticky top-0 z-10 border-b border-line bg-surface/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-[760px] items-center gap-4 px-5">
-          <Link to="/help/$slug" params={{ slug }} className="flex min-w-0 items-center gap-2.5">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-inverse text-[11.5px] font-semibold text-inverse-fg">
-              {title.trim().charAt(0).toUpperCase()}
-            </span>
-            <bdi className="truncate text-[14px] font-semibold tracking-[-0.015em]">{title}</bdi>
+      <header
+        className={cn(
+          "sticky top-0 z-10 border-b backdrop-blur-md transition-colors duration-200",
+          atHome ? "border-transparent bg-sunken/90" : "border-line-soft bg-surface/90",
+        )}
+      >
+        <div className={cn("mx-auto flex h-14 items-center gap-4 px-5", atHome ? "max-w-[960px]" : "max-w-[760px]")}>
+          <Link to="/help/$slug" params={{ slug }} className="flex min-w-0 items-center gap-2.5 rounded-md">
+            {loaded && <HelpGlyph name={title} />}
+            <bdi className="truncate text-[14px] font-semibold tracking-[-0.015em]">{loaded ? title : ""}</bdi>
           </Link>
           <div className="ms-auto flex items-center gap-2">
             {!atHome && loaded && (
@@ -44,32 +48,28 @@ export default function HelpLayout() {
               type="button"
               aria-label={dark ? t("help.theme_light") : t("help.theme_dark")}
               onClick={() => setTheme(dark ? "light" : "dark")}
-              className="flex size-8 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+              className="flex size-8 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg active:scale-[0.96]"
             >
               {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </button>
           </div>
         </div>
       </header>
-      <main className="flex-1">
+      <main className="flex flex-1 flex-col">
         {isError ? (
-          loaded && (
-            <div className="py-24">
-              <EmptyState lit={2} title={t("help.not_found_title")} description={t("help.not_found_body")} />
-            </div>
-          )
+          loaded && <EmptyState lit={2} title={t("help.not_found_title")} description={t("help.not_found_body")} />
         ) : (
           // Hold the page until its language is in, so English never flashes first.
           loaded && <Outlet />
         )}
       </main>
       <footer className="border-t border-line-soft">
-        <div className="mx-auto flex h-14 max-w-[760px] items-center gap-3 px-5 text-xs text-fg-4">
+        <div className={cn("mx-auto flex h-14 items-center gap-3 px-5 text-xs text-fg-4", atHome ? "max-w-[960px]" : "max-w-[760px]")}>
           <span className="min-w-0 truncate">
             © {new Date().getFullYear()} {data?.title ?? ""}
           </span>
           <LanguageSwitcher current={locale} className="ms-auto" />
-          <a href="https://opendesk.sh" className="flex items-center gap-1.5 hover:text-fg-2">
+          <a href="https://opendesk.sh" className="flex items-center gap-1.5 rounded-md transition-colors hover:text-fg-2">
             {t("footer.powered_by")} <Lockup className="h-[11px]" />
           </a>
         </div>

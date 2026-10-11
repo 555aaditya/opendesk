@@ -42,5 +42,6 @@
   "sources": "Sources",
   "talkToPerson": "Parler à une personne",
   "handoffDone": "Nous avons prévenu l’équipe. Quelqu’un vous répondra ici.",
-  "handoffFailed": "Impossible de joindre l’équipe. Réessayez."
+  "handoffFailed": "Impossible de joindre l’équipe. Réessayez.",
+  "thinking": "Recherche d’une réponse…"
 }

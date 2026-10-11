@@ -37,3 +37,33 @@
   font-size: 12px;
   font-weight: 500;
 }
+
+/* Article reading layout: a calm measure, room around headings, and
+   logical (RTL-aware) list and quote indents. */
+[data-public-page] .help-article {
+  color: var(--fg-2);
+  max-width: 68ch;
+}
+[data-public-page] .help-article > * + * { margin-top: 1em; }
+[data-public-page] .help-article :is(h1, h2, h3, strong) { color: var(--fg); }
+[data-public-page] .help-article h1 { font-size: 1.45em; margin-top: 2em; }
+[data-public-page] .help-article h2 { font-size: 1.25em; margin-top: 1.9em; }
+[data-public-page] .help-article h3 { font-size: 1.05em; margin-top: 1.6em; }
+[data-public-page] .help-article :is(h1, h2, h3) + * { margin-top: 0.6em; }
+[data-public-page] .help-article :is(ul, ol) { padding-left: 0; padding-inline-start: 1.4em; }
+[data-public-page] .help-article li + li { margin-top: 0.4em; }
+[data-public-page] .help-article li::marker { color: var(--fg-4); }
+[data-public-page] .help-article blockquote {
+  border-left: 0;
+  border-inline-start: 2px solid var(--line-strong);
+  padding-left: 0;
+  padding-inline-start: 1em;
+}
+[data-public-page] .help-article a { color: var(--fg); font-weight: 500; }
+[data-public-page] .help-article img { border-radius: 7px; margin-block: 1.5em; }
+[data-public-page] .help-article pre { border-radius: 7px; font-size: 13px; line-height: 1.6; padding: 14px 16px; }
+[data-public-page] .help-article code { border-radius: 4px; }
+[data-public-page] .help-article table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+[data-public-page] .help-article :is(th, td) { border-bottom: 1px solid var(--line-soft); padding: 8px 10px; text-align: start; }
+[data-public-page] .help-article th { color: var(--fg); font-weight: 600; border-bottom-color: var(--line); }
+[data-public-page] .help-article hr { margin-block: 2em; }

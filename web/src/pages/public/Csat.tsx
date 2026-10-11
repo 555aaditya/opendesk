@@ -1,7 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { Check } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Lockup } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { LanguageSwitcher, usePublicLocale } from "@/components/help/locale";
 import "@/components/help/help.css";
 import { cn } from "@/lib/cn";
 import { q } from "@/lib/queries";
+import { tone, type Tone } from "@/lib/tones";
 
 const route = getRouteApi("/csat/$token");
 
@@ -33,20 +35,30 @@ function landingScore(token: string): string | undefined {
   }
 }
 
+// One hue per score, from the sentiment family: frustrated red to positive green.
+const HUES: Tone[] = ["red", "orange", "gray", "lime", "green"];
+const hueOf = (score: number) => HUES[Math.min(Math.max(score, 1), 5) - 1];
+
 /** A line face; the mouth curves from frown (1) to smile (5). */
-function Face({ score, active }: { score: number; active: boolean }) {
+function Face({ score, className, draw }: { score: number; className?: string; draw?: boolean }) {
   const curve = (score - 3) * 3.2; // -6.4 .. 6.4
+  const d = `M13 ${26 - curve / 2} Q20 ${26 + curve} 27 ${26 - curve / 2}`;
   return (
-    <svg viewBox="0 0 40 40" className="size-9" aria-hidden fill="none">
-      <circle cx="20" cy="20" r="17" className={active ? "fill-inverse" : "fill-transparent"} stroke="currentColor" strokeWidth={active ? 0 : 1.4} />
-      <circle cx="14.2" cy="16.5" r="1.7" className={active ? "fill-inverse-fg" : "fill-current"} />
-      <circle cx="25.8" cy="16.5" r="1.7" className={active ? "fill-inverse-fg" : "fill-current"} />
-      <path
-        d={`M12.5 ${26 - curve / 2} Q20 ${26 + curve} 27.5 ${26 - curve / 2}`}
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        className={active ? "stroke-inverse-fg" : "stroke-current"}
-      />
+    <svg viewBox="0 0 40 40" className={cn("size-9", className)} aria-hidden fill="none" stroke="currentColor" strokeLinecap="round">
+      <circle cx="20" cy="20" r="16.5" strokeWidth="1.6" />
+      {score === 1 ? (
+        <path d="M12.6 14.6l3.4 1.6M27.4 14.6l-3.4 1.6" strokeWidth="1.8" />
+      ) : (
+        <>
+          <circle cx="14.6" cy="16.4" r="1.75" fill="currentColor" stroke="none" />
+          <circle cx="25.4" cy="16.4" r="1.75" fill="currentColor" stroke="none" />
+        </>
+      )}
+      {draw ? (
+        <motion.path d={d} strokeWidth="1.9" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.45, delay: 0.15, ease: [0.16, 1, 0.3, 1] }} />
+      ) : (
+        <path d={d} strokeWidth="1.9" />
+      )}
     </svg>
   );
 }
@@ -82,6 +94,18 @@ export default function Csat() {
   }, [loaded, t]);
 
   const rated = data?.score != null && sentScore === null;
+  const reduce = useReducedMotion();
+
+  // A radio group moves with the arrow keys (and keeps one tab stop).
+  const onRadioKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const rtl = getComputedStyle(e.currentTarget).direction === "rtl";
+    const step = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const next = Math.min(5, Math.max(1, (score ?? (step > 0 ? 0 : 6)) + step));
+    setScore(next);
+    e.currentTarget.querySelectorAll<HTMLButtonElement>("[role=radio]")[next - 1]?.focus();
+  };
 
   return (
     <div data-public-page className="flex min-h-dvh flex-col items-center bg-surface px-4">
@@ -95,17 +119,17 @@ export default function Csat() {
         ) : isError || !data ? (
           <EmptyState lit={2} title={t("csat.invalid_title")} description={t("csat.invalid_body")} />
         ) : rated ? (
-          <Done title={t("csat.already_title")} body={t("csat.already_body")} />
+          <Done score={data.score ?? 5} title={t("csat.already_title")} body={t("csat.already_body")} />
         ) : finished ? (
-          <Done title={t("csat.thanks_title")} body={data.workspace_name ? t("csat.thanks_body", { name: data.workspace_name }) : t("csat.thanks_body_generic")} />
+          <Done score={sentScore ?? score ?? 5} title={t("csat.thanks_title")} body={data.workspace_name ? t("csat.thanks_body", { name: data.workspace_name }) : t("csat.thanks_body_generic")} />
         ) : (
-          <div className="text-center">
+          <div className="animate-rise-in text-center motion-reduce:animate-none">
             {data.workspace_name && (
               <p className="label-caps mb-3">
                 <bdi>{data.workspace_name}</bdi>
               </p>
             )}
-            <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.03em]">{t("csat.question")}</h1>
+            <h1 className="text-[24px] font-semibold leading-tight tracking-[-0.03em] text-fg">{t("csat.question")}</h1>
             {data.ticket?.subject && (
               <p className="mx-auto mt-2 max-w-[380px] truncate text-[13px] text-fg-3">
                 {data.ticket.number ? (
@@ -116,24 +140,35 @@ export default function Csat() {
                 <bdi>{data.ticket.subject}</bdi>
               </p>
             )}
-            <div role="radiogroup" aria-label={t("csat.rating")} className="mt-8 grid grid-cols-5 gap-2">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  role="radio"
-                  aria-checked={score === n}
-                  aria-label={t("csat.score_label", { score: n, label: label(n) })}
-                  onClick={() => setScore(n)}
-                  className={cn(
-                    "flex flex-col items-center gap-2 rounded-lg border px-1 py-3 transition-[border-color,background-color,color] duration-100",
-                    score === n ? "border-fg text-fg" : "border-line text-fg-3 hover:border-line-strong hover:text-fg",
-                  )}
-                >
-                  <Face score={n} active={score === n} />
-                  <span className="text-[11.5px] leading-tight">{label(n)}</span>
-                </button>
-              ))}
+            <div role="radiogroup" aria-label={t("csat.rating")} className="mt-8 grid grid-cols-5 gap-2" onKeyDown={onRadioKey}>
+              {[1, 2, 3, 4, 5].map((n) => {
+                const on = score === n;
+                const h = tone[hueOf(n)];
+                return (
+                  <button
+                    key={n}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    tabIndex={on || (score === null && n === 1) ? 0 : -1}
+                    aria-label={t("csat.score_label", { score: n, label: label(n) })}
+                    onClick={() => setScore(n)}
+                    className={cn(
+                      "group flex flex-col items-center gap-2 rounded-lg border px-1 pb-2.5 pt-3.5 outline-none transition-[border-color,background-color,color,transform] duration-150 focus-visible:shadow-[0_0_0_3px_var(--focus)] active:scale-[0.97]",
+                      on ? cn(h.soft, h.line) : "border-line hover:border-line-strong hover:bg-sunken",
+                    )}
+                  >
+                    <motion.span
+                      className={cn("flex transition-colors duration-150", on ? h.text : "text-fg-4 group-hover:text-fg-2")}
+                      animate={reduce ? undefined : { scale: on ? 1.08 : 1 }}
+                      transition={{ type: "spring", stiffness: 520, damping: 26 }}
+                    >
+                      <Face score={n} />
+                    </motion.span>
+                    <span className={cn("text-[12px] leading-tight transition-colors", on ? cn("font-medium", h.text) : "text-fg-3")}>{label(n)}</span>
+                  </button>
+                );
+              })}
             </div>
             <div className="mt-6 text-start">
               <label htmlFor="csat-comment" className="text-[12.5px] font-medium">
@@ -168,14 +203,32 @@ export default function Csat() {
   );
 }
 
-function Done({ title, body }: { title: string; body: string }) {
+function Done({ score, title, body }: { score: number; title: string; body: string }) {
+  const reduce = useReducedMotion();
+  const h = tone[hueOf(score)];
+  const spring = { type: "spring", stiffness: 420, damping: 28 } as const;
+  const rise = (delay: number) =>
+    reduce ? {} : { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.42, delay, ease: [0.16, 1, 0.3, 1] as const } };
   return (
     <div className="flex flex-col items-center text-center" aria-live="polite">
-      <span className="mb-5 flex size-11 items-center justify-center rounded-full bg-inverse text-inverse-fg">
-        <Check className="size-5" strokeWidth={2.5} />
-      </span>
-      <h1 className="text-[22px] font-semibold tracking-[-0.03em]">{title}</h1>
-      <p className="mt-1.5 text-[13px] text-fg-3">{body}</p>
+      <motion.span
+        className={cn("relative mb-6 flex size-16 items-center justify-center rounded-xl border", h.soft, h.line, h.text)}
+        {...(reduce ? {} : { initial: { opacity: 0, scale: 0.86 }, animate: { opacity: 1, scale: 1 }, transition: spring })}
+      >
+        <Face score={score} className="size-10" draw={!reduce} />
+        <motion.span
+          className="absolute -bottom-1.5 -end-1.5 flex size-6 items-center justify-center rounded-md bg-inverse text-inverse-fg ring-[3px] ring-surface"
+          {...(reduce ? {} : { initial: { opacity: 0, scale: 0.5 }, animate: { opacity: 1, scale: 1 }, transition: { ...spring, delay: 0.28 } })}
+        >
+          <Check className="size-3.5" strokeWidth={2.75} />
+        </motion.span>
+      </motion.span>
+      <motion.h1 className="text-[22px] font-semibold tracking-[-0.03em] text-fg" {...rise(0.12)}>
+        {title}
+      </motion.h1>
+      <motion.p className="mt-1.5 max-w-[340px] text-[13.5px] leading-5 text-fg-3" {...rise(0.18)}>
+        {body}
+      </motion.p>
     </div>
   );
 }

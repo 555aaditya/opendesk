@@ -10,6 +10,8 @@ export type WidgetConfig = {
   require_email: boolean;
   /** Workspace default language (BCP 47) for visitors whose browser language isn't supported. */
   locale?: string | null;
+  /** The AI answer bot takes new chat messages (contracts/ai.md); lets the widget show it working. */
+  ai_answers?: boolean;
 };
 
 export type WidgetSession = {

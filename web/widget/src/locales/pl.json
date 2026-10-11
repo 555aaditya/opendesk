@@ -42,5 +42,6 @@
   "sources": "Źródła",
   "talkToPerson": "Porozmawiaj z człowiekiem",
   "handoffDone": "Daliśmy znać zespołowi. Ktoś odpowie tutaj.",
-  "handoffFailed": "Nie udało się skontaktować z zespołem. Spróbuj ponownie."
+  "handoffFailed": "Nie udało się skontaktować z zespołem. Spróbuj ponownie.",
+  "thinking": "Szukam odpowiedzi…"
 }

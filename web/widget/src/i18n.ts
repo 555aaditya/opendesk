@@ -49,6 +49,7 @@ export const en = {
   talkToPerson: "Talk to a person",
   handoffDone: "We've let the team know. Someone will reply here.",
   handoffFailed: "Couldn't reach the team. Try again.",
+  thinking: "Looking for an answer…",
 };
 
 export type Dict = typeof en;

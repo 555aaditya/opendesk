@@ -251,6 +251,7 @@ export class Controller {
             active: s.active === null && s.view === "thread" ? conversation.id : s.active,
             messages: { ...rest, [conversation.id]: mergeServer(s.messages[conversation.id] ?? [], thread) },
             conversations: [conversation, ...(s.conversations ?? []).filter((c) => c.id !== conversation.id)],
+            awaiting: { ...s.awaiting, [conversation.id]: Date.now() },
           };
         });
         if (!message) void this.openConversation(conversation.id);
@@ -258,6 +259,7 @@ export class Controller {
         const msg = await this.api.send(key, local.body_text, ids.length ? ids : undefined);
         set((s) => ({
           messages: { ...s.messages, [key]: upsert((s.messages[key] ?? []).filter((m) => m.id !== local.id), msg) },
+          awaiting: { ...s.awaiting, [key]: Date.now() },
         }));
         this.touchConversation(key, msg);
       }
@@ -303,6 +305,12 @@ export class Controller {
     else this.touchConversation(tid, m);
     if (m.direction === "outbound" && e.type === "message.created") {
       this.clearTyping(tid);
+      if (tid in get().awaiting)
+        set((st) => {
+          const next = { ...st.awaiting };
+          delete next[tid];
+          return { awaiting: next };
+        });
       const viewing = s.open && s.view === "thread" && s.active === tid;
       if (!s.open) set((st) => ({ unread: st.unread + 1 }));
       else if (!viewing) void this.loadConversations();

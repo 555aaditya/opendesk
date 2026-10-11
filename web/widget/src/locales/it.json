@@ -42,5 +42,6 @@
   "sources": "Fonti",
   "talkToPerson": "Parla con una persona",
   "handoffDone": "Abbiamo avvisato il team. Qualcuno ti risponderà qui.",
-  "handoffFailed": "Impossibile contattare il team. Riprova."
+  "handoffFailed": "Impossibile contattare il team. Riprova.",
+  "thinking": "Cerco una risposta…"
 }

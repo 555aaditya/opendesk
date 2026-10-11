@@ -42,5 +42,6 @@
   "sources": "Kaynaklar",
   "talkToPerson": "Bir temsilciyle görüşün",
   "handoffDone": "Ekibe haber verdik. Birisi burada yanıt verecek.",
-  "handoffFailed": "Ekibe ulaşılamadı. Tekrar deneyin."
+  "handoffFailed": "Ekibe ulaşılamadı. Tekrar deneyin.",
+  "thinking": "Yanıt aranıyor…"
 }

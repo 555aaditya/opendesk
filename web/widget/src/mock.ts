@@ -159,6 +159,7 @@ export const mockFetch: Fetcher = async (url, init) => {
       help_center_url: "https://example.com/help/fieldnote",
       require_email: u.searchParams.get("key") === "wk_email",
       locale: params.get("od_ws_lang") ?? "en",
+      ai_answers: params.get("od_bot") !== "0",
     });
   if (path === "/v1/widget/session") {
     if (typeof body.email === "string") contact.email = body.email;
