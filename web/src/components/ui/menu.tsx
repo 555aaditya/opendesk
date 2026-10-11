@@ -28,7 +28,7 @@ export function MenuContent({
         side={side}
         sideOffset={sideOffset}
         collisionPadding={8}
-        className={cn(floatingPanel, "min-w-[180px] p-1", className)}
+        className={cn(floatingPanel, "min-w-[180px] origin-[var(--radix-dropdown-menu-content-transform-origin)] p-1", className)}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -38,7 +38,7 @@ export function MenuContent({
 }
 
 const itemCls =
-  "relative flex h-7 cursor-default select-none items-center gap-2 rounded-md px-2 text-[12.5px] text-fg outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-fg-3";
+  "relative flex h-7 cursor-default select-none items-center gap-2 rounded-md px-2 transition-colors duration-100 text-[12.5px] text-fg outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-fg-3";
 
 export function MenuItem({
   children,
@@ -101,7 +101,7 @@ export function MenuSub({ label, icon, children }: { label: ReactNode; icon?: Re
         <ChevronRight />
       </M.SubTrigger>
       <M.Portal>
-        <M.SubContent sideOffset={6} collisionPadding={8} className={cn(floatingPanel, "min-w-[180px] p-1")}>
+        <M.SubContent sideOffset={6} collisionPadding={8} className={cn(floatingPanel, "min-w-[180px] origin-[var(--radix-dropdown-menu-content-transform-origin)] p-1")}>
           {children}
         </M.SubContent>
       </M.Portal>

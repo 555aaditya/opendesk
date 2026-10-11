@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Inbox, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Inbox, MoreHorizontal, Pencil, Plus, Trash2, UserCheck } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { IconTile, ListSkeleton } from "@/components/settings2/bits";
@@ -10,7 +10,7 @@ import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Drawer } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Field, TextInput } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Picker } from "@/components/ui/picker";
@@ -62,9 +62,10 @@ export default function Teams() {
           <ListSkeleton rows={3} />
         </Section>
       ) : !teams?.length ? (
-        <Section>
-          <EmptyState
-            lit={2}
+        <Section flush>
+          <SettingsEmpty
+            art="contacts"
+            ghost="people"
             title={tr("teams.emptyTitle")}
             description={tr("teams.emptyHint")}
             action={
@@ -74,6 +75,10 @@ export default function Teams() {
                 </Button>
               )
             }
+            tips={[
+              { label: tr("teams.emptyTips.mailbox"), icon: <Inbox /> },
+              { label: tr("teams.emptyTips.delete"), icon: <UserCheck /> },
+            ]}
           />
         </Section>
       ) : (

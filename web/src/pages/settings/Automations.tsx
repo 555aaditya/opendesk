@@ -1,19 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { ListOrdered, MoreHorizontal, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow, NoAccess } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useConfirm } from "@/components/ui/confirm";
-import { IconTile, ListSkeleton, ReorderButtons, StatePill, SummaryStrip } from "@/components/settings2/bits";
-import { MotionList, MotionRow } from "@/components/settings2/motion";
+import { IconTile, ListSkeleton, StatePill, SummaryStrip } from "@/components/settings2/bits";
 import { TriggerIcon } from "@/components/settings2/pickers";
-import { moveItem, useListMutation } from "@/components/settings2/optimistic";
+import { orderBy, useListMutation } from "@/components/settings2/optimistic";
+import { SortableList } from "@/components/settings2/Sortable";
 import { triggerShort, triggerTone } from "@/components/settings2/automation";
 import { api } from "@/lib/api/endpoints";
 import type { Automation } from "@/lib/api/types";
@@ -36,14 +36,14 @@ export default function Automations() {
     (rows, v) => rows.map((r) => (r.id === v.id ? { ...r, enabled: v.enabled } : r)),
     { errorText: t("automations.updateFailed") },
   );
-  const reorder = useListMutation<Automation, { id: string; dir: -1 | 1 }>(
+  const reorder = useListMutation<Automation, string[]>(
     qk.automations,
-    async (v) => {
-      const next = moveItem(sorted, v.id, v.dir);
+    async (ids) => {
+      const next = orderBy(sorted, ids);
       const changed = next.filter((n) => sorted.find((o) => o.id === n.id)?.position !== n.position);
       await Promise.all(changed.map((n) => api.automations.update(n.id, { position: n.position })));
     },
-    (rows, v) => moveItem(rows, v.id, v.dir),
+    (rows, ids) => orderBy(rows, ids),
     { errorText: t("automations.reorderFailed") },
   );
   const remove = useListMutation<Automation, string>(
@@ -103,12 +103,24 @@ export default function Automations() {
         {isLoading ? (
           <ListSkeleton rows={4} />
         ) : !sorted.length ? (
-          <EmptyState compact lit={1} title={t("automations.emptyTitle")} description={t("automations.emptyHint")} action={newLink("sm")} />
+          <SettingsEmpty
+            art="ai"
+            title={t("automations.emptyTitle")}
+            description={t("automations.emptyHint")}
+            action={newLink()}
+            tips={[
+              { label: t("automations.emptyTips.order"), icon: <ListOrdered /> },
+              { label: t("automations.emptyTips.trigger"), icon: <Zap /> },
+            ]}
+          />
         ) : (
-          <MotionList>
-            {sorted.map((a, i) => (
-              <MotionRow key={a.id}>
+          <SortableList
+            items={sorted}
+            onReorder={(ids) => reorder.mutate(ids)}
+            handleLabel={(a) => t("automations.reorderAria", { name: a.name })}
+            renderRow={(a, handle) => (
                 <ListRow onClick={() => open(a.id)}>
+                  {handle}
                   <IconTile tone={a.enabled ? triggerTone[a.trigger] : "gray"}>
                     <TriggerIcon trigger={a.trigger} className={a.enabled ? undefined : "text-fg-4"} />
                   </IconTile>
@@ -138,14 +150,6 @@ export default function Automations() {
                     checked={a.enabled}
                     onCheckedChange={(enabled) => toggle.mutate({ id: a.id, enabled })}
                     aria-label={t("common.enable", { name: a.name })}
-                  />
-                  <ReorderButtons
-                    label={a.name}
-                    first={i === 0}
-                    last={i === sorted.length - 1}
-                    disabled={reorder.isPending}
-                    onUp={() => reorder.mutate({ id: a.id, dir: -1 })}
-                    onDown={() => reorder.mutate({ id: a.id, dir: 1 })}
                   />
                   <Menu>
                     <MenuTrigger asChild>
@@ -185,9 +189,8 @@ export default function Automations() {
                     </MenuContent>
                   </Menu>
                 </ListRow>
-              </MotionRow>
-            ))}
-          </MotionList>
+            )}
+          />
         )}
       </Section>
     </SettingsPage>

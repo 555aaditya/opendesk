@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { MoreHorizontal, Plus, Power, Trash2, Zap } from "lucide-react";
+import { Forward, MoreHorizontal, Plus, Power, Trash2, Users, Zap } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow, NoAccess } from "@/components/layout";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
@@ -109,11 +109,15 @@ export default function Mailboxes() {
         </>
       ) : !sorted.length ? (
         <Section flush>
-          <EmptyState
-            lit={1}
+          <SettingsEmpty
+            art="inbox"
             title={t("list.emptyTitle")}
             description={t("list.emptyBody")}
-            action={<AddMailboxButton size="sm">{t("list.addFirst")}</AddMailboxButton>}
+            action={<AddMailboxButton>{t("list.addFirst")}</AddMailboxButton>}
+            tips={[
+              { label: t("list.emptyTips.forward"), icon: <Forward /> },
+              { label: t("list.emptyTips.team"), icon: <Users /> },
+            ]}
           />
         </Section>
       ) : (

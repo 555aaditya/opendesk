@@ -1,9 +1,28 @@
-import { forwardRef, useId, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import { forwardRef, useEffect, useId, useRef, useState, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
 import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const inputBase =
   "w-full min-w-0 rounded-md border border-line bg-surface px-2.5 text-[13px] text-fg shadow-xs outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-fg-4 hover:border-line-strong focus:border-focus-line focus:shadow-[0_0_0_3px_var(--focus)] focus-visible:shadow-[0_0_0_3px_var(--focus)] disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-3 aria-[invalid=true]:border-danger aria-[invalid=true]:focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_18%,transparent)]";
+
+/**
+ * Shakes a control once when it turns invalid (not on every render while it
+ * stays invalid). Reduced motion keeps it still.
+ */
+function useShake(invalid: boolean | undefined) {
+  const [shake, setShake] = useState(false);
+  const was = useRef(!!invalid);
+  useEffect(() => {
+    if (invalid && !was.current) setShake(true);
+    was.current = !!invalid;
+  }, [invalid]);
+  return {
+    className: shake ? "animate-shake motion-reduce:animate-none" : undefined,
+    onAnimationEnd: (e: React.AnimationEvent) => {
+      if (e.target === e.currentTarget) setShake(false);
+    },
+  };
+}
 
 const heights = { sm: "h-7 text-[12.5px]", md: "h-8", lg: "h-10 rounded-lg px-3 text-[14px]" } as const;
 
@@ -14,10 +33,22 @@ export const TextInput = forwardRef<HTMLInputElement, InputProps>(function TextI
   ref,
 ) {
   const h = heights[inputSize];
+  const shake = useShake(invalid);
   if (!leading && !trailing)
-    return <input ref={ref} aria-invalid={invalid || undefined} className={cn(inputBase, h, className)} {...rest} />;
+    return (
+      <input
+        ref={ref}
+        aria-invalid={invalid || undefined}
+        className={cn(inputBase, h, className, shake.className)}
+        {...rest}
+        onAnimationEnd={(e) => {
+          shake.onAnimationEnd(e);
+          rest.onAnimationEnd?.(e);
+        }}
+      />
+    );
   return (
-    <div className={cn("relative flex items-center", className)}>
+    <div className={cn("relative flex items-center", className, shake.className)} onAnimationEnd={shake.onAnimationEnd}>
       {leading && <span className="pointer-events-none absolute left-2.5 flex text-fg-3 [&_svg]:size-3.5">{leading}</span>}
       <input
         ref={ref}
@@ -32,12 +63,17 @@ export const TextInput = forwardRef<HTMLInputElement, InputProps>(function TextI
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }>(
   function Textarea({ className, invalid, ...rest }, ref) {
+    const shake = useShake(invalid);
     return (
       <textarea
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={cn(inputBase, "min-h-[72px] resize-y py-1.5 leading-5", className)}
+        className={cn(inputBase, "min-h-[72px] resize-y py-1.5 leading-5", className, shake.className)}
         {...rest}
+        onAnimationEnd={(e) => {
+          shake.onAnimationEnd(e);
+          rest.onAnimationEnd?.(e);
+        }}
       />
     );
   },

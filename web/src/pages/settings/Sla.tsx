@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, MoreHorizontal, Pencil, Plus, Timer, Trash2 } from "lucide-react";
+import { Clock, ListOrdered, MoreHorizontal, Pencil, Plus, Timer, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow, NoAccess } from "@/components/layout";
@@ -9,13 +9,13 @@ import { Field, NumberInput, TextInput } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
-import { ListSkeleton, ReorderButtons, StatePill, SummaryStrip } from "@/components/settings2/bits";
-import { MotionList, MotionRow } from "@/components/settings2/motion";
-import { moveItem, useListMutation } from "@/components/settings2/optimistic";
+import { ListSkeleton, StatePill, SummaryStrip } from "@/components/settings2/bits";
+import { orderBy, useListMutation } from "@/components/settings2/optimistic";
+import { SortableList } from "@/components/settings2/Sortable";
 import { PriorityIcon, PriorityPill, priorityLabel, priorityOrder } from "@/components/tickets/bits";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
@@ -76,14 +76,14 @@ export default function Sla() {
     (rows, v) => rows.map((r) => (r.id === v.id ? { ...r, enabled: v.enabled } : r)),
     { errorText: t("sla.updateFailed") },
   );
-  const reorder = useListMutation<SlaPolicy, { id: string; dir: -1 | 1 }>(
+  const reorder = useListMutation<SlaPolicy, string[]>(
     qk.slaPolicies,
-    async (v) => {
-      const next = moveItem(sorted, v.id, v.dir);
+    async (ids) => {
+      const next = orderBy(sorted, ids);
       const changed = next.filter((n) => sorted.find((o) => o.id === n.id)?.position !== n.position);
       await Promise.all(changed.map((n) => api.slaPolicies.update(n.id, { position: n.position })));
     },
-    (rows, v) => moveItem(rows, v.id, v.dir),
+    (rows, ids) => orderBy(rows, ids),
     { errorText: t("sla.reorderFailed") },
   );
   const remove = useListMutation<SlaPolicy, string>(
@@ -141,22 +141,28 @@ export default function Sla() {
           {isLoading ? (
             <ListSkeleton rows={3} />
           ) : !sorted.length ? (
-            <EmptyState
-              compact
-              lit={3}
+            <SettingsEmpty
+              art="pending"
               title={t("sla.emptyTitle")}
               description={t("sla.emptyHint")}
               action={
-                <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
+                <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
                   {t("sla.new")}
                 </Button>
               }
+              tips={[
+                { label: t("sla.emptyTips.order"), icon: <ListOrdered /> },
+                { label: t("sla.emptyTips.calendar"), icon: <Clock /> },
+              ]}
             />
           ) : (
-            <MotionList>
-              {sorted.map((p, i) => (
-                <MotionRow key={p.id}>
+            <SortableList
+              items={sorted}
+              onReorder={(ids) => reorder.mutate(ids)}
+              handleLabel={(p) => t("sla.reorderAria", { name: p.name })}
+              renderRow={(p, handle, i) => (
                   <ListRow onClick={() => setEditing(p)}>
+                    {handle}
                     <span className="mono w-4 shrink-0 text-center text-[11px] tabular-nums text-fg-4">{i + 1}</span>
                     
                     <div className="min-w-0 flex-1">
@@ -180,14 +186,6 @@ export default function Sla() {
                       checked={p.enabled}
                       onCheckedChange={(enabled) => toggle.mutate({ id: p.id, enabled })}
                       aria-label={t("common.enable", { name: p.name })}
-                    />
-                    <ReorderButtons
-                      label={p.name}
-                      first={i === 0}
-                      last={i === sorted.length - 1}
-                      disabled={reorder.isPending}
-                      onUp={() => reorder.mutate({ id: p.id, dir: -1 })}
-                      onDown={() => reorder.mutate({ id: p.id, dir: 1 })}
                     />
                     <Menu>
                       <MenuTrigger asChild>
@@ -227,9 +225,8 @@ export default function Sla() {
                       </MenuContent>
                     </Menu>
                   </ListRow>
-                </MotionRow>
-              ))}
-            </MotionList>
+              )}
+            />
           )}
         </Section>
         <p className="flex items-center gap-1.5 px-1 text-[12px] text-fg-3">

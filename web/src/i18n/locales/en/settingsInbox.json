@@ -43,9 +43,14 @@
     "needTitle": "Give the reply a title.",
     "needBody": "Write the reply text.",
     "shortcutTaken": "Another reply already uses /{{shortcut}}.",
-    "updated": "Edited {{when}}"
+    "updated": "Edited {{when}}",
+    "emptyTips": {
+      "slash": "Type / and a shortcut in the composer",
+      "team": "Replies are shared with your whole team"
+    }
   },
   "views": {
+    "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",
     "title": "Views",
     "description": "Saved filters that sit in everyone's sidebar under Views, with a live count. Order here is the order in the sidebar.",
     "new": "New view",
@@ -107,9 +112,14 @@
     "unknown": "unknown",
     "inMailbox": "In {{name}}",
     "aMailbox": "a mailbox",
-    "matching": "Matching “{{q}}”"
+    "matching": "Matching “{{q}}”",
+    "emptyTips": {
+      "sidebar": "Shared views sit in everyone's sidebar",
+      "personal": "Personal views stay in your sidebar only"
+    }
   },
   "sla": {
+    "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",
     "title": "SLA policies",
     "description": "Response and resolution targets. Policies are checked from top to bottom, and the first enabled one that matches a ticket's priority applies.",
     "new": "New policy",
@@ -157,9 +167,14 @@
       "m": "Minutes",
       "h": "Hours",
       "d": "Days"
+    },
+    "emptyTips": {
+      "order": "The first matching policy applies",
+      "calendar": "Targets count calendar time"
     }
   },
   "automations": {
+    "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",
     "title": "Automations",
     "description": "Rules that run on their own when something happens to a ticket. They run in order, top to bottom.",
     "new": "New automation",
@@ -183,6 +198,10 @@
       "active": "Active",
       "paused": "Paused",
       "runs": "Runs"
+    },
+    "emptyTips": {
+      "order": "Rules run in order, top to bottom",
+      "trigger": "Each rule starts from a trigger, like a new ticket"
     }
   },
   "edit": {

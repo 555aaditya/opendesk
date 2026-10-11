@@ -17,7 +17,11 @@
     },
     "empty": {
       "title": "No API keys yet",
-      "description": "Create a key to connect a script, an integration or your own backend."
+      "description": "Create a key to connect a script, an integration or your own backend.",
+      "tips": {
+        "scopes": "Scopes limit what each key can do",
+        "once": "A new key is shown only once"
+      }
     },
     "col": {
       "key": "Key and scopes",
@@ -83,7 +87,11 @@
     },
     "empty": {
       "title": "No webhooks yet",
-      "description": "Send ticket and contact events to your own systems as they happen."
+      "description": "Send ticket and contact events to your own systems as they happen.",
+      "tips": {
+        "signed": "Every delivery is signed with your secret",
+        "retry": "Failed deliveries retry with backoff"
+      }
     },
     "col": {
       "endpoint": "Endpoint",
@@ -149,6 +157,10 @@
       "succeeded": "Delivered",
       "failed": "Failed",
       "pending": "Pending"
+    },
+    "emptyTips": {
+      "status": "Each attempt shows its status and response time",
+      "retry": "Failures are retried automatically"
     }
   },
   "webhookForm": {
@@ -195,7 +207,11 @@
     "emptyFilteredHint": "Try another category or search.",
     "emptyFilteredMore": "Older entries load as you scroll.",
     "clear": "Clear filters",
-    "end": "That's everything"
+    "end": "That's everything",
+    "emptyTips": {
+      "security": "Sign-ins, 2FA and role changes are recorded",
+      "ip": "Each entry keeps the person and IP address"
+    }
   },
   "widget": {
     "title": "Chat widget",

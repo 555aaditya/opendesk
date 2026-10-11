@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquareText, Plus, Trash2 } from "lucide-react";
+import { Plus, Slash, Trash2, Users } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,11 +7,12 @@ import { SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Field, SearchInput, TextInput } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Kbd } from "@/components/ui/kbd";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { RichEditor } from "@/components/editor/RichEditor";
-import { IconTile, ListSkeleton, MonoChip } from "@/components/settings2/bits";
+import { ListSkeleton, MonoChip } from "@/components/settings2/bits";
 import { rowSpring } from "@/components/settings2/motion";
 import { api } from "@/lib/api/endpoints";
 import type { SavedReply } from "@/lib/api/types";
@@ -151,22 +152,21 @@ export default function SavedReplies() {
     >
       {!isLoading && !replies?.length && selected !== NEW ? (
         <div className="rounded-lg border border-line bg-surface shadow-xs">
-          <EmptyState
-            lit={1}
-            icon={
-              <IconTile tone="blue" className="size-10 [&_svg]:size-5">
-                <MessageSquareText />
-              </IconTile>
-            }
+          <SettingsEmpty
+            art="settings"
             title={t("savedReplies.emptyTitle")}
             description={t("savedReplies.emptyHint")}
             action={
               canEdit && (
-                <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => open(NEW)}>
+                <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => open(NEW)}>
                   {t("savedReplies.new")}
                 </Button>
               )
             }
+            tips={[
+              { label: t("savedReplies.emptyTips.slash"), icon: <Slash /> },
+              { label: t("savedReplies.emptyTips.team"), icon: <Users /> },
+            ]}
           />
         </div>
       ) : (

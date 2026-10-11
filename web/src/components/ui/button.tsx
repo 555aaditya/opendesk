@@ -59,11 +59,27 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {asChild ? (
         children
       ) : (
-        <>
-          {loading ? <Spinner className="size-3.5" /> : icon}
-          {children}
-          {iconRight}
-        </>
+        // With an icon the spinner takes its place; without one it sits over the
+        // hidden label, so the button keeps its width while it loads.
+        icon ? (
+          <>
+            {loading ? <Spinner className="size-3.5" /> : icon}
+            {children}
+            {iconRight}
+          </>
+        ) : (
+          <>
+            <span className={cn("contents", loading && "[&>*]:invisible")}>
+              <span className="inline-flex min-w-0 items-center gap-[inherit]">{children}</span>
+              {iconRight && <span className="inline-flex">{iconRight}</span>}
+            </span>
+            {loading && (
+              <span className="absolute inset-0 flex items-center justify-center">
+                <Spinner className="size-3.5" />
+              </span>
+            )}
+          </>
+        )
       )}
     </Comp>
   );

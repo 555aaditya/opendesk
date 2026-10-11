@@ -26,6 +26,7 @@ import { SearchInput } from "@/components/ui/input";
 import { IconTile } from "@/components/settings2/bits";
 import type { Tone } from "@/lib/tones";
 import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Segmented } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -325,14 +326,14 @@ export default function AuditLog() {
         </div>
       ) : !shown.length ? (
         <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-xs">
-          <EmptyState
-            compact
-            lit={2}
-            className="py-12"
-            title={filtered ? t("audit.emptyFiltered") : t("audit.empty")}
-            description={filtered ? (hasNextPage ? t("audit.emptyFilteredMore") : t("audit.emptyFilteredHint")) : t("audit.emptyHint")}
-            action={
-              filtered ? (
+          {filtered ? (
+            <EmptyState
+              compact
+              lit={2}
+              className="py-12"
+              title={t("audit.emptyFiltered")}
+              description={hasNextPage ? t("audit.emptyFilteredMore") : t("audit.emptyFilteredHint")}
+              action={
                 <Button
                   size="sm"
                   onClick={() => {
@@ -342,9 +343,19 @@ export default function AuditLog() {
                 >
                   {t("audit.clear")}
                 </Button>
-              ) : undefined
-            }
-          />
+              }
+            />
+          ) : (
+            <SettingsEmpty
+              art="search"
+              title={t("audit.empty")}
+              description={t("audit.emptyHint")}
+              tips={[
+                { label: t("audit.emptyTips.security"), icon: <ShieldCheck /> },
+                { label: t("audit.emptyTips.ip"), icon: <MonitorSmartphone /> },
+              ]}
+            />
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-6">

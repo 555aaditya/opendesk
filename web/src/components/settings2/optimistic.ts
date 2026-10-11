@@ -42,3 +42,11 @@ export function moveItem<T extends { id: string; position: number }>(rows: T[], 
   [sorted[i], sorted[j]] = [sorted[j], sorted[i]];
   return sorted.map((r, idx) => ({ ...r, position: idx }));
 }
+
+/** Put rows in the order of `ids` and renumber 0..n; rows not in `ids` keep their place after. */
+export function orderBy<T extends { id: string; position: number }>(rows: T[], ids: string[]): T[] {
+  const at = new Map(ids.map((id, i) => [id, i]));
+  return [...rows]
+    .sort((a, b) => (at.get(a.id) ?? ids.length + a.position) - (at.get(b.id) ?? ids.length + b.position))
+    .map((r, idx) => ({ ...r, position: idx }));
+}

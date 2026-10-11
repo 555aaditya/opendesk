@@ -1,4 +1,8 @@
 {
+  "sortable": {
+    "handle": "Drag to reorder. Hold Alt and press the arrow keys to move it.",
+    "hint": "Drag to reorder"
+  },
   "cancel": "Cancel",
   "labels": {
     "title": "Labels",
@@ -39,7 +43,11 @@
     },
     "empty": {
       "title": "No labels yet",
-      "description": "Labels you add to tickets show up here. Create a few to get started, like billing or bug."
+      "description": "Labels you add to tickets show up here. Create a few to get started, like billing or bug.",
+      "tips": {
+        "groups": "Groups can allow one label at a time",
+        "who": "Admins choose who can create labels"
+      }
     },
     "noMatch": {
       "title": "No labels match",
@@ -167,6 +175,10 @@
       "send": "Send invitations",
       "emails": "Email addresses",
       "emailsHint": "Separate addresses with commas or spaces."
+    },
+    "emptyTips": {
+      "roles": "Roles decide what each person can do",
+      "expire": "Invitations expire after 7 days"
     }
   },
   "teams": {
@@ -202,7 +214,11 @@
     "andMore_one": " and {{count}} more",
     "andMore_other": " and {{count}} more",
     "mailboxes_one": "{{count}} mailbox",
-    "mailboxes_other": "{{count}} mailboxes"
+    "mailboxes_other": "{{count}} mailboxes",
+    "emptyTips": {
+      "mailbox": "Mailboxes can send new tickets to a team",
+      "delete": "Deleting a team keeps ticket assignees"
+    }
   },
   "profile": {
     "title": "Profile",
@@ -292,6 +308,7 @@
     "transferBody": "They get full control, including deleting the workspace. You stay on as an admin."
   },
   "fields": {
+    "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",
     "title": "Custom fields",
     "description": "Extra details your team records on tickets, contacts and companies, like plan, order number or renewal date.",
     "new": "New field",
@@ -327,7 +344,11 @@
       "title": "No {{entity}} fields yet",
       "ticket": "Add fields like order number or product area to capture details on every ticket.",
       "contact": "Add fields like plan or account manager to keep customer details in one place.",
-      "company": "Add fields like renewal date or seats to track accounts."
+      "company": "Add fields like renewal date or seats to track accounts.",
+      "tips": {
+        "required": "Ticket fields can be required to solve",
+        "sidebar": "Agents fill them in from the record's sidebar"
+      }
     },
     "type": {
       "text": "Text",

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StatePill } from "@/components/settings2/bits";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { springs } from "@/lib/motion";
 import { NoAccess, Row, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -156,8 +157,17 @@ export default function WidgetSettings() {
                   <div className="flex flex-col gap-2">
                     {draft.allowed_origins.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
+                        <AnimatePresence initial={false} mode="popLayout">
                         {draft.allowed_origins.map((o) => (
-                          <span key={o} className="mono inline-flex h-6 animate-pop-in items-center gap-1.5 rounded-sm border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2 motion-reduce:animate-none">
+                          <motion.span
+                            key={o}
+                            layout={reduce ? false : "position"}
+                            initial={reduce ? false : { opacity: 0, scale: 0.92 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.92 }}
+                            transition={springs.snap}
+                            className="mono inline-flex h-6 items-center gap-1.5 rounded-sm border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2"
+                          >
                             <span className="size-1.5 rounded-full bg-tone-green-solid" aria-hidden />
                             {o}
                             <button
@@ -168,8 +178,9 @@ export default function WidgetSettings() {
                             >
                               <X className="size-3" />
                             </button>
-                          </span>
+                          </motion.span>
                         ))}
+                        </AnimatePresence>
                       </div>
                     )}
                     <div className="flex gap-2">

@@ -2,8 +2,7 @@
 // they apply, how often they're used, archive and merge.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, ArchiveRestore, ChevronRight, FolderPlus, GitMerge, GripVertical, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import { Reorder, useDragControls, useReducedMotion } from "motion/react";
+import { Archive, ArchiveRestore, ChevronRight, FolderPlus, GitMerge, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, Row } from "@/components/layout";
@@ -11,14 +10,16 @@ import { Badge, TagChip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { SearchInput } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { Segmented } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/toast";
 import { ListSkeleton, SummaryStrip } from "@/components/settings2/bits";
+import { SortableList } from "@/components/settings2/Sortable";
 import { ColorSwatchPicker } from "@/components/settings2/ColorSwatchPicker";
-import { MotionList, MotionRow, rowSpring } from "@/components/settings2/motion";
+import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { GroupDialog, MergeDialog } from "@/components/settings2/labels/GroupDialog";
 import { LabelDialog, scopeIcon } from "@/components/settings2/labels/LabelDialog";
 import {
@@ -130,9 +131,9 @@ export default function Tags() {
           <ListSkeleton rows={6} />
         </Section>
       ) : !active.length ? (
-        <Section>
-          <EmptyState
-            lit={2}
+        <Section flush>
+          <SettingsEmpty
+            art="settings"
             title={t("labels.empty.title")}
             description={t("labels.empty.description")}
             action={
@@ -142,6 +143,10 @@ export default function Tags() {
                 </Button>
               )
             }
+            tips={[
+              { label: t("labels.empty.tips.groups"), icon: <FolderPlus /> },
+              { label: t("labels.empty.tips.who"), icon: <ShieldCheck /> },
+            ]}
           />
         </Section>
       ) : (
@@ -182,7 +187,12 @@ export default function Tags() {
               {caps.usage && rows.length > 0 && <ColumnHead caps={caps} />}
               {rows.length ? (
                 caps.reorder && canEdit && !term ? (
-                  <SortableRows rows={rows} {...rowProps} onReorder={(ids) => void structure.reorder(ids)} />
+                  <SortableList
+                    items={rows}
+                    onReorder={(ids) => void structure.reorder(ids)}
+                    handleLabel={(l) => t("labels.reorderAria", { name: l.name })}
+                    renderRow={(l, handle) => <LabelRow label={l} {...rowProps} handle={handle} />}
+                  />
                 ) : (
                   <MotionList>
                     {rows.map((l) => (
@@ -373,79 +383,6 @@ function LabelRow({ label: l, caps, canEdit, groups, onEdit, onDelete, onArchive
         )}
       </div>
     </div>
-  );
-}
-
-/** Drag by the grip (or Alt+Arrow on it) to reorder labels inside a group. */
-function SortableRows({ rows, onReorder, ...rowProps }: RowProps & { rows: Label[]; onReorder: (ids: string[]) => void }) {
-  const [order, setOrder] = useState(rows.map((r) => r.id));
-  const [prevRows, setPrevRows] = useState(rows);
-  if (prevRows !== rows) {
-    setPrevRows(rows);
-    setOrder(rows.map((r) => r.id));
-  }
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const move = (id: string, dir: -1 | 1) => {
-    const i = order.indexOf(id);
-    const j = i + dir;
-    if (j < 0 || j >= order.length) return;
-    const next = order.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    setOrder(next);
-    onReorder(next);
-  };
-  return (
-    <Reorder.Group axis="y" values={order} onReorder={setOrder} as="div">
-      {order.map((id) => {
-        const l = byId.get(id);
-        return l ? <SortableRow key={id} label={l} {...rowProps} onDrop={() => onReorder(order)} onMove={(dir) => move(id, dir)} /> : null;
-      })}
-    </Reorder.Group>
-  );
-}
-
-function SortableRow({ label, onDrop, onMove, ...rowProps }: Omit<RowProps, "onMove"> & { label: Label; onDrop: () => void; onMove: (dir: -1 | 1) => void } & Pick<RowProps, never>) {
-  const { t } = useTranslation("settings");
-  const controls = useDragControls();
-  const reduce = useReducedMotion();
-  return (
-    <Reorder.Item
-      as="div"
-      value={label.id}
-      dragListener={false}
-      dragControls={controls}
-      onDragEnd={onDrop}
-      transition={reduce ? { duration: 0 } : rowSpring}
-      whileDrag={{ scale: 1.01, boxShadow: "var(--shadow-pop)", zIndex: 2 }}
-      className="relative border-b border-line-soft last:border-0"
-    >
-      <LabelRow
-        label={label}
-        {...(rowProps as RowProps)}
-        onMove={() => {}}
-        handle={
-          <button
-            type="button"
-            aria-label={t("labels.reorderAria", { name: label.name })}
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              controls.start(e);
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-                e.preventDefault();
-                e.stopPropagation();
-                onMove(e.key === "ArrowUp" ? -1 : 1);
-              }
-            }}
-            className="absolute left-0.5 top-1/2 flex h-7 w-4 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-sm text-fg-4 opacity-0 transition-opacity hover:text-fg-2 focus-visible:opacity-100 active:cursor-grabbing group-hover:opacity-100"
-          >
-            <GripVertical className="size-3.5" />
-          </button>
-        }
-      />
-    </Reorder.Item>
   );
 }
 

@@ -113,7 +113,7 @@ export async function run(t) {
 
   await t.step("saved reply: create in settings and insert with /", async () => {
     await owner.goto(cfg.app + "/settings/saved-replies");
-    await owner.getByRole("button", { name: "New reply" }).click();
+    await owner.getByRole("button", { name: "New reply" }).first().click();
     await owner.getByLabel("Title").fill("Reset steps");
     await owner.getByLabel(/Shortcut/).fill("reset");
     await owner.getByRole("textbox").filter({ hasText: "" }).last().click();

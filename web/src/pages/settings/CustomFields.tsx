@@ -1,18 +1,19 @@
 // Settings > Custom fields: typed fields for tickets, contacts and companies,
 // with options, colours, "required to solve", archive and reorder.
 
-import { Archive, ArchiveRestore, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Archive, ArchiveRestore, Asterisk, MoreHorizontal, PanelRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Segmented } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
-import { IconTile, ListSkeleton, ReorderButtons } from "@/components/settings2/bits";
+import { IconTile, ListSkeleton } from "@/components/settings2/bits";
+import { SortableList } from "@/components/settings2/Sortable";
 import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { FieldDialog } from "@/components/settings2/fields/FieldDialog";
 import { ENTITIES, hasOptions, typeIcon, typeTone, useCustomFields, useFieldWrites, type CustomField, type FieldEntity } from "@/components/settings2/fields/model";
@@ -35,17 +36,12 @@ export default function CustomFields() {
   const archived = mine.filter((f) => f.archived);
   const count = (e: FieldEntity) => fields.filter((f) => f.entity === e && !f.archived).length;
 
-  const move = (f: CustomField, dir: -1 | 1) => {
-    const ids = active.map((x) => x.id);
-    const i = ids.indexOf(f.id);
-    const j = i + dir;
-    if (j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
+  const reorder = (ids: string[]) => {
+    if (ids.join() === active.map((x) => x.id).join()) return;
     writes.reorder(entity, ids).catch((e) => toast.error(e));
   };
 
-  const row = (f: CustomField, i: number, list: CustomField[]) => (
-    <MotionRow key={f.id}>
+  const row = (f: CustomField, handle?: ReactNode) => (
       <div
         role={canEdit ? "button" : undefined}
         tabIndex={canEdit ? 0 : undefined}
@@ -53,8 +49,9 @@ export default function CustomFields() {
         onKeyDown={(e) => {
           if (canEdit && e.key === "Enter" && e.target === e.currentTarget) setEditing(f);
         }}
-        className={cn("group flex min-h-12 items-center gap-3 px-4 py-2", canEdit && "cursor-pointer transition-colors hover:bg-sunken", f.archived && "opacity-65")}
+        className={cn("group relative flex min-h-12 items-center gap-3 bg-surface px-4 py-2", canEdit && "cursor-pointer transition-colors hover:bg-sunken", f.archived && "opacity-65")}
       >
+        {handle}
         <IconTile tone={typeTone[f.type]}>{typeIcon[f.type]}</IconTile>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -77,11 +74,6 @@ export default function CustomFields() {
               </span>
             ))}
             {f.options.length > 3 && <span className="mono text-[11px] text-fg-4">+{f.options.length - 3}</span>}
-          </span>
-        )}
-        {canEdit && !f.archived && (
-          <span className="opacity-100 transition-opacity focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">
-            <ReorderButtons label={f.name} first={i === 0} last={i === list.length - 1} onUp={() => move(f, -1)} onDown={() => move(f, 1)} />
           </span>
         )}
         {canEdit && (
@@ -119,7 +111,6 @@ export default function CustomFields() {
           </Menu>
         )}
       </div>
-    </MotionRow>
   );
 
   return (
@@ -153,26 +144,41 @@ export default function CustomFields() {
         {isLoading ? (
           <ListSkeleton rows={4} />
         ) : !active.length ? (
-          <EmptyState
-            compact
-            lit={1}
+          <SettingsEmpty
+            art="settings"
             title={t("fields.empty.title", { entity: t(`fields.entity.${entity}`).toLowerCase() })}
             description={t(`fields.empty.${entity}`)}
             action={
               canEdit && (
-                <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
+                <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing("new")}>
                   {t("fields.new")}
                 </Button>
               )
             }
+            tips={[
+              { label: t("fields.empty.tips.required"), icon: <Asterisk /> },
+              { label: t("fields.empty.tips.sidebar"), icon: <PanelRight /> },
+            ]}
           />
         ) : (
-          <MotionList>{active.map((f, i) => row(f, i, active))}</MotionList>
+canEdit ? (
+          <SortableList items={active} onReorder={reorder} handleLabel={(f) => t("fields.reorderAria", { name: f.name })} renderRow={(f, handle) => row(f, handle)} />
+        ) : (
+          <MotionList>
+            {active.map((f) => (
+              <MotionRow key={f.id}>{row(f)}</MotionRow>
+            ))}
+          </MotionList>
+        )
         )}
       </Section>
       {archived.length > 0 && (
         <Section flush title={t("fields.archivedTitle", { count: archived.length })}>
-          <MotionList>{archived.map((f, i) => row(f, i, archived))}</MotionList>
+          <MotionList>
+            {archived.map((f) => (
+              <MotionRow key={f.id}>{row(f)}</MotionRow>
+            ))}
+          </MotionList>
         </Section>
       )}
       {editing && (

@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { LogOut, MoreHorizontal, UserMinus, UserPlus, X } from "lucide-react";
+import { Clock, LogOut, MoreHorizontal, ShieldCheck, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
 import { ListSkeleton, RolePill, roleTone, StatePill, SummaryStrip } from "@/components/settings2/bits";
 import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { SearchInput } from "@/components/ui/input";
 import { tone as tones } from "@/lib/tones";
 import { Avatar } from "@/components/ui/avatar";
@@ -160,19 +161,25 @@ function MembersList({ onInvite }: { onInvite?: () => void }) {
     >
       {isLoading ? (
         <ListSkeleton rows={5} />
+      ) : !sorted.length && term ? (
+        <EmptyState compact lit={3} title={t("members.noMatch")} description={t("members.noMatchHint")} />
       ) : !sorted.length ? (
-        <EmptyState
-          compact
-          lit={3}
-          title={term ? t("members.noMatch") : t("members.emptyTitle")}
-          description={term ? t("members.noMatchHint") : t("members.emptyHint")}
+        <SettingsEmpty
+          art="contacts"
+          ghost="people"
+          title={t("members.emptyTitle")}
+          description={t("members.emptyHint")}
           action={
-            !term && onInvite ? (
-              <Button size="sm" icon={<UserPlus className="size-3.5" />} onClick={onInvite}>
+            onInvite ? (
+              <Button variant="primary" icon={<UserPlus className="size-3.5" />} onClick={onInvite}>
                 {t("members.invite")}
               </Button>
             ) : undefined
           }
+          tips={[
+            { label: t("members.emptyTips.roles"), icon: <ShieldCheck /> },
+            { label: t("members.emptyTips.expire"), icon: <Clock /> },
+          ]}
         />
       ) : (
         <>

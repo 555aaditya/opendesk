@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Pencil, RefreshCw, Send, Trash2 } from "lucide-react";
+import { Activity, Pencil, RefreshCw, Send, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BackLink, NoAccess, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
@@ -189,20 +190,20 @@ export default function WebhookDetail() {
         {deliveries.isLoading ? (
           <ListSkeleton rows={5} />
         ) : !rows.length ? (
-          <EmptyState
-            compact
-            lit={0}
-            className="py-10"
-            title={filter === "failed" ? t("webhook.emptyFailed") : t("webhook.empty")}
-            description={filter === "failed" ? t("webhook.emptyFailedHint") : t("webhook.emptyHint")}
-            action={
-              filter === "all" && hook.enabled ? (
-                <Button size="sm" icon={<Send className="size-3.5" />} loading={test.isPending} onClick={() => test.mutate()}>
-                  {t("webhook.sendTest")}
-                </Button>
-              ) : undefined
-            }
-          />
+          filter === "failed" ? (
+            <EmptyState compact lit={0} className="py-10" title={t("webhook.emptyFailed")} description={t("webhook.emptyFailedHint")} />
+          ) : (
+            // The header already offers Send test event; one button keeps the label unique.
+            <SettingsEmpty
+              art="settings"
+              title={t("webhook.empty")}
+              description={t("webhook.emptyHint")}
+              tips={[
+                { label: t("webhook.emptyTips.status"), icon: <Activity /> },
+                { label: t("webhook.emptyTips.retry"), icon: <RefreshCw /> },
+              ]}
+            />
+          )
         ) : (
           <div role="table" aria-label={t("webhook.deliveries")} className="text-[12.5px]">
             <div role="row" className={cn(grid, "h-8 border-b border-line-soft bg-sunken")}>

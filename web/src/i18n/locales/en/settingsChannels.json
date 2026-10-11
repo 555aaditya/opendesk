@@ -34,7 +34,11 @@
     "colConnection": "Connection",
     "colTeam": "Team",
     "colStatus": "Status",
-    "colSynced": "Last sync"
+    "colSynced": "Last sync",
+    "emptyTips": {
+      "forward": "Forwarding works with any provider",
+      "team": "Each mailbox can route to a team"
+    }
   },
   "summary": {
     "total": "Mailboxes",

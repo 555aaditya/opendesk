@@ -8,16 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
-import { IconTile, ListSkeleton, ReorderButtons } from "@/components/settings2/bits";
-import { MotionList, MotionRow } from "@/components/settings2/motion";
+import { IconTile, ListSkeleton } from "@/components/settings2/bits";
 import { Avatar } from "@/components/ui/avatar";
 import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { moveItem, useListMutation } from "@/components/settings2/optimistic";
+import { orderBy, useListMutation } from "@/components/settings2/optimistic";
+import { SortableList } from "@/components/settings2/Sortable";
 import {
   MultiPick,
   SinglePick,
@@ -147,14 +147,14 @@ export default function Views() {
     (rows, v) => rows.map((r) => (r.id === v.id ? { ...r, shared: v.shared } : r)),
     { errorText: t("views.updateFailed") },
   );
-  const reorder = useListMutation<View, { id: string; dir: -1 | 1 }>(
+  const reorder = useListMutation<View, string[]>(
     qk.views,
-    async (v) => {
-      const next = moveItem(sorted, v.id, v.dir);
+    async (ids) => {
+      const next = orderBy(sorted, ids);
       const changed = next.filter((n) => sorted.find((o) => o.id === n.id)?.position !== n.position);
       await Promise.all(changed.map((n) => api.views.update(n.id, { position: n.position })));
     },
-    (rows, v) => moveItem(rows, v.id, v.dir),
+    (rows, ids) => orderBy(rows, ids),
     { errorText: t("views.reorderFailed") },
   );
   const remove = useListMutation<View, string>(
@@ -179,12 +179,25 @@ export default function Views() {
         {isLoading ? (
           <ListSkeleton rows={3} />
         ) : !sorted.length ? (
-          <EmptyState compact lit={0} title={t("views.emptyTitle")} description={t("views.emptyHint")} action={newButton("sm")} />
+          <SettingsEmpty
+            art="views"
+            title={t("views.emptyTitle")}
+            description={t("views.emptyHint")}
+            action={newButton()}
+            tips={[
+              { label: t("views.emptyTips.sidebar"), icon: <Globe /> },
+              { label: t("views.emptyTips.personal"), icon: <Lock /> },
+            ]}
+          />
         ) : (
-          <MotionList>
-            {sorted.map((v, i) => (
-              <MotionRow key={v.id}>
+          <SortableList
+            items={sorted}
+            disabled={!canEdit}
+            onReorder={(ids) => reorder.mutate(ids)}
+            handleLabel={(v) => t("views.reorderAria", { name: v.name })}
+            renderRow={(v, handle) => (
                 <ListRow onClick={canEdit ? () => setEditing(v) : undefined} className="items-start py-3">
+                  {handle}
                   <IconTile tone={v.shared ? "blue" : "gray"} className="mt-0.5">
                     <Layers />
                   </IconTile>
@@ -211,14 +224,6 @@ export default function Views() {
                           })}
                         />
                       </span>
-                      <ReorderButtons
-                        label={v.name}
-                        first={i === 0}
-                        last={i === sorted.length - 1}
-                        disabled={reorder.isPending}
-                        onUp={() => reorder.mutate({ id: v.id, dir: -1 })}
-                        onDown={() => reorder.mutate({ id: v.id, dir: 1 })}
-                      />
                       <Menu>
                         <MenuTrigger asChild>
                           <button
@@ -272,9 +277,8 @@ export default function Views() {
                     </div>
                   )}
                 </ListRow>
-              </MotionRow>
-            ))}
-          </MotionList>
+            )}
+          />
         )}
       </Section>
       {editing && <ViewDrawer view={editing === "new" ? null : editing} nextPosition={sorted.length} onClose={() => setEditing(null)} />}

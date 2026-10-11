@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { EyeOff, KeyRound, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NoAccess, Section, SettingsPage } from "@/components/layout";
@@ -9,7 +9,7 @@ import { Field, TextInput } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/tabs";
-import { EmptyState } from "@/components/ui/empty";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
 import { CopyField } from "@/components/ui/copy-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Avatar } from "@/components/ui/avatar";
@@ -106,17 +106,19 @@ export default function ApiKeys() {
         {isLoading ? (
           <ListSkeleton rows={3} />
         ) : !sorted.length ? (
-          <EmptyState
-            compact
-            lit={2}
-            className="py-12"
+          <SettingsEmpty
+            art="settings"
             title={t("apiKeys.empty.title")}
             description={t("apiKeys.empty.description")}
             action={
-              <Button size="sm" variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
+              <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
                 {t("apiKeys.new")}
               </Button>
             }
+            tips={[
+              { label: t("apiKeys.empty.tips.scopes"), icon: <ShieldCheck /> },
+              { label: t("apiKeys.empty.tips.once"), icon: <EyeOff /> },
+            ]}
           />
         ) : (
           <>

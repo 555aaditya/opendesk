@@ -35,7 +35,7 @@ export function Popover({
           side={side}
           sideOffset={sideOffset}
           collisionPadding={8}
-          className={cn(floatingPanel, className)}
+          className={cn(floatingPanel, "origin-[var(--radix-popover-content-transform-origin)]", className)}
           onClick={(e) => e.stopPropagation()}
         >
           {children}
