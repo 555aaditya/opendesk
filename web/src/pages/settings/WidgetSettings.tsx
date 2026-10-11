@@ -27,6 +27,18 @@ function widgetOrigin() {
   return window.location.origin;
 }
 
+/** The API origin for `data-api`, when the widget can't infer it from where it loads. */
+function widgetApi(origin: string): string | null {
+  if (!config.apiUrl) return null;
+  const inferred = origin === HOSTED ? "https://api.opendesk.sh" : origin;
+  try {
+    const a = new URL(config.apiUrl, window.location.href).origin;
+    return a === inferred ? null : a;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeOrigin(v: string): string | null {
   try {
     const u = new URL(v.trim().includes("://") ? v.trim() : `https://${v.trim()}`);
@@ -81,7 +93,9 @@ export default function WidgetSettings() {
     setOriginInput("");
   };
 
-  const snippet = `<script src="${widgetOrigin()}/widget/v1.js" data-key="${ws?.widget_key ?? "wk_..."}" async></script>`;
+  const origin = widgetOrigin();
+  const apiAttr = widgetApi(origin);
+  const snippet = `<script src="${origin}/widget/v1.js" data-key="${ws?.widget_key ?? "wk_..."}"${apiAttr ? ` data-api="${apiAttr}"` : ""} async></script>`;
   const identify = `window.opendesk('identify', {
   user_id: "42",
   user_hash: "<hmac from your server>",
