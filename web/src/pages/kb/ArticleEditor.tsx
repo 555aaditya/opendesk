@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useBlocker, useNavigate } from "@tanstack/react-router";
 import type { Editor } from "@tiptap/react";
-import { ChevronDown, ChevronRight, ExternalLink, Eye, Folder, MoreHorizontal, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ExternalLink, Eye, Folder, MoreHorizontal, Trash2, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { BackLink } from "@/components/layout";
 import { RichEditor, Toolbar, type RichEditorHandle } from "@/components/editor/RichEditor";
@@ -14,6 +14,8 @@ import { TextInput } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Picker } from "@/components/ui/picker";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Morph } from "@/components/motion";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
@@ -272,14 +274,24 @@ function EditorScreen({ article }: { article: KbArticle | null }) {
         />
         <ArticleStatus status={status} />
         <span className="ml-1 hidden items-center gap-1.5 text-xs text-fg-4 lg:inline-flex" aria-live="polite">
-          {dirty ? (
-            <>
-              <span className="size-1.5 rounded-full bg-tone-amber-solid" />
-              {t("editor.unsaved")}
-            </>
-          ) : current ? (
-            <span title={fullDate(current.updated_at)}>{t("editor.savedAgo", { when: relLong(current.updated_at) })}</span>
-          ) : null}
+          <Morph k={save.isPending ? "saving" : dirty ? "dirty" : current ? `saved-${current.updated_at}` : "new"} className="items-center gap-1.5">
+            {save.isPending ? (
+              <>
+                <Spinner className="size-3" />
+                {t("editor.saving")}
+              </>
+            ) : dirty ? (
+              <>
+                <span className="size-1.5 rounded-full bg-tone-amber-solid" />
+                {t("editor.unsaved")}
+              </>
+            ) : current ? (
+              <>
+                <Check className="size-3 text-tone-green" strokeWidth={2.5} />
+                <span title={fullDate(current.updated_at)}>{t("editor.savedAgo", { when: relLong(current.updated_at) })}</span>
+              </>
+            ) : null}
+          </Morph>
         </span>
 
         <div className="ml-auto flex items-center gap-1.5">

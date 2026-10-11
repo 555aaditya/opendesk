@@ -1,6 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Building2, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +7,7 @@ import { PageHeader, Stat, StatStrip } from "@/components/layout";
 import { AvatarStack } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty";
+import { EmptyState, GhostList } from "@/components/ui/empty";
 import { Field, SearchInput, TextInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -17,7 +16,7 @@ import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { CompanyDrawer } from "@/components/contacts/CompanyDrawer";
 import { CompanyGlyph, Labels, labelsOf } from "@/components/contacts/bits";
 import { useDebounced, useSentinel } from "@/components/contacts/hooks";
-import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
+import { AnimatedNumber, PresenceList, PresenceRow } from "@/components/motion";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { Contact } from "@/lib/api/types";
@@ -40,7 +39,6 @@ export default function CompaniesPage() {
   const { companyId } = route.useParams();
   const navigate = route.useNavigate();
   const role = useRole();
-  const reduce = useReducedMotion();
   const [term, setTerm] = useState(search.q ?? "");
   const debounced = useDebounced(term, 250);
   const [creating, setCreating] = useState(false);
@@ -118,26 +116,33 @@ export default function CompaniesPage() {
         ) : list.error ? (
           <EmptyState lit={3} title={t("error.companiesTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
-          <EmptyState
-            lit={0}
-            title={search.q ? t("empty.noCompanyMatch") : t("empty.companiesTitle")}
-            description={search.q ? t("empty.noCompanyMatchHint") : t("empty.companiesDescription")}
-            action={search.q ? <Button onClick={() => setTerm("")}>{t("clearSearch")}</Button> : newButton}
-          />
+          search.q ? (
+            <EmptyState
+              art="search"
+              ghost={<GhostList variant="table" />}
+              title={t("empty.noCompanyMatch")}
+              description={t("empty.noMatchFor", { q: search.q })}
+              action={<Button onClick={() => setTerm("")}>{t("clearSearch")}</Button>}
+              tips={[{ label: t("tips.spelling") }, { label: t("tips.tryDomain") }]}
+            />
+          ) : (
+            <EmptyState
+              art="contacts"
+              ghost={<GhostList variant="table" />}
+              title={t("empty.companiesTitle")}
+              description={t("empty.companiesDescription")}
+              action={newButton}
+              tips={[{ label: t("tips.domains") }]}
+            />
+          )
         ) : (
-          <ul role="list">
-            <AnimatePresence initial={false}>
+          <div role="list">
+            <PresenceList>
               {rows.map((c) => {
                 const members = byCompany.get(c.id) ?? [];
                 return (
-                  <motion.li
-                    key={c.id}
-                    layout={reduce ? false : "position"}
-                    initial={reduce ? false : { opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={reduce ? undefined : { opacity: 0, transition: { duration: 0.12 } }}
-                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                  >
+                  <PresenceRow key={c.id}>
+                  <div role="listitem">
                     <Link
                       to="/companies/{-$companyId}"
                       params={{ companyId: c.id }}
@@ -169,11 +174,12 @@ export default function CompaniesPage() {
                         {relShort(c.updated_at)}
                       </span>
                     </Link>
-                  </motion.li>
+                  </div>
+                  </PresenceRow>
                 );
               })}
-            </AnimatePresence>
-          </ul>
+            </PresenceList>
+          </div>
         )}
         <div ref={sentinel} className="flex h-12 items-center justify-center">
           {list.isFetchingNextPage && <Spinner className="size-3.5 text-fg-4" />}

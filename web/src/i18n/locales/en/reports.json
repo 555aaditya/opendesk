@@ -10,7 +10,9 @@
   },
   "empty": {
     "title": "Nothing to report yet",
-    "description": "Once tickets come in, volume, response times and satisfaction show up here."
+    "description": "Reports fill in as tickets arrive. The figures behind this card are sample data.",
+    "sample": "Sample data",
+    "sampleHint": "A preview of what this page shows once tickets arrive. None of these numbers are real."
   },
   "unit": {
     "tickets_one": "{{count}} ticket",

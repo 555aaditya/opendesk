@@ -4,6 +4,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Building2, Pencil, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { dur, ease, springs } from "@/lib/motion";
+import { PresenceList, PresenceRow } from "@/components/motion";
 import { Drawer } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar } from "@/components/ui/avatar";
@@ -28,7 +30,7 @@ export { CompanyGlyph } from "./bits";
 
 type Tab = "overview" | "people";
 
-const swap = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } } as const;
+const swap = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4, transition: { duration: dur.fast, ease: ease.out } }, transition: springs.row };
 
 export function CompanyDrawer({ companyId, onClose }: { companyId: string | null; onClose: () => void }) {
   const { t } = useTranslation("contacts");
@@ -177,9 +179,11 @@ function People({ companyId }: { companyId: string }) {
     );
   if (!rows.length) return <EmptyState compact lit={2} title={t("drawer.noPeople")} description={t("drawer.noPeopleHint")} />;
   return (
-    <ul className="py-1">
+    <div role="list" className="py-1">
+      <PresenceList>
       {rows.map((p) => (
-        <li key={p.id}>
+        <PresenceRow key={p.id}>
+        <div role="listitem">
           <Link
             to="/contacts/{-$contactId}"
             params={{ contactId: p.id }}
@@ -197,16 +201,18 @@ function People({ companyId }: { companyId: string }) {
             </span>
             <span className="mono text-[11px] text-fg-4">{t("ticketCount", { count: p.ticket_count })}</span>
           </Link>
-        </li>
+        </div>
+        </PresenceRow>
       ))}
+      </PresenceList>
       {list.hasNextPage && (
-        <li className="flex justify-center py-3">
+        <div className="flex justify-center py-3">
           <Button size="xs" variant="ghost" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
             {t("showMore")}
           </Button>
-        </li>
+        </div>
       )}
-    </ul>
+    </div>
   );
 }
 

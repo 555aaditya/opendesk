@@ -1,5 +1,7 @@
 import { format, parseISO } from "date-fns";
+import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
+import { ease } from "@/lib/motion";
 import type { ReportsOverview } from "@/lib/api/types";
 import { SERIES, toneVar } from "@/lib/tones";
 import { monotonePath, niceTicks, useWidth } from "./useSize";
@@ -21,6 +23,7 @@ export const series = [
 export function VolumeChart({ days }: { days: Day[] }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const reduce = useReducedMotion();
 
   const plotW = Math.max(0, width - ML - MR);
   const max = Math.max(1, ...days.map((d) => Math.max(d.created, d.solved)));
@@ -74,9 +77,20 @@ export function VolumeChart({ days }: { days: Day[] }) {
             </text>
           ))}
 
-          <path d={area} fill={series[0].color} fillOpacity={0.07} />
+          <motion.path d={area} fill={series[0].color} initial={reduce ? false : { fillOpacity: 0 }} animate={{ fillOpacity: 0.07 }} transition={{ duration: 0.25, delay: 0.2, ease: ease.out }} />
           {[...paths].reverse().map((p) => (
-            <path key={p.key} d={p.d} fill="none" stroke={p.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+            <motion.path
+              key={p.key}
+              d={p.d}
+              fill="none"
+              stroke={p.color}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              initial={reduce ? false : { pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.25, ease: ease.out }}
+            />
           ))}
 
           {hover === null &&
@@ -184,6 +198,7 @@ export function VolumeTable({ days }: { days: Day[] }) {
 
 /** A 12-point de-emphasised trend for a stat tile. */
 export function Sparkline({ values, color = "var(--fg-4)", width = 72 }: { values: number[]; color?: string; width?: number }) {
+  const reduce = useReducedMotion();
   const v = values.slice(-12);
   if (v.length < 2) return null;
   const w = width;
@@ -193,7 +208,17 @@ export function Sparkline({ values, color = "var(--fg-4)", width = 72 }: { value
   const lastPt = pts[pts.length - 1];
   return (
     <svg width={w} height={hh} aria-hidden className="shrink-0 overflow-visible">
-      <path d={monotonePath(pts)} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <motion.path
+        d={monotonePath(pts)}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={reduce ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.25, ease: ease.out }}
+      />
       <circle cx={lastPt[0]} cy={lastPt[1]} r={2.5} fill={color} stroke="var(--surface)" strokeWidth={1.5} />
     </svg>
   );

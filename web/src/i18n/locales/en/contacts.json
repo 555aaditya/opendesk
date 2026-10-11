@@ -79,7 +79,8 @@
     "companiesTitle": "No companies yet",
     "companiesDescription": "Group contacts by the organisation they work for.",
     "noCompanyMatch": "No companies match",
-    "noCompanyMatchHint": "Try a different name or domain."
+    "noCompanyMatchHint": "Try a different name or domain.",
+    "noMatchFor": "Nothing matches \"{{q}}\"."
   },
   "error": {
     "listTitle": "Contacts couldn't load",
@@ -131,5 +132,14 @@
     "add": "Add label",
     "edit": "Labels",
     "saveFailed": "Couldn't save that change"
+  },
+  "clearFilters": "Clear filters",
+  "tips": {
+    "spelling": "Check the spelling",
+    "emailOrDomain": "Try an email address or a domain",
+    "tryDomain": "Try the email domain, like acme.com",
+    "automatic": "Contacts are created automatically from email and chat",
+    "search": "to search everything",
+    "domains": "Companies group contacts by their email domain"
   }
 }

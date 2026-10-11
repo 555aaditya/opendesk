@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FileText, Pencil, Ticket as TicketIcon, Trash2, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { dur, ease, springs } from "@/lib/motion";
 import { Drawer } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar } from "@/components/ui/avatar";
@@ -16,7 +17,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
-import { StatusPill, TicketNumber } from "@/components/tickets/bits";
+import { PriorityIcon, StatusIcon, priorityLabel, statusLabel } from "@/components/indicators";
+import { TicketNumber } from "@/components/tickets/bits";
+import { Tooltip } from "@/components/ui/tooltip";
+import { PresenceList, PresenceRow } from "@/components/motion";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { CompanyRef, Contact } from "@/lib/api/types";
@@ -30,7 +34,7 @@ import { dropContact, patchContact, restore, snapshot } from "./cache";
 
 type Tab = "overview" | "tickets";
 
-const swap = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } } as const;
+const swap = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4, transition: { duration: dur.fast, ease: ease.out } }, transition: springs.row };
 
 export function ContactDrawer({ contactId, onClose }: { contactId: string | null; onClose: () => void }) {
   const { t } = useTranslation("contacts");
@@ -266,29 +270,46 @@ function Tickets({ contactId }: { contactId: string }) {
     );
   if (!data?.length) return <EmptyState compact lit={0} title={t("drawer.noTickets")} description={t("drawer.noTicketsHint")} />;
   return (
-    <ul className="py-1">
+    <div role="list" className="py-1">
+      <PresenceList>
       {data.map((tk) => (
-        <li key={tk.id}>
+        <PresenceRow key={tk.id}>
+        <div role="listitem">
           <Link
             to="/inbox/$folder/{-$ticketId}"
             params={{ folder: "open", ticketId: tk.id }}
             className="flex items-center gap-3 border-b border-line-soft px-5 py-2.5 transition-colors hover:bg-sunken"
           >
+            {/* Fixed icon slots so priority and status line up down the list. */}
+            <span className="flex shrink-0 items-center gap-2">
+              <Tooltip content={priorityLabel[tk.priority]}>
+                <span className="flex size-4 items-center justify-center">
+                  <PriorityIcon priority={tk.priority} />
+                </span>
+              </Tooltip>
+              <Tooltip content={statusLabel[tk.status]}>
+                <span className="flex size-4 items-center justify-center">
+                  <StatusIcon status={tk.status} />
+                </span>
+              </Tooltip>
+            </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-medium" data-ph-mask>
                 {tk.subject}
               </span>
               <span className="mt-1 flex items-center gap-2 text-xs text-fg-3">
                 <TicketNumber n={tk.number} />
+                <span>{statusLabel[tk.status]}</span>
                 {tk.assignee && <span className="truncate">{tk.assignee.name}</span>}
               </span>
             </span>
-            <StatusPill status={tk.status} />
             <span className="mono w-8 shrink-0 text-right text-[11px] text-fg-4">{relShort(tk.last_message_at)}</span>
           </Link>
-        </li>
+        </div>
+        </PresenceRow>
       ))}
-    </ul>
+      </PresenceList>
+    </div>
   );
 }
 

@@ -1,6 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Plus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +7,7 @@ import { PageHeader, Stat, StatStrip } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty";
+import { EmptyState, GhostList } from "@/components/ui/empty";
 import { Field, SearchInput, TextInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -19,7 +18,7 @@ import { ContactDrawer } from "@/components/contacts/ContactDrawer";
 import { CompanyPicker } from "@/components/contacts/CompanyPicker";
 import { CompanyGlyph, Labels, labelsOf } from "@/components/contacts/bits";
 import { useDebounced, useSentinel } from "@/components/contacts/hooks";
-import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
+import { AnimatedNumber, PresenceList, PresenceRow } from "@/components/motion";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { CompanyRef } from "@/lib/api/types";
@@ -44,7 +43,6 @@ export default function ContactsPage() {
   const { contactId } = route.useParams();
   const navigate = route.useNavigate();
   const role = useRole();
-  const reduce = useReducedMotion();
   const [term, setTerm] = useState(search.q ?? "");
   const debounced = useDebounced(term, 250);
   const [creating, setCreating] = useState(false);
@@ -89,7 +87,7 @@ export default function ContactsPage() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {!list.isLoading && rows.length > 0 && (
           <StatStrip>
-            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} />{more}</>} sub={search.q || search.company ? t("stat.matching") : t("stat.inDirectory")} />
+            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} flash />{more}</>} sub={search.q || search.company ? t("stat.matching") : t("stat.inDirectory")} />
             <Stat label={t("stat.companies")} value={<AnimatedNumber value={companies} />} sub={t("stat.represented")} />
             <Stat label={t("stat.tickets")} value={<AnimatedNumber value={tickets} />} sub={t("stat.fromThesePeople")} />
             <Stat label={t("stat.blocked")} value={<AnimatedNumber value={blocked} />} sub={t("stat.blockedHint")} />
@@ -129,24 +127,40 @@ export default function ContactsPage() {
         ) : list.error ? (
           <EmptyState lit={3} title={t("error.listTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
-          <EmptyState
-            lit={2}
-            title={search.q ? t("empty.noMatch") : t("empty.title")}
-            description={search.q ? t("empty.noMatchHint") : t("empty.description")}
-            action={search.q ? <Button onClick={() => setTerm("")}>{t("clearSearch")}</Button> : newButton}
-          />
-        ) : (
-          <ul role="list">
-            <AnimatePresence initial={false}>
-              {rows.map((c) => (
-                <motion.li
-                  key={c.id}
-                  layout={reduce ? false : "position"}
-                  initial={reduce ? false : { opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={reduce ? undefined : { opacity: 0, transition: { duration: 0.12 } }}
-                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
+          search.q || search.company ? (
+            <EmptyState
+              art="search"
+              ghost={<GhostList variant="people" />}
+              title={t("empty.noMatch")}
+              description={search.q ? t("empty.noMatchFor", { q: search.q }) : t("empty.noMatchHint")}
+              action={
+                <Button
+                  onClick={() => {
+                    setTerm("");
+                    void navigate({ search: (s) => ({ ...s, q: undefined, company: undefined }) });
+                  }}
                 >
+                  {t("clearFilters")}
+                </Button>
+              }
+              tips={[{ label: t("tips.spelling") }, { label: t("tips.emailOrDomain") }]}
+            />
+          ) : (
+            <EmptyState
+              art="contacts"
+              ghost={<GhostList variant="people" />}
+              title={t("empty.title")}
+              description={t("empty.description")}
+              action={newButton}
+              tips={[{ label: t("tips.automatic") }, { kbd: "mod k", label: t("tips.search") }]}
+            />
+          )
+        ) : (
+          <div role="list">
+            <PresenceList>
+              {rows.map((c) => (
+                <PresenceRow key={c.id}>
+                  <div role="listitem">
                   <Link
                     to="/contacts/{-$contactId}"
                     params={{ contactId: c.id }}
@@ -185,10 +199,11 @@ export default function ContactsPage() {
                       {relShort(c.updated_at)}
                     </span>
                   </Link>
-                </motion.li>
+                  </div>
+                </PresenceRow>
               ))}
-            </AnimatePresence>
-          </ul>
+            </PresenceList>
+          </div>
         )}
         <div ref={sentinel} className="flex h-12 items-center justify-center">
           {list.isFetchingNextPage && <Spinner className="size-3.5 text-fg-4" />}

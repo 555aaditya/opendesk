@@ -55,7 +55,10 @@
     "description": "Write answers once and share them in replies, the chat widget and your help center.",
     "noDrafts": "No drafts",
     "noMatch": "No articles match",
-    "noMatchHint": "Try different words, or clear the filters."
+    "noMatchHint": "Try different words, or clear the filters.",
+    "noMatchFor": "Nothing matches \"{{q}}\".",
+    "noDraftsHint": "Every article here is published. Drafts show up as you write them.",
+    "collectionTitle": "This collection is empty"
   },
   "error": {
     "title": "Articles couldn't load"
@@ -125,6 +128,14 @@
     "leaveTitle": "Leave without saving?",
     "leaveBody": "Your changes to this article haven't been saved.",
     "keepEditing": "Keep editing",
-    "discard": "Discard changes"
+    "discard": "Discard changes",
+    "saving": "Saving"
+  },
+  "clearFilters": "Clear filters",
+  "tips": {
+    "spelling": "Check the spelling",
+    "fewerWords": "Try fewer or broader words",
+    "collections": "Group articles into collections",
+    "publish": "Publish to show it in your help center"
   }
 }

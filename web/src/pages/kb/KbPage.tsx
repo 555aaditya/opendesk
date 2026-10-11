@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BookOpen, ExternalLink, Folder, FolderPlus, Library, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader, Stat, StatStrip } from "@/components/layout";
@@ -8,7 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { ArticleStatus } from "@/components/kb/ArticleStatus";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty";
+import { EmptyState, GhostGrid, GhostList } from "@/components/ui/empty";
 import { Field, SearchInput, Textarea, TextInput } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Segmented } from "@/components/ui/tabs";
@@ -23,7 +22,7 @@ import { cn } from "@/lib/cn";
 import { compact, fullDate, relShort } from "@/lib/format";
 import { tone, type Tone } from "@/lib/tones";
 import { collectionTone } from "@/components/kb/tone";
-import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
+import { AnimatedNumber, PresenceList, PresenceRow } from "@/components/motion";
 import { q, qk, removeFromList, upsertInList } from "@/lib/queries";
 import { atLeast, useRole, useWorkspace } from "@/lib/session";
 import { useAI } from "@/lib/ai";
@@ -46,7 +45,6 @@ export default function KbPage() {
   const navigate = route.useNavigate();
   const ws = useWorkspace();
   const role = useRole();
-  const reduce = useReducedMotion();
   const canEdit = atLeast(role, "agent");
   const [term, setTerm] = useState(search.q ?? "");
   const debounced = useDebounced(term, 250);
@@ -197,38 +195,45 @@ export default function KbPage() {
         ) : articles.error ? (
           <EmptyState lit={3} title={t("error.title")} description={errorMessage(articles.error)} action={<Button onClick={() => void articles.refetch()}>{t("retry")}</Button>} />
         ) : !articles.data?.length ? (
-          <EmptyState
-            className="min-h-[320px]"
-            lit={search.q ? 3 : 1}
-            title={search.q ? t("empty.noMatch") : search.status === "draft" ? t("empty.noDrafts") : t("empty.title")}
-            description={search.q ? t("empty.noMatchHint") : t("empty.description")}
-            action={
-              search.q ? (
-                <Button onClick={() => setTerm("")}>{t("clearSearch")}</Button>
-              ) : canEdit ? (
-                <Button asChild variant="primary">
-                  <Link to="/kb/articles/$articleId" params={{ articleId: "new" }} search={{ collection: search.collection }}>
-                    <Plus className="size-3.5" />
-                    {t("writeArticle")}
-                  </Link>
+          search.q || search.status ? (
+            <EmptyState
+              className="min-h-[360px]"
+              art="search"
+              ghost={<GhostList rows={6} variant="table" />}
+              title={search.q ? t("empty.noMatch") : t("empty.noDrafts")}
+              description={search.q ? t("empty.noMatchFor", { q: search.q }) : t("empty.noDraftsHint")}
+              action={
+                <Button
+                  onClick={() => {
+                    setTerm("");
+                    void navigate({ search: (s) => ({ ...s, q: undefined, status: undefined }) });
+                  }}
+                >
+                  {t("clearFilters")}
                 </Button>
-              ) : undefined
-            }
-          />
+              }
+              tips={search.q ? [{ label: t("tips.spelling") }, { label: t("tips.fewerWords") }] : undefined}
+            />
+          ) : (
+            <EmptyState
+              className="min-h-[420px]"
+              art="kb"
+              ghost={<GhostGrid cards={6} />}
+              title={current ? t("empty.collectionTitle") : t("empty.title")}
+              description={t("empty.description")}
+              action={newArticle}
+              secondary={canEdit ? <DraftFromTicketsLink collection={search.collection} /> : undefined}
+              tips={[{ label: t("tips.collections") }, { label: t("tips.publish") }]}
+            />
+          )
         ) : (
-          <ul role="list" className="pb-10">
-            <AnimatePresence initial={false}>
+          <div role="list" className="pb-10">
+            <PresenceList>
               {articles.data.map((a) => {
                 const cname = collectionName(a.collection_id);
                 return (
-                  <motion.li
-                    key={a.id}
-                    layout={reduce ? false : "position"}
-                    initial={reduce ? false : { opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={reduce ? undefined : { opacity: 0, transition: { duration: 0.12 } }}
-                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                  >
+                  <PresenceRow key={a.id}>
+                  <div role="listitem">
                     <Link
                       to="/kb/articles/$articleId"
                       params={{ articleId: a.id }}
@@ -267,11 +272,12 @@ export default function KbPage() {
                         {relShort(a.updated_at)}
                       </span>
                     </Link>
-                  </motion.li>
+                  </div>
+                  </PresenceRow>
                 );
               })}
-            </AnimatePresence>
-          </ul>
+            </PresenceList>
+          </div>
         )}
       </div>
 

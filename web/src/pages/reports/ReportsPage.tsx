@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/layout";
 import { EmptyState } from "@/components/ui/empty";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { RangePicker } from "@/components/reports/RangePicker";
 import { Sparkline, VolumeChart, VolumeLegend, VolumeTable } from "@/components/reports/VolumeChart";
 import { ChannelBars } from "@/components/reports/ChannelBars";
 import { AgentTable } from "@/components/reports/AgentTable";
-import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
+import { AnimatedNumber } from "@/components/motion";
 import { Bar, BreakdownBars, ShareBar, type BarRow } from "@/components/reports/Bars";
 import { PriorityIcon, StatusIcon, priorityLabel, priorityOrder, statusLabel } from "@/components/tickets/bits";
 import type { ReportsOverview, ReportsRange, Ticket } from "@/lib/api/types";
@@ -68,7 +69,7 @@ export default function ReportsPage() {
             action={<Button onClick={() => void report.refetch()}>{t("error.retry")}</Button>}
           />
         ) : !d || empty ? (
-          <EmptyState lit={1} title={t("empty.title")} description={t("empty.description")} />
+          <SamplePreview />
         ) : (
           <div className={cn("flex flex-col gap-4 px-4 pb-12 pt-4 transition-opacity duration-150 md:px-6 md:pt-5", refetching && "opacity-60")}>
             <Kpis d={d} p={p} />
@@ -198,7 +199,7 @@ function Kpis({ d, p }: { d: ReportsOverview; p?: ReportsOverview }) {
               {x.value === null ? (
                 <span className="text-[26px] font-semibold leading-8 tracking-[-0.03em] text-fg-4">–</span>
               ) : (
-                <AnimatedNumber value={x.value} format={x.format} className="text-[26px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-fg" />
+                <AnimatedNumber flash value={x.value} format={x.format} className="text-[26px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-fg" />
               )}
               {x.unit && <span className="mono text-xs text-fg-4">{x.unit}</span>}
             </span>
@@ -458,6 +459,71 @@ function ReportSkeleton() {
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** A clearly labelled, made-up month so an empty workspace sees what reports will show. */
+function sampleOverview(): ReportsOverview {
+  const today = new Date();
+  const by_day = Array.from({ length: 30 }, (_, i) => {
+    const d = subDays(today, 29 - i);
+    const weekend = d.getDay() === 0 || d.getDay() === 6;
+    const created = Math.round((weekend ? 6 : 18) + 6 * Math.sin(i / 3) + (i % 5));
+    return { date: format(d, "yyyy-MM-dd"), created, solved: Math.max(0, created - 2 + (i % 3)) };
+  });
+  const created = by_day.reduce((a, x) => a + x.created, 0);
+  const solved = by_day.reduce((a, x) => a + x.solved, 0);
+  return {
+    created,
+    solved,
+    open_now: 24,
+    first_response_p50_minutes: 38,
+    resolution_p50_minutes: 260,
+    csat_avg: 4.6,
+    csat_count: 128,
+    sla_breached: 6,
+    by_day,
+    by_channel: { email: Math.round(created * 0.62), chat: Math.round(created * 0.26), portal: Math.round(created * 0.08), api: Math.round(created * 0.04) },
+    by_agent: [],
+  };
+}
+
+function SamplePreview() {
+  const { t } = useTranslation("reports");
+  const d = sampleOverview();
+  return (
+    <div className="relative min-h-full overflow-hidden">
+      <div className="flex items-center gap-2 px-4 pt-4 md:px-6 md:pt-5">
+        <Badge tone="amber" dot>
+          {t("empty.sample")}
+        </Badge>
+        <span className="text-xs text-fg-3">{t("empty.sampleHint")}</span>
+      </div>
+      <div aria-hidden className="pointer-events-none flex select-none flex-col gap-4 px-4 pt-3 opacity-45 [mask-image:linear-gradient(to_bottom,black_55%,transparent)] md:px-6">
+        <Kpis d={d} />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <VolumeCard d={d} className="xl:col-span-2" />
+          <Card title={t("channel.title")} subtitle={t("channel.subtitle")}>
+            <ChannelBars data={d.by_channel} />
+          </Card>
+        </div>
+      </div>
+      <div className="absolute inset-0 flex items-start justify-center pt-[18vh]">
+        <div className="pointer-events-auto rounded-xl border border-line bg-surface shadow-float">
+          <EmptyState
+            compact
+            art="reports"
+            className="px-8 py-7"
+            title={t("empty.title")}
+            description={t("empty.description")}
+          >
+            <Badge tone="amber" dot>
+              {t("empty.sample")}
+            </Badge>
+          </EmptyState>
+        </div>
       </div>
     </div>
   );
