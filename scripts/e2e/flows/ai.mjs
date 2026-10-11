@@ -77,7 +77,7 @@ export async function run(t) {
 
   await t.step("draft a KB article from tickets", async () => {
     await owner.goto(cfg.app + "/kb");
-    await owner.getByRole("link", { name: "Draft from tickets" }).click();
+    await owner.getByRole("link", { name: "Draft from tickets" }).first().click();
     const dialog = owner.getByRole("dialog");
     await dialog.getByLabel("Topic").fill("Signing in after a password reset");
     await dialog.getByRole("button", { name: "Draft article" }).click();

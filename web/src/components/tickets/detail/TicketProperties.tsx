@@ -221,6 +221,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
                 trigger={
                   <button
                     type="button"
+                    aria-label={tr("props.addTag")}
                     className="inline-flex h-[18px] items-center rounded-sm border border-dashed border-line-strong px-1.5 text-[11px] text-fg-3 outline-none transition-colors hover:border-fg-4 hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
                   >
                     {t.tags.length ? tr("props.addTagShort") : tr("props.addTag")}

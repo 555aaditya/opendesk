@@ -69,7 +69,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
           </>
         ) : (
           <>
-            <span className={cn("contents", loading && "[&>*]:invisible")}>
+            <span className={cn("contents", loading && "[&>*]:opacity-0")}>
               <span className="inline-flex min-w-0 items-center gap-[inherit]">{children}</span>
               {iconRight && <span className="inline-flex">{iconRight}</span>}
             </span>

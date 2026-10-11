@@ -35,12 +35,14 @@ export async function run(t) {
   await t.step("add a new tag", async () => {
     const tagBtn = owner.getByRole("button", { name: /add (tags?|labels?)/i }).or(owner.getByPlaceholder("Add tags")).first();
     await tagBtn.click();
+    // New workspaces start with a few labels; create one that is not among them.
+    const tagName = `e2e-${uid()}`;
     const input = owner.getByPlaceholder("Add or create a tag");
-    await input.fill("vip");
+    await input.fill(tagName);
     await owner.getByRole("option", { name: /create/i }).first().click();
     await owner.keyboard.press("Escape");
-    await until(async () => (await getTicket(t.ticketId)).tags.some((x) => x.name === "vip"), "tag saved");
-    await agent.getByText("vip", { exact: true }).first().waitFor();
+    await until(async () => (await getTicket(t.ticketId)).tags.some((x) => x.name === tagName), "tag saved");
+    await agent.getByText(tagName, { exact: true }).first().waitFor();
   });
 
   await t.step("snooze puts the ticket on hold", async () => {

@@ -81,7 +81,7 @@ export async function run(t) {
   t.articleTitle = title;
   await t.step("write and publish an article", async () => {
     await owner.getByRole("navigation", { name: "Collections" }).getByText(collection).click();
-    await owner.getByRole("link", { name: "New article" }).click();
+    await owner.getByRole("link", { name: "New article" }).first().click();
     await owner.getByLabel("Title").fill(title);
     await owner.getByLabel("Excerpt").fill("Reset your password from the sign-in page.");
     await owner.locator(".ProseMirror").last().click();
