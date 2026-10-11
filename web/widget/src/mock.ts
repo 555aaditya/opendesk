@@ -88,23 +88,21 @@ const messages: Record<string, Message[]> = {
 
 const HELP = "https://example.com/help/fieldnote/articles";
 
-/** The answer bot: a system reply with `custom.ai` and cited articles, a moment after the first message. */
+/** The answer bot: a system reply with `ai: true`, cited articles linked in the body, a moment after the first message. */
 function aiAnswer(tid: string, question: string) {
   setTimeout(() => {
     const sso = /sso|sign|log ?in|saml|ログイン|サインイン|تسجيل/i.test(question);
-    const html = sso ? copy.aiSso : copy.ai;
+    const links = sso
+      ? [
+          { title: copy.s1, url: `${HELP}/saml-sso` },
+          { title: copy.s2, url: `${HELP}/rotate-sso-certificate` },
+        ]
+      : [{ title: copy.subject, url: `${HELP}/export-notebooks` }];
+    const html = (sso ? copy.aiSso : copy.ai) + `<ul>${links.map((l) => `<li><a href="${l.url}">${l.title}</a></li>`).join("")}</ul>`;
     const m: Message = {
       ...msg(tid, "outbound", html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), 0, html),
       author: { type: "system", user: null, contact: null },
-      custom: {
-        ai: true,
-        sources: sso
-          ? [
-              { title: copy.s1, url: `${HELP}/saml-sso` },
-              { title: copy.s2, url: `${HELP}/rotate-sso-certificate` },
-            ]
-          : [{ title: copy.subject, url: `${HELP}/export-notebooks` }],
-      },
+      ai: true,
     };
     messages[tid]?.push(m);
     broadcast("event", { id: id("ev"), seq: n, type: "message.created", data: { ticket_id: tid, message: m }, topics: [] });
@@ -184,7 +182,7 @@ export const mockFetch: Fetcher = async (url, init) => {
   if (h && method === "POST") {
     const conv = conversations.find((c) => c.id === h[1]);
     if (!conv) return json({ status: 404, title: "Not found", code: "not_found" }, 404);
-    conv.custom = { ...conv.custom, ai_handoff: true };
+    conv.ai_handoff = true;
     humanReply(conv.id);
     return json(conv, 200);
   }

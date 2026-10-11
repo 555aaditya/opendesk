@@ -168,13 +168,6 @@ input.field:focus { border-color: var(--fg-3); }
   display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 99px;
   border: 1px solid var(--line-2); color: var(--fg-2); font-size: 10px; font-weight: 600; letter-spacing: .02em;
 }
-.sources { margin-top: 6px; width: 100%; min-width: 220px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
-.sources-h { padding: 7px 10px 3px; font-size: 11px; font-weight: 500; color: var(--fg-3); }
-.src { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--fg); text-decoration: none; border-top: 1px solid var(--line); }
-.src:first-of-type { border-top: 0; }
-.src:hover { background: var(--bg-3); }
-.src > svg, .src .flip { color: var(--fg-3); flex: none; display: grid; }
-.src span:not(.flip) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .handoff {
   margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 99px;
   border: 1px solid var(--line-2); background: var(--bg); font-size: 12.5px; font-weight: 500; color: var(--fg); transition: background .1s, opacity .12s;

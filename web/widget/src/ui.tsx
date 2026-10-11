@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Fragment, type JSX } from "preact";
 import { NEW, type Controller } from "./controller";
-import { handedOff, handoffTarget, isAiAnswer, sourcesOf } from "./ai";
+import { handedOff, handoffTarget, isAiAnswer } from "./ai";
 import { initials, safeHtml, size } from "./html";
 import { clock, current, dayLabel, isRtl, relTime, t } from "./i18n";
 import { useStore } from "./store";
@@ -369,7 +369,6 @@ const STOCK_GREETINGS = new Set(["hi there. how can we help?", "hi there! how ca
 type Offer = "idle" | "pending" | "done" | "failed" | null;
 
 function AiBubble({ m, name, offer, onHandoff }: { m: UiMessage; name: string; offer: Offer; onHandoff: () => void }) {
-  const sources = sourcesOf(m);
   return (
     <div class="row them gap ai">
       <div class="who">
@@ -383,20 +382,6 @@ function AiBubble({ m, name, offer, onHandoff }: { m: UiMessage; name: string; o
         </span>
       </div>
       {m.body_html ? <div class="msg" dangerouslySetInnerHTML={{ __html: safeHtml(m.body_html) }} /> : <div class="msg">{m.body_text}</div>}
-      {sources.length > 0 && (
-        <div class="sources">
-          <div class="sources-h">{t("sources")}</div>
-          {sources.map((src) => (
-            <a key={src.url} class="src" href={src.url} target="_blank" rel="noopener noreferrer nofollow">
-              <FileIc />
-              <span>{src.title}</span>
-              <span class="flip">
-                <Ext />
-              </span>
-            </a>
-          ))}
-        </div>
-      )}
       {offer === "done" ? (
         <div class="handoff-note" role="status">
           <Check />

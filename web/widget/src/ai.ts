@@ -1,41 +1,18 @@
 // The AI answer bot's replies (contracts/ai.md): posted as `author.type =
-// "system"` with `custom.ai = true`, citing knowledge base articles, with a way
-// to reach a person.
+// "system"` with `ai: true`. The cited articles are links at the end of the
+// body; the widget offers a way to reach a person under the answer.
 
-import type { AiSource, Conversation, Message } from "./types";
+import type { Conversation, Message } from "./types";
 
-export function isAiAnswer(m: Pick<Message, "author" | "custom">): boolean {
-  return m.author?.type === "system" && m.custom?.ai === true;
-}
-
-/** Cited articles with safe http(s) links, deduplicated, at most five. */
-export function sourcesOf(m: Pick<Message, "custom">): AiSource[] {
-  const raw = m.custom?.sources;
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const out: AiSource[] = [];
-  for (const s of raw) {
-    if (!s || typeof s.url !== "string" || typeof s.title !== "string") continue;
-    let url: URL;
-    try {
-      url = new URL(s.url);
-    } catch {
-      continue;
-    }
-    if (url.protocol !== "https:" && url.protocol !== "http:") continue;
-    if (seen.has(url.href)) continue;
-    seen.add(url.href);
-    out.push({ title: s.title.trim() || url.hostname, url: url.href });
-    if (out.length === 5) break;
-  }
-  return out;
+export function isAiAnswer(m: Pick<Message, "author" | "ai">): boolean {
+  return m.author?.type === "system" && m.ai === true;
 }
 
 /**
  * The latest AI answer, and whether a person from the team has replied since.
  * "Talk to a person" is offered on it only until someone does.
  */
-export function handoffTarget(msgs: readonly Pick<Message, "id" | "author" | "custom" | "direction">[]): { id: string; answered: boolean } | null {
+export function handoffTarget(msgs: readonly Pick<Message, "id" | "author" | "ai" | "direction">[]): { id: string; answered: boolean } | null {
   let answered = false;
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
@@ -45,6 +22,6 @@ export function handoffTarget(msgs: readonly Pick<Message, "id" | "author" | "cu
   return null;
 }
 
-export function handedOff(c: Pick<Conversation, "custom"> | undefined): boolean {
-  return c?.custom?.ai_handoff === true;
+export function handedOff(c: Pick<Conversation, "ai_handoff"> | undefined): boolean {
+  return c?.ai_handoff === true;
 }

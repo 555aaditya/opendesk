@@ -25,8 +25,8 @@ export type Conversation = {
   status: string;
   last_message_preview: string;
   last_message_at: string;
-  /** `ai_handoff: true` once the visitor asked for a person (contracts/ai.md). */
-  custom?: { ai_handoff?: boolean };
+  /** True once the visitor asked for a person after an AI answer (contracts/ai.md). */
+  ai_handoff?: boolean;
 };
 
 export type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
@@ -45,12 +45,10 @@ export type Message = {
   body_text: string;
   attachments: Attachment[];
   created_at: string;
-  /** AI answers carry `ai: true` and the articles they cite (contracts/ai.md, widget answer bot). */
-  custom?: MessageCustom;
+  /** An automatic answer from the answer bot (contracts/ai.md); its sources are links in the body. */
+  ai?: boolean;
 };
 
-export type AiSource = { title: string; url: string; article_id?: string };
-export type MessageCustom = { ai?: boolean; sources?: AiSource[] };
 
 /** A message as the widget shows it: server messages plus local optimistic ones. */
 export type UiMessage = Message & { local?: "pending" | "failed"; localFiles?: File[] };

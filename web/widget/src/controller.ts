@@ -169,7 +169,7 @@ export class Controller {
       await this.api.handoff(id);
       set((s) => ({
         handoff: { ...s.handoff, [id]: "done" },
-        conversations: (s.conversations ?? []).map((c) => (c.id === id ? { ...c, custom: { ...c.custom, ai_handoff: true } } : c)),
+        conversations: (s.conversations ?? []).map((c) => (c.id === id ? { ...c, ai_handoff: true } : c)),
       }));
       this.announce(t("handoffDone"));
     } catch {
