@@ -10,3 +10,4 @@ dist/
 # Review screenshots (regenerated locally)
 web/docs/screenshots/
 site/docs/screenshots/
+/data/
