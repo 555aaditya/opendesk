@@ -22,8 +22,7 @@ export function ModuleArt({ lit = 1, className }: { lit?: 0 | 1 | 2 | 3; classNa
             cx={c.x + 13}
             cy={c.y + 13}
             r={13}
-            className={cn("animate-rise-in", i === lit ? "fill-fg" : "stroke-line-strong")}
-            style={{ animationDelay: `${i * 70}ms` }}
+            className={i === lit ? "fill-fg" : "stroke-line-strong"}
             strokeWidth={i === lit ? 0 : 1}
             strokeDasharray={i === lit ? undefined : "2 2.5"}
           />
@@ -35,8 +34,7 @@ export function ModuleArt({ lit = 1, className }: { lit?: 0 | 1 | 2 | 3; classNa
             width={25}
             height={25}
             rx={6.5}
-            className={cn("animate-rise-in", i === lit ? "fill-fg" : "stroke-line-strong")}
-            style={{ animationDelay: `${i * 70}ms` }}
+            className={i === lit ? "fill-fg" : "stroke-line-strong"}
             strokeWidth={i === lit ? 0 : 1}
             strokeDasharray={i === lit ? undefined : "2 2.5"}
           />
@@ -67,7 +65,7 @@ export function EmptyState({
     <div className={cn("flex flex-col items-center justify-center text-center", compact ? "gap-2 py-8" : "gap-3 py-16", className)}>
       {icon ?? <ModuleArt lit={lit} className={compact ? "size-9" : "size-12"} />}
       <div className="flex max-w-[320px] flex-col gap-1">
-        <p className="text-[14px] font-semibold tracking-[-0.03em] text-fg">{title}</p>
+        <p className="text-[13.5px] font-medium tracking-[-0.01em] text-fg">{title}</p>
         {description && <p className="text-[12.5px] leading-5 text-fg-3">{description}</p>}
       </div>
       {action && <div className="mt-1 flex items-center gap-2">{action}</div>}

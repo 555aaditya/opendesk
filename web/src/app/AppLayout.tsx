@@ -101,34 +101,30 @@ export function AppLayout() {
   if (!authed) return null;
 
   return (
-    <div className="fixed inset-0 flex bg-surface text-fg">
-      <aside
-        className={cn(
-          "hidden shrink-0 border-r border-line transition-[width] duration-200 ease-[var(--ease-snap)] motion-reduce:transition-none md:flex",
-          collapsed ? "w-14" : "w-60",
-        )}
-      >
-        <Sidebar />
-      </aside>
+    <div className="fixed inset-0 flex flex-col bg-chrome text-fg">
+      <AppHeader />
+      <div className="flex min-h-0 flex-1">
+        <aside className={cn("hidden shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex", collapsed ? "w-14" : "w-60")}>
+          <Sidebar />
+        </aside>
 
-      {/* Phone: the sidebar is a sheet. */}
-      <D.Root open={sidebarOpen} onOpenChange={(o) => shell.sidebar(o)}>
-        <D.Portal>
-          <D.Overlay className="fixed inset-0 z-40 bg-scrim data-[state=open]:animate-fade-in md:hidden" />
-          <D.Content
-            aria-describedby={undefined}
-            className="fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col border-r border-line bg-surface outline-none data-[state=open]:animate-slide-in-right md:hidden"
-            onClick={(e) => (e.target as HTMLElement).closest("a") && shell.sidebar(false)}
-          >
-            <D.Title className="sr-only">Navigation</D.Title>
-            <Sidebar drawer />
-          </D.Content>
-        </D.Portal>
-      </D.Root>
+        {/* Phone: the sidebar is a sheet. */}
+        <D.Root open={sidebarOpen} onOpenChange={(o) => shell.sidebar(o)}>
+          <D.Portal>
+            <D.Overlay className="fixed inset-0 z-40 bg-scrim data-[state=open]:animate-fade-in md:hidden" />
+            <D.Content
+              aria-describedby={undefined}
+              className="fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col bg-chrome pt-2 shadow-float outline-none data-[state=open]:animate-fade-in md:hidden"
+              onClick={(e) => (e.target as HTMLElement).closest("a") && shell.sidebar(false)}
+            >
+              <D.Title className="sr-only">Navigation</D.Title>
+              <Sidebar drawer />
+            </D.Content>
+          </D.Portal>
+        </D.Root>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <AppHeader />
-        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* The work panel: pure white, its inner corner softened where it meets the chrome. */}
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden border-t border-line bg-surface md:rounded-tl-2xl md:border-l">
           <Outlet />
         </main>
       </div>

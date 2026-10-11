@@ -26,7 +26,7 @@ export function CompanyGlyph({ name, size = "md" }: { name: string; size?: "md" 
       className={
         size === "lg"
           ? "flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-sunken text-[12px] font-semibold text-fg-2"
-          : "flex size-6 shrink-0 items-center justify-center rounded-sm border border-line bg-sunken text-[10px] font-semibold text-fg-2"
+          : "flex size-6 shrink-0 items-center justify-center rounded-[6px] border border-line bg-sunken text-[10px] font-semibold text-fg-2"
       }
     >
       {name.trim().charAt(0).toUpperCase() || "?"}

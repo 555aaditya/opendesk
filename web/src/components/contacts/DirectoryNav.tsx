@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/cn";
 
 const tab =
-  "inline-flex h-[26px] items-center rounded-sm px-2.5 text-[12.5px] font-medium text-fg-3 transition-[color,background-color,box-shadow] duration-100 hover:text-fg";
+  "inline-flex h-[26px] items-center rounded-[6px] px-2.5 text-[12.5px] font-medium text-fg-3 transition-[color,background-color,box-shadow] duration-100 hover:text-fg";
 const active = "bg-surface !text-fg shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/0.06)]";
 
 /** Contacts / Companies switch shown in both page headers. */

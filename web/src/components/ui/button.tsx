@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { Spinner } from "./spinner";
 
 export const buttonVariants = cva(
-  "relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium outline-none transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-150 ease-out active:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed focus-visible:shadow-[0_0_0_1px_var(--surface),0_0_0_3px_var(--focus)] [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium outline-none transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-150 ease-out active:scale-[0.985] disabled:pointer-events-none disabled:cursor-not-allowed focus-visible:shadow-[0_0_0_1px_var(--surface),0_0_0_3px_var(--focus)] [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -20,10 +20,10 @@ export const buttonVariants = cva(
         link: "h-auto px-0 text-fg underline-offset-4 hover:underline active:scale-100",
       },
       size: {
-        xs: "h-6 gap-1 rounded-sm px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-6 gap-1 rounded-[6px] px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1.5 rounded-md px-2.5 text-[12.5px] [&_svg:not([class*='size-'])]:size-3.5",
         md: "h-8 gap-1.5 rounded-md px-3 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-10 gap-2 rounded-md px-4 text-[13.5px] [&_svg:not([class*='size-'])]:size-4",
+        lg: "h-10 gap-2 rounded-lg px-4 text-[13.5px] [&_svg:not([class*='size-'])]:size-4",
       },
     },
     defaultVariants: { variant: "secondary", size: "sm" },

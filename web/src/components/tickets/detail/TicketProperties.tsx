@@ -190,7 +190,7 @@ export function TicketProperties({ t, assignOpen, onAssignOpenChange }: { t: Tic
                 onChange={(v) => patch({ tags: v })}
                 onCreate={(name) => patch({ tags: [...tagNames, name] })}
                 trigger={
-                  <button type="button" className="inline-flex h-[18px] items-center rounded-sm border border-dashed border-line-strong px-1.5 text-[11px] text-fg-3 hover:border-fg-4 hover:text-fg">
+                  <button type="button" className="inline-flex h-[18px] items-center rounded-[5px] border border-dashed border-line-strong px-1.5 text-[11px] text-fg-3 hover:border-fg-4 hover:text-fg">
                     {t.tags.length ? "Add" : "Add tag"}
                   </button>
                 }

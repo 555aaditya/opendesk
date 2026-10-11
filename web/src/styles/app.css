@@ -11,80 +11,77 @@
  */
 :root {
   color-scheme: light;
-  /* Brand greys: ink, coal, charcoal, graphite, smoke, ash, mist, paper. */
-  --chrome: #ffffff;
-  --chrome-hover: #f4f4f4;
-  --chrome-active: #ececec;
-  --chrome-line: #e4e4e4;
-  --canvas: #ffffff;
+  /* Chrome: the off-white frame behind the sidebar and header. */
+  --chrome: #f5f5f5;
+  --chrome-hover: rgb(10 10 10 / 0.045);
+  --chrome-active: rgb(10 10 10 / 0.075);
+  --chrome-line: rgb(10 10 10 / 0.07);
+  --canvas: #f5f5f5;
   --surface: #ffffff;
   --raised: #ffffff;
   --sunken: #fafafa;
-  --hover: #f4f4f4;
-  --active: #ececec;
-  --line: #e4e4e4;
-  --line-soft: #efefef;
-  --line-strong: #cfcfcf;
+  --hover: #f6f6f6;
+  --active: #ededed;
+  --line: #e7e7e7;
+  --line-soft: #f0f0f0;
+  --line-strong: #d6d6d6;
   --fg: #0a0a0a;
-  --fg-2: #525252;
+  --fg-2: #4a4a4a;
   --fg-3: #737373;
   --fg-4: #a3a3a3;
   --inverse: #0a0a0a;
   --inverse-hover: #262626;
   --inverse-fg: #ffffff;
   --note: #fafafa;
-  --note-line: #cfcfcf;
-  --focus: #0a0a0a;
-  --focus-line: #0a0a0a;
-  --ok: #15803d;
-  --warn: #b45309;
-  --danger: #c81e1e;
+  --note-line: #d4d4d4;
+  --focus: rgb(10 10 10 / 0.14);
+  --focus-line: #a3a3a3;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --danger: #dc2626;
   --info: #525252;
   --danger-fg: #b91c1c;
-  --scrim: rgb(10 10 10 / 0.24);
-  --grid-line: rgb(10 10 10 / 0.045);
-  --shadow-xs: none;
-  --shadow-pop: 0 8px 24px -12px rgb(10 10 10 / 0.18);
-  --shadow-float: 0 24px 48px -24px rgb(10 10 10 / 0.28);
+  --scrim: rgb(10 10 10 / 0.28);
+  --shadow-xs: 0 1px 2px rgb(10 10 10 / 0.04);
+  --shadow-pop: 0 4px 12px -2px rgb(10 10 10 / 0.08), 0 2px 4px rgb(10 10 10 / 0.04);
+  --shadow-float: 0 1px 2px rgb(10 10 10 / 0.04), 0 30px 70px -32px rgb(10 10 10 / 0.32);
 }
 
-/* Dark is the true inverse: paper on coal and charcoal. */
 .dark {
   color-scheme: dark;
-  --chrome: #171717;
-  --chrome-hover: #212121;
-  --chrome-active: #2a2a2a;
-  --chrome-line: #2a2a2a;
-  --canvas: #171717;
-  --surface: #171717;
-  --raised: #1e1e1e;
-  --sunken: #141414;
-  --hover: #212121;
-  --active: #2a2a2a;
-  --line: #2a2a2a;
-  --line-soft: #222222;
-  --line-strong: #3d3d3d;
-  --fg: #ffffff;
-  --fg-2: #c8c8c8;
-  --fg-3: #8a8a8a;
-  --fg-4: #5e5e5e;
-  --inverse: #ffffff;
+  --chrome: #080808;
+  --chrome-hover: rgb(255 255 255 / 0.045);
+  --chrome-active: rgb(255 255 255 / 0.08);
+  --chrome-line: rgb(255 255 255 / 0.07);
+  --canvas: #080808;
+  --surface: #111111;
+  --raised: #191919;
+  --sunken: #0d0d0d;
+  --hover: #1a1a1a;
+  --active: #232323;
+  --line: #262626;
+  --line-soft: #1c1c1c;
+  --line-strong: #353535;
+  --fg: #f7f7f7;
+  --fg-2: #c4c4c4;
+  --fg-3: #8f8f8f;
+  --fg-4: #5f5f5f;
+  --inverse: #f7f7f7;
   --inverse-hover: #e4e4e4;
   --inverse-fg: #0a0a0a;
-  --note: #1c1c1c;
-  --note-line: #3d3d3d;
-  --focus: #ffffff;
-  --focus-line: #ffffff;
-  --ok: #4ade80;
-  --warn: #fbbf24;
-  --danger: #f87171;
+  --note: #151515;
+  --note-line: #3a3a3a;
+  --focus: rgb(255 255 255 / 0.16);
+  --focus-line: #6b6b6b;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
   --info: #a3a3a3;
-  --danger-fg: #fca5a5;
-  --scrim: rgb(0 0 0 / 0.55);
-  --grid-line: rgb(255 255 255 / 0.04);
-  --shadow-xs: none;
-  --shadow-pop: 0 8px 24px -12px rgb(0 0 0 / 0.7);
-  --shadow-float: 0 24px 48px -24px rgb(0 0 0 / 0.8);
+  --danger-fg: #f87171;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px rgb(0 0 0 / 0.3);
+  --shadow-float: 0 30px 70px -32px rgb(0 0 0 / 0.8);
 }
 
 @theme inline {
@@ -125,13 +122,11 @@
   --shadow-pop: var(--shadow-pop);
   --shadow-float: var(--shadow-float);
 
-  /* Square-leaning: modules, not pills. */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 4px;
-  --radius-lg: 6px;
-  --radius-xl: 8px;
-  --radius-2xl: 10px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
 
   --text-2xs: 11px;
   --text-2xs--line-height: 16px;
@@ -145,13 +140,10 @@
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  /* Modules snap into place: short and crisp. */
-  --ease-snap: cubic-bezier(0.2, 0, 0, 1);
-  --animate-pop-in: pop-in 130ms var(--ease-snap);
-  --animate-dialog-in: dialog-in 160ms var(--ease-snap);
+  --animate-pop-in: pop-in 160ms var(--ease-out-expo);
+  --animate-dialog-in: dialog-in 200ms var(--ease-out-expo);
   --animate-card-float: card-float 700ms var(--ease-out-expo) both;
-  --animate-rise-in: rise-in 220ms var(--ease-snap) both;
-  --animate-module-fill: module-fill 1.2s var(--ease-snap) infinite;
+  --animate-rise-in: rise-in 420ms var(--ease-out-expo) both;
   --animate-fade-in: fade-in 160ms ease-out;
   --animate-slide-in-right: slide-in-right 220ms var(--ease-out-soft);
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
@@ -159,29 +151,24 @@
 }
 
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(-3px) scale(0.97); }
   to { opacity: 1; transform: none; }
 }
 @keyframes dialog-in {
-  from { opacity: 0; transform: translate(-50%, 8px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
-/* The four modules of the mark filling in turn. */
-@keyframes module-fill {
-  0%, 100% { opacity: 0.18; }
-  20%, 45% { opacity: 1; }
+  from { opacity: 0; transform: translate(-50%, 6px) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 @keyframes card-float {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes rise-in {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
 @keyframes module-breathe {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
@@ -232,13 +219,8 @@
   }
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 1px var(--surface), 0 0 0 2.5px var(--focus);
+    box-shadow: 0 0 0 1px var(--surface), 0 0 0 3px var(--focus);
     border-radius: inherit;
-  }
-  /* Icons: thin, square-ended strokes that match the mark's geometry. */
-  svg.lucide {
-    stroke-linecap: square;
-    stroke-linejoin: miter;
   }
   input::placeholder,
   textarea::placeholder {
@@ -272,34 +254,19 @@
   }
   /* Small tracked-uppercase eyebrow: section labels, stat labels, menu groups. */
   .label-caps {
-    font-family: var(--font-mono);
     font-size: 10px;
     line-height: 14px;
-    font-weight: 400;
-    letter-spacing: 0.06em;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--fg-3);
+    color: var(--fg-4);
   }
-  /* Headings: Geist SemiBold at -4% tracking. */
-  .heading {
-    font-weight: 600;
-    letter-spacing: -0.04em;
-  }
-  /* A faint modular grid, for backdrops (auth, empty canvases). */
-  .module-grid {
-    background-image:
-      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
-      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
-    background-size: 48px 48px;
-  }
-  /* Skeletons are modules filling in: flat blocks that settle in turn. */
   .skeleton {
-    border-radius: 2px;
-    background: var(--active);
-    animation: module-breathe 1.6s var(--ease-snap) infinite;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--hover) 0%, var(--active) 50%, var(--hover) 100%);
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
   }
-  .skeleton:nth-child(2n) { animation-delay: 0.2s; }
-  .skeleton:nth-child(3n) { animation-delay: 0.4s; }
   .hairline-b {
     box-shadow: inset 0 -1px 0 var(--line);
   }

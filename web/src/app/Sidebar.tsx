@@ -1,7 +1,6 @@
-// The sidebar is a column of modules: the brand row, the workspace module and
-// search, then the navigation. Mono labels name the groups, a single ink dot
-// marks where you are and slides between rows, and `b` folds the column into
-// an icon rail that keeps every row reachable.
+// The sidebar: sits on the chrome beside the white work panel. Small
+// tracked-uppercase section labels, 28px rows, hairlines between groups, and an
+// icon-only rail (`b` or the Collapse row) that keeps every row reachable.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -30,9 +29,6 @@ import {
   Users,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { motion } from "motion/react";
-import { Mark } from "@/components/brand";
-import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/kbd";
@@ -58,22 +54,10 @@ const folderIcons: Record<FolderId, ReactNode> = {
 // The two row shapes share one element so the icon never moves while the label
 // fades and the column narrows.
 const rowBase =
-  "group relative flex items-center rounded-md text-left text-[13px] outline-none transition-[width,background-color,color] duration-150 focus-visible:shadow-[0_0_0_1.5px_var(--focus)] motion-reduce:transition-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:transition-colors";
-const rowShape = (rail: boolean) => (rail ? "mx-2.5 h-8 w-9 justify-center" : "mx-2.5 h-8 w-[calc(100%-1.25rem)] gap-2.5 px-2.5");
-const rowIdle = "text-fg-2 hover:bg-hover hover:text-fg [&>svg]:text-fg-3 hover:[&>svg]:text-fg";
-const rowActive = "text-fg font-medium [&>svg]:text-fg";
-
-/** The ink dot beside the current row; one element that slides from row to row. */
-function ActiveDot({ rail }: { rail: boolean }) {
-  return (
-    <motion.span
-      layoutId="nav-active-dot"
-      aria-hidden
-      transition={{ type: "spring", stiffness: 700, damping: 45 }}
-      className={cn("absolute size-[5px] rounded-full bg-fg", rail ? "-left-[7px] top-1/2 -mt-[2.5px]" : "-left-[9px] top-1/2 -mt-[2.5px]")}
-    />
-  );
-}
+  "group relative flex items-center rounded-md text-left text-[12.5px] outline-none transition-[width,background-color,color] duration-200 ease-out focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:transition-colors";
+const rowShape = (rail: boolean) => (rail ? "mx-3 h-8 w-8 justify-center" : "mx-2.5 h-7 w-[calc(100%-1.25rem)] gap-2.5 px-2");
+const rowIdle = "text-fg-2 hover:bg-chrome-hover hover:text-fg [&>svg]:text-fg-3 hover:[&>svg]:text-fg-2";
+const rowActive = "bg-chrome-active text-fg font-medium [&>svg]:text-fg";
 
 function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
   if (!rail) return children;
@@ -82,6 +66,11 @@ function NavTip({ rail, label, children }: { rail: boolean; label: string; child
       {children}
     </Tooltip>
   );
+}
+
+function Count({ n, rail }: { n: number | null | undefined; rail: boolean }) {
+  if (n === null || n === undefined || rail) return null;
+  return <span className="mono ml-auto text-[11px] tabular-nums text-fg-4 group-data-[status=active]:text-fg-2">{n > 999 ? "999+" : n}</span>;
 }
 
 function Label({ children, rail }: { children: ReactNode; rail: boolean }) {
@@ -120,9 +109,9 @@ function Section({
     }
   };
   return (
-    <div className={cn(!first && (rail ? "mt-3 border-t border-line pt-3" : "mt-5"))}>
+    <div className={cn(!first && "mt-5")}>
       {!rail && (
-        <div className="group/section mx-2.5 mb-1 flex h-6 items-center px-2.5">
+        <div className="group/section mx-2.5 mb-0.5 flex h-6 items-center px-2">
           <button
             type="button"
             aria-expanded={!folded}
@@ -146,42 +135,6 @@ function Section({
   );
 }
 
-type NavLinkProps = {
-  rail: boolean;
-  label: string;
-  icon: ReactNode;
-  count?: number | null;
-  badge?: boolean;
-  muted?: boolean;
-  to: string;
-  params?: Record<string, string | undefined>;
-};
-
-function NavLink({ rail, label, icon, count, badge, muted, to, params }: NavLinkProps) {
-  return (
-    <NavTip rail={rail} label={label}>
-      <Link
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        to={to as any}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        params={params as any}
-        className={cn(rowBase, rowShape(rail), rowIdle, muted && "text-fg-3")} activeProps={{ className: rowActive }} aria-label={rail ? label : undefined}>
-        {({ isActive }) => (
-          <>
-            {isActive && <ActiveDot rail={rail} />}
-            {icon}
-            <Label rail={rail}>{label}</Label>
-            {!rail && count !== null && count !== undefined && (
-              <span className={cn("mono ml-auto text-[11px] tabular-nums", isActive ? "text-fg-2" : "text-fg-4")}>{count > 999 ? "999+" : count}</span>
-            )}
-            {rail && badge && <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-surface" />}
-          </>
-        )}
-      </Link>
-    </NavTip>
-  );
-}
-
 export function Sidebar({ drawer }: { drawer?: boolean }) {
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
@@ -192,67 +145,25 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
 
   return (
     <nav aria-label={t("nav.main")} className="flex h-full w-full flex-col">
-      {/* Brand row: its hairline continues the topbar's across the page. */}
-      <div className={cn("flex h-12 shrink-0 items-center border-b border-line", rail ? "justify-center" : "justify-between pl-[18px] pr-2.5")}>
-        <Link
-          to="/inbox/$folder/{-$ticketId}"
-          params={{ folder: "unassigned", ticketId: undefined }}
-          aria-label="opendesk"
-          className="group flex items-center gap-2 rounded-sm outline-none focus-visible:shadow-[0_0_0_1.5px_var(--focus)]"
-        >
-          <Mark className="size-[18px] text-fg" />
-          {!rail && <span className="heading text-[16px] leading-none text-fg">opendesk</span>}
-        </Link>
-        {!rail && !drawer && (
-          <Tooltip content={t("nav.collapse")} shortcut="b">
-            <button
-              type="button"
-              aria-label={t("nav.collapse")}
-              onClick={() => toggleNav()}
-              className="hidden size-7 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-hover hover:text-fg md:flex"
-            >
-              <PanelLeftClose className="size-4" />
-            </button>
-          </Tooltip>
-        )}
-      </div>
-
-      <div className={cn("flex shrink-0 flex-col gap-1.5 pb-2 pt-2.5", rail ? "items-center px-2.5" : "px-2.5")}>
-        <WorkspaceSwitcher rail={rail} />
-        <NavTip rail={rail} label={t("search.label")}>
-          <button
-            type="button"
-            onClick={() => shell.palette()}
-            aria-label={t("search.open")}
-            className={cn(
-              "flex h-8 items-center rounded-md border border-line bg-surface text-[12.5px] text-fg-4 outline-none transition-colors hover:border-line-strong hover:text-fg-3 focus-visible:shadow-[0_0_0_1.5px_var(--focus)]",
-              rail ? "w-9 justify-center" : "w-full gap-2 pl-2.5 pr-1.5",
-            )}
-          >
-            <Search className="size-3.5 shrink-0" />
-            {!rail && (
-              <>
-                <span className="flex-1 text-left">{t("search.label")}</span>
-                <Kbd>mod k</Kbd>
-              </>
-            )}
-          </button>
-        </NavTip>
-      </div>
-
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
         <Section id="inbox" label={t("nav.inbox")} rail={rail} first>
           {folders.map((f) => (
-            <NavLink
-              key={f.id}
-              rail={rail}
-              label={f.label}
-              icon={folderIcons[f.id]}
-              to="/inbox/$folder/{-$ticketId}"
-              params={{ folder: f.id, ticketId: undefined }}
-              count={counts && f.id !== "solved" && f.id !== "spam" ? f.count(counts) : null}
-              badge={!!counts && f.id === "unassigned" && (f.count(counts) ?? 0) > 0}
-            />
+            <NavTip key={f.id} rail={rail} label={f.label}>
+              <Link
+                to="/inbox/$folder/{-$ticketId}"
+                params={{ folder: f.id, ticketId: undefined }}
+                className={cn(rowBase, rowShape(rail), rowIdle)}
+                activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
+                aria-label={rail ? f.label : undefined}
+              >
+                {folderIcons[f.id]}
+                <Label rail={rail}>{f.label}</Label>
+                {counts && f.id !== "solved" && f.id !== "spam" && <Count n={f.count(counts)} rail={rail} />}
+                {rail && counts && f.id === "unassigned" && (f.count(counts) ?? 0) > 0 && (
+                  <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />
+                )}
+              </Link>
+            </NavTip>
           ))}
         </Section>
 
@@ -266,7 +177,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
                 <Link
                   to="/settings/views"
                   aria-label={t("nav.manageViews")}
-                  className="flex size-5 items-center justify-center rounded-sm text-fg-4 opacity-0 transition-opacity hover:bg-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100"
+                  className="flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100"
                 >
                   <Plus className="size-3.5" />
                 </Link>
@@ -278,87 +189,107 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
             [...views]
               .sort((a, b) => a.position - b.position)
               .map((v) => (
-                <NavLink
-                  key={v.id}
-                  rail={rail}
-                  label={v.name}
-                  icon={<Layers />}
-                  to="/views/$viewId/{-$ticketId}"
-                  params={{ viewId: v.id, ticketId: undefined }}
-                  count={counts?.views?.[v.id]}
-                />
+                <NavTip key={v.id} rail={rail} label={v.name}>
+                  <Link
+                    to="/views/$viewId/{-$ticketId}"
+                    params={{ viewId: v.id, ticketId: undefined }}
+                    className={cn(rowBase, rowShape(rail), rowIdle)}
+                    activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
+                    aria-label={rail ? v.name : undefined}
+                  >
+                    <Layers />
+                    <Label rail={rail}>{v.name}</Label>
+                    <Count n={counts?.views?.[v.id]} rail={rail} />
+                  </Link>
+                </NavTip>
               ))
           ) : (
-            <NavLink rail={rail} label={t("nav.createView")} icon={<Plus />} to="/settings/views" muted />
+            <NavTip rail={rail} label={t("nav.createView")}>
+              <Link to="/settings/views" className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
+                <Plus />
+                <Label rail={rail}>{t("nav.createView")}</Label>
+              </Link>
+            </NavTip>
           )}
         </Section>
 
         <Section id="workspace" label={t("nav.workspace")} rail={rail}>
-          <NavLink rail={rail} label={t("nav.contacts")} icon={<Users />} to="/contacts/{-$contactId}" params={{ contactId: undefined }} />
-          <NavLink rail={rail} label={t("nav.kb")} icon={<BookOpen />} to="/kb" />
-          <NavLink rail={rail} label={t("nav.reports")} icon={<BarChart3 />} to="/reports" />
-          <NavLink rail={rail} label={t("nav.settings")} icon={<Settings />} to="/settings" />
+          <NavTip rail={rail} label={t("nav.contacts")}>
+            <Link
+              to="/contacts/{-$contactId}"
+              params={{ contactId: undefined }}
+              className={cn(rowBase, rowShape(rail), rowIdle)}
+              activeProps={{ className: rowActive }}
+              aria-label={rail ? t("nav.contacts") : undefined}
+            >
+              <Users />
+              <Label rail={rail}>{t("nav.contacts")}</Label>
+            </Link>
+          </NavTip>
+          <NavTip rail={rail} label={t("nav.kb")}>
+            <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>
+              <BookOpen />
+              <Label rail={rail}>{t("nav.kb")}</Label>
+            </Link>
+          </NavTip>
+          <NavTip rail={rail} label={t("nav.reports")}>
+            <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.reports") : undefined}>
+              <BarChart3 />
+              <Label rail={rail}>{t("nav.reports")}</Label>
+            </Link>
+          </NavTip>
         </Section>
       </div>
 
-      {rail && !drawer && (
-        <div className="flex shrink-0 justify-center pb-1">
-          <Tooltip content={t("nav.expand")} shortcut="b" side="right">
+      <div className="flex shrink-0 flex-col gap-px py-1.5">
+        <NavTip rail={rail} label={t("nav.settings")}>
+          <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>
+            <Settings />
+            <Label rail={rail}>{t("nav.settings")}</Label>
+          </Link>
+        </NavTip>
+        {!drawer && (
+          <Tooltip content={rail ? t("nav.expand") : t("nav.collapse")} shortcut="b" side="right">
             <button
               type="button"
-              aria-label={t("nav.expand")}
+              aria-label={rail ? t("nav.expand") : t("nav.collapse")}
               onClick={() => toggleNav()}
-              className="hidden size-8 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-hover hover:text-fg md:flex"
+              className={cn(rowBase, rowShape(rail), rowIdle, "hidden md:flex")}
             >
-              <PanelLeftOpen className="size-4" />
+              {rail ? <PanelLeftOpen /> : <PanelLeftClose />}
+              <Label rail={rail}>{t("nav.collapse")}</Label>
             </button>
           </Tooltip>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="shrink-0 border-t border-line">
+      <div className="shrink-0 border-t border-chrome-line">
         <UserMenu rail={rail} />
       </div>
     </nav>
   );
 }
 
-export function WorkspaceSwitcher({ rail }: { rail?: boolean }) {
+export function WorkspaceSwitcher() {
   const ws = useWorkspace();
   const memberships = useSession((s) => s.memberships);
-  const role = useRole();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { t } = useTranslation("shell");
   if (!ws) return null;
   return (
     <Menu>
-      <NavTip rail={!!rail} label={ws.name}>
-        <MenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={rail ? ws.name : undefined}
-            className={cn(
-              "group flex items-center text-left outline-none transition-colors focus-visible:shadow-[0_0_0_1.5px_var(--focus)]",
-              rail
-                ? "size-9 justify-center rounded-md hover:bg-hover data-[state=open]:bg-hover"
-                : "h-11 w-full gap-2.5 rounded-md border border-line px-2 hover:border-line-strong data-[state=open]:border-fg",
-            )}
-          >
-            <WorkspaceGlyph name={ws.name} />
-            {!rail && (
-              <>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-medium leading-4 text-fg">{ws.name}</span>
-                  <span className="mono block truncate text-[10px] uppercase leading-3.5 tracking-[0.06em] text-fg-4">{role}</span>
-                </span>
-                <ChevronsUpDown className="size-3.5 shrink-0 text-fg-4 transition-colors group-hover:text-fg" />
-              </>
-            )}
-          </button>
-        </MenuTrigger>
-      </NavTip>
-      <MenuContent align="start" side={rail ? "right" : "bottom"} className="w-[240px]">
+      <MenuTrigger asChild>
+        <button
+          type="button"
+          className="group flex h-8 min-w-0 max-w-[220px] items-center gap-2 rounded-md pl-1 pr-1.5 text-left outline-none transition-colors hover:bg-chrome-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-chrome-hover"
+        >
+          <WorkspaceGlyph name={ws.name} />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">{ws.name}</span>
+          <ChevronsUpDown className="size-3.5 shrink-0 text-fg-4 transition-colors group-hover:text-fg-2" />
+        </button>
+      </MenuTrigger>
+      <MenuContent align="start" className="w-[240px]">
         <MenuLabel>{t("workspaces.title")}</MenuLabel>
         {memberships.map((m) => (
           <MenuItem
@@ -395,7 +326,7 @@ export function WorkspaceGlyph({ name, small }: { name: string; small?: boolean 
       aria-hidden
       className={cn(
         "flex shrink-0 items-center justify-center bg-inverse font-semibold tracking-tight text-inverse-fg",
-        small ? "size-4 rounded-[2px] text-[9px] !text-inverse-fg" : "size-7 rounded-[4px] text-[12px]",
+        small ? "size-4 rounded-[4px] text-[9px] !text-inverse-fg" : "size-6 rounded-md text-[10.5px]",
       )}
     >
       {name.trim().charAt(0).toUpperCase() || "?"}
@@ -413,7 +344,7 @@ export function ThemeSwitch() {
     { v: "system", icon: <Monitor />, label: t("theme.system") },
   ];
   return (
-    <div role="radiogroup" aria-label={t("theme.title")} className="inline-flex items-center rounded-md border border-line p-0.5">
+    <div role="radiogroup" aria-label={t("theme.title")} className="inline-flex items-center rounded-md bg-hover p-0.5">
       {opts.map((o) => (
         <Tooltip key={o.v} content={o.label}>
           <button
@@ -426,7 +357,7 @@ export function ThemeSwitch() {
               setTheme(o.v);
             }}
             className={cn(
-              "flex h-[22px] w-7 items-center justify-center rounded-sm text-fg-3 transition-[color,background-color,box-shadow] hover:text-fg [&_svg]:size-3.5",
+              "flex h-[22px] w-7 items-center justify-center rounded-[5px] text-fg-3 transition-[color,background-color,box-shadow] hover:text-fg [&_svg]:size-3.5",
               pref === o.v && "bg-surface text-fg shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/0.06)]",
             )}
           >
@@ -452,15 +383,15 @@ function UserMenu({ rail }: { rail: boolean }) {
           type="button"
           aria-label={t("account.menu")}
           className={cn(
-            "my-2 flex items-center rounded-md text-left outline-none transition-[width,background-color] duration-200 hover:bg-hover focus-visible:shadow-[0_0_0_1.5px_var(--focus)] data-[state=open]:bg-hover",
-            rail ? "mx-auto w-9 justify-center py-0.5" : "mx-2.5 w-[calc(100%-1.25rem)] gap-2.5 px-2 py-1.5",
+            "my-2 flex items-center rounded-md text-left outline-none transition-[width,background-color] duration-200 hover:bg-chrome-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-chrome-hover",
+            rail ? "mx-3 w-8 justify-center py-0.5" : "mx-2.5 w-[calc(100%-1.25rem)] gap-2.5 px-1.5 py-1",
           )}
         >
           <Avatar name={name} src={user.avatar_url} size="lg" />
           {!rail && (
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[12.5px] font-medium text-fg">{name}</span>
-              <span className="mono block truncate text-[10.5px] text-fg-4">{user.email}</span>
+              <span className="block truncate text-[11px] text-fg-3">{user.email}</span>
             </span>
           )}
         </button>

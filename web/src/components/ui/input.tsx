@@ -3,9 +3,9 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const inputBase =
-  "w-full min-w-0 rounded-md border border-line bg-surface px-2.5 text-[13px] text-fg shadow-xs outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-fg-4 hover:border-line-strong focus:border-fg focus:shadow-none focus-visible:shadow-none disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-3 aria-[invalid=true]:border-danger aria-[invalid=true]:focus:border-danger";
+  "w-full min-w-0 rounded-md border border-line bg-surface px-2.5 text-[13px] text-fg shadow-xs outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-fg-4 hover:border-line-strong focus:border-focus-line focus:shadow-[0_0_0_3px_var(--focus)] focus-visible:shadow-[0_0_0_3px_var(--focus)] disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-3 aria-[invalid=true]:border-danger aria-[invalid=true]:focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_18%,transparent)]";
 
-const heights = { sm: "h-7 text-[12.5px]", md: "h-8", lg: "h-10 px-3 text-[14px]" } as const;
+const heights = { sm: "h-7 text-[12.5px]", md: "h-8", lg: "h-10 rounded-lg px-3 text-[14px]" } as const;
 
 type InputProps = InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean; leading?: ReactNode; trailing?: ReactNode; inputSize?: keyof typeof heights };
 

@@ -28,7 +28,7 @@ export function Checkbox({
       onClick={onClick}
       onCheckedChange={(v) => onCheckedChange(v === true)}
       className={cn(
-        "peer flex size-[15px] shrink-0 items-center justify-center rounded-[2px] border border-line-strong bg-surface text-inverse-fg transition-colors duration-100 hover:border-fg-3 data-[state=checked]:border-inverse data-[state=checked]:bg-inverse data-[state=indeterminate]:border-inverse data-[state=indeterminate]:bg-inverse disabled:opacity-50",
+        "peer flex size-[15px] shrink-0 items-center justify-center rounded-[4px] border border-line-strong bg-surface text-inverse-fg transition-colors duration-100 hover:border-fg-3 data-[state=checked]:border-inverse data-[state=checked]:bg-inverse data-[state=indeterminate]:border-inverse data-[state=indeterminate]:bg-inverse disabled:opacity-50",
         className,
       )}
     >
