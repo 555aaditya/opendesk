@@ -98,7 +98,7 @@ export default function ContactsPage() {
           <div className="flex h-10 items-center gap-2 border-b border-line-soft px-4 md:px-5">
             <span className="text-xs text-fg-3">{t("filteredBy")}</span>
             <span className="inline-flex h-6 items-center gap-1.5 rounded-sm bg-hover pl-1 pr-0.5 text-xs">
-              <CompanyGlyph name={company.data?.name ?? "?"} size="xs" />
+              <CompanyGlyph name={company.data?.name ?? "?"} src={company.data?.avatar_url} size="xs" />
               {company.data?.name ?? t("company")}
               <button
                 type="button"
@@ -181,7 +181,7 @@ export default function ContactsPage() {
                     <span className={`min-w-0 ${md}`}>
                       {c.company ? (
                         <span className="flex min-w-0 items-center gap-2">
-                          <CompanyGlyph name={c.company.name} size="xs" />
+                          <CompanyGlyph name={c.company.name} src={c.company.avatar_url} size="xs" />
                           <span className="truncate text-fg-2">{c.company.name}</span>
                         </span>
                       ) : (

@@ -25,6 +25,7 @@ export function WidgetPreview({
   requireEmail,
   dark,
   enabled,
+  avatarUrl,
 }: {
   workspaceName: string;
   greeting: string;
@@ -32,6 +33,8 @@ export function WidgetPreview({
   requireEmail: boolean;
   dark: boolean;
   enabled: boolean;
+  /** The widget_avatar brand image; the opendesk mark without one. */
+  avatarUrl?: string | null;
 }) {
   const accent = brandColor && /^#?[0-9a-f]{6}$/i.test(brandColor) ? (brandColor.startsWith("#") ? brandColor : `#${brandColor}`) : dark ? "#fafafa" : "#0a0a0a";
   const onAccent = readableOn(accent);
@@ -61,8 +64,8 @@ export function WidgetPreview({
           >
             <div className="flex items-center gap-2.5 px-3.5 py-3" style={{ borderBottom: `1px solid ${c.line}` }}>
               <ChevronLeft className="size-4" style={{ color: c.fg2 }} />
-              <span className="flex size-7 items-center justify-center rounded-full" style={{ background: c.bubble }}>
-                <Mark className="size-3.5" />
+              <span className="flex size-7 items-center justify-center overflow-hidden rounded-full" style={{ background: c.bubble }}>
+                {avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover" /> : <Mark className="size-3.5" />}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-semibold tracking-[-0.01em]">{workspaceName}</div>

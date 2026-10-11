@@ -130,7 +130,7 @@ function FieldControl({ field, value, onSave, autoOpen, disabled }: { field: Cus
     const items =
       field.type === "select"
         ? field.options.map((o) => ({ value: o.id, label: o.label, icon: <TagSwatch name={o.label} color={o.color} /> }))
-        : (members ?? []).filter((m) => m.role !== "viewer").map((m) => ({ value: m.user.id, label: m.user.name, keywords: [m.user.email], icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> }));
+        : (members ?? []).filter((m) => m.role !== "viewer").map((m) => ({ value: m.user.id, label: m.user.name, keywords: [m.user.email], icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" presence={m.presence} /> }));
     const current = typeof value === "string" ? value : null;
     let shown: ReactNode = empty;
     if (current && field.type === "select") {

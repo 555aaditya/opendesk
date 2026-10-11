@@ -14,7 +14,7 @@ import { cn } from "@/lib/cn";
 import { MessageSquareText } from "lucide-react";
 
 export type SuggestItem =
-  | { kind: "mention"; id: string; label: string; sub?: string; avatar?: string }
+  | { kind: "mention"; id: string; label: string; sub?: string; avatar?: string | null }
   | { kind: "reply"; id: string; label: string; sub?: string; html: string };
 
 type SuggestState = {
@@ -74,7 +74,7 @@ export function mentionExtension(getMembers: () => Member[], enabled: () => bool
           .filter((m) => m.role !== "viewer")
           .filter((m) => !query || m.user.name.toLowerCase().includes(query.toLowerCase()) || m.user.email.toLowerCase().startsWith(query.toLowerCase()))
           .slice(0, 6)
-          .map((m) => ({ kind: "mention", id: m.user.id, label: m.user.name, sub: m.user.email, avatar: m.user.avatar_url ?? undefined })),
+          .map((m) => ({ kind: "mention", id: m.user.id, label: m.user.name, sub: m.user.email, avatar: m.user.avatar_url })),
       render: renderer("mention"),
     },
   });

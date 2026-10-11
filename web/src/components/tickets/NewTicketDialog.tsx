@@ -214,7 +214,7 @@ export default function NewTicketDialog() {
           <Picker
             items={[
               { value: "__none", label: tr("props.unassigned"), icon: <span className="size-4 rounded-xs border border-dashed border-line-strong" /> },
-              ...(members ?? []).filter((m) => m.role !== "viewer").map((m) => ({ value: m.user.id, label: m.user.name, icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> })),
+              ...(members ?? []).filter((m) => m.role !== "viewer").map((m) => ({ value: m.user.id, label: m.user.name, icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" presence={m.presence} /> })),
             ]}
             value={assignee ?? "__none"}
             onSelect={(v) => setAssignee(v === "__none" ? null : v)}

@@ -41,7 +41,8 @@
     "open": "Open the setup checklist",
     "step_done": "Done",
     "step_todo": "To do",
-    "needs_admin": "An admin sets this up"
+    "needs_admin": "An admin sets this up",
+    "needs_ai": "Turn on AI in Settings to try this"
   },
   "availability": {
     "label": "Availability",

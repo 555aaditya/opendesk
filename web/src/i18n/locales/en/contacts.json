@@ -111,7 +111,8 @@
     "discardTitle": "Discard changes?",
     "discard": "Discard",
     "discardBody": "Your changes to this contact will be lost.",
-    "discardCompany": "Your changes to this company will be lost."
+    "discardCompany": "Your changes to this company will be lost.",
+    "pictureRefresh": "Looking for a new picture. It shows up here when one is found."
   },
   "confirm": {
     "deleteTitle": "Delete {{name}}?",

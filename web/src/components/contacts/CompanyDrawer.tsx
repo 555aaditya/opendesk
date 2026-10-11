@@ -9,6 +9,7 @@ import { PresenceList, PresenceRow } from "@/components/motion";
 import { Drawer } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar } from "@/components/ui/avatar";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea, TextInput } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty";
@@ -19,6 +20,7 @@ import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { Company } from "@/lib/api/types";
 import { fullDate, relShort, shortDate } from "@/lib/format";
+import { useCompanyAvatar } from "@/lib/pictures";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, MiniStat, none } from "./bits";
@@ -41,6 +43,7 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const { data: c, isLoading, error } = useQuery({ ...q.company(companyId ?? ""), enabled: !!companyId });
+  const picture = useCompanyAvatar();
   const { data: defs } = useRecordFields("company");
   const definedKeys = new Set((defs ?? []).map((f) => f.key));
   useEffect(() => {
@@ -85,7 +88,28 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
       ) : (
         <div className="flex min-h-full flex-col">
           <div className="flex items-start gap-3.5 px-5 pb-4 pt-5">
-            <CompanyGlyph name={c.name} size="xl" />
+            {canEdit ? (
+              <ImageUpload
+                compact
+                size="md"
+                shape="square"
+                name={c.name}
+                value={c.avatar_url}
+                source={c.avatar_source}
+                onChange={async (file) => {
+                  await picture.upload.mutateAsync({ id: c.id, file });
+                }}
+                onRemove={async () => {
+                  await picture.remove.mutateAsync(c.id);
+                }}
+                onRefresh={async () => {
+                  await picture.refresh.mutateAsync(c.id);
+                  toast.info(t("drawer.pictureRefresh"));
+                }}
+              />
+            ) : (
+              <CompanyGlyph name={c.name} src={c.avatar_url} size="xl" />
+            )}
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-[16px] font-semibold tracking-[-0.015em]">{c.name}</h2>
               <div className="mono mt-1 truncate text-xs text-fg-3">{c.domain || t("noDomain")}</div>

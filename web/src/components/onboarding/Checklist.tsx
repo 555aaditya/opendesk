@@ -11,22 +11,12 @@ import { AnimatedNumber } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Popover } from "@/components/ui/popover";
 import { Tooltip } from "@/components/ui/tooltip";
+import type { Onboarding, OnboardingStep, OnboardingStepId } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { ease, springs } from "@/lib/motion";
 import { AI_TONE, tone } from "@/lib/tones";
 
-// Shapes from contracts/api.md (Triage, assignment and setup).
-export type OnboardingStepId =
-  | "connect_mailbox"
-  | "invite_teammate"
-  | "upload_photo"
-  | "install_widget"
-  | "publish_article"
-  | "setup_triage"
-  | "create_label"
-  | "try_jev";
-export type OnboardingStep = { id: OnboardingStepId; title: string; description: string; done: boolean; href: string; requires: "admin" | "agent" };
-export type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
+export type { Onboarding, OnboardingStep, OnboardingStepId };
 
 export const STEP_ICONS: Record<OnboardingStepId, LucideIcon> = {
   connect_mailbox: Mail,
@@ -308,7 +298,7 @@ export function ProgressRing({ value, className }: { value: number; className?: 
 }
 
 /** The sidebar entry: ring + count; opens the checklist in a popover. `collapsed` for the icon rail. */
-export function ChecklistMini({ collapsed, ...props }: Props & { collapsed?: boolean }) {
+export function ChecklistMini({ collapsed, triggerClassName, ...props }: Props & { collapsed?: boolean; triggerClassName?: string }) {
   const { t } = useTranslation("setup");
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -322,6 +312,7 @@ export function ChecklistMini({ collapsed, ...props }: Props & { collapsed?: boo
       className={cn(
         "flex h-8 items-center gap-2 rounded-md text-[12.5px] text-fg-2 outline-none transition-colors duration-150 hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-hover data-[state=open]:text-fg",
         collapsed ? "w-8 justify-center" : "w-full px-2",
+        triggerClassName,
       )}
     >
       <ProgressRing value={pct} />

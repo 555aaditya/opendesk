@@ -81,7 +81,7 @@ export function useMemberItems(): PickerItem[] {
       label: m.user.name || m.user.email,
       hint: m.user.email,
       keywords: [m.user.email],
-      icon: <Avatar name={m.user.name || m.user.email} src={m.user.avatar_url} size="xs" />,
+      icon: <Avatar name={m.user.name || m.user.email} src={m.user.avatar_url} size="xs" presence={m.presence} />,
     }));
 }
 

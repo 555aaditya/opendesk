@@ -180,7 +180,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               { value: "__none", label: tr("props.unassigned"), icon: unassignedIcon },
               ...(members ?? [])
                 .filter((m) => m.role !== "viewer")
-                .map((m) => ({ value: m.user.id, label: m.user.name, keywords: [m.user.email], icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> })),
+                .map((m) => ({ value: m.user.id, label: m.user.name, keywords: [m.user.email], icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" presence={m.presence} /> })),
             ]}
             onSelect={(v) => patch({ assignee_id: v === "__none" ? null : v })}
             trigger={

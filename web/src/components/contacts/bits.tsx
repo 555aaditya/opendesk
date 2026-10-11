@@ -1,10 +1,10 @@
 // Small shared pieces for the contacts and companies directory.
 
 import type { ReactNode } from "react";
+import { Avatar } from "@/components/ui/avatar";
 import { TagChip } from "@/components/ui/badge";
 import type { TagRef } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { tone, toneFor } from "@/lib/tones";
 
 export type LabelRef = TagRef;
 export const labelsOf = (x: { tags?: TagRef[] }): TagRef[] => x.tags ?? [];
@@ -37,20 +37,11 @@ export function Labels({ labels, max = 2, className }: { labels: LabelRef[]; max
   );
 }
 
-const glyph = {
-  xs: "size-5 rounded-sm text-[9px]",
-  md: "size-6 rounded-sm text-[10px]",
-  lg: "size-8 rounded-md text-[12px]",
-  xl: "size-10 rounded-lg text-[14px]",
-};
+const glyph = { xs: "sm", md: "md", lg: "lg", xl: "xl" } as const;
 
-/** A company's tile: its initial on a stable tinted square. */
-export function CompanyGlyph({ name, size = "md" }: { name: string; size?: keyof typeof glyph }) {
-  return (
-    <span aria-hidden className={cn("flex shrink-0 select-none items-center justify-center font-semibold", glyph[size], tone[toneFor(name)].chip)}>
-      {name.trim().charAt(0).toUpperCase() || "?"}
-    </span>
-  );
+/** A company's tile: its logo, or its initial on a stable tinted square. */
+export function CompanyGlyph({ name, src, size = "md" }: { name: string; src?: string | null; size?: keyof typeof glyph }) {
+  return <Avatar name={name || "?"} src={src} size={glyph[size]} square />;
 }
 
 /** Label / value pair in a drawer's detail list. */

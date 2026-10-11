@@ -7,11 +7,13 @@ import { SettingsPage, Section, Row } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { TextInput } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import type { User } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
+import { useMyAvatar } from "@/lib/pictures";
 import { updateUser, useRole, useSession } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 
@@ -21,20 +23,18 @@ export default function Profile() {
   const role = useRole();
   const workspace = useSession((s) => s.memberships.find((m) => m.workspace.id === s.workspaceId)?.workspace.name);
   const [name, setName] = useState(user.name);
-  const [avatar, setAvatar] = useState(user.avatar_url ?? "");
+  const picture = useMyAvatar();
   useEffect(() => {
     setName(user.name);
-    setAvatar(user.avatar_url ?? "");
-  }, [user.name, user.avatar_url]);
+  }, [user.name]);
 
-  const dirty = name.trim() !== user.name || avatar.trim() !== (user.avatar_url ?? "");
-  const validAvatar = !avatar.trim() || /^https:\/\/\S+$/i.test(avatar.trim());
+  const dirty = name.trim() !== user.name;
 
   const save = useMutation({
-    mutationFn: () => api.me.update({ name: name.trim(), avatar_url: avatar.trim() }),
+    mutationFn: () => api.me.update({ name: name.trim() }),
     onMutate: () => {
       const prev: User = user;
-      updateUser({ ...user, name: name.trim(), avatar_url: avatar.trim() || null });
+      updateUser({ ...user, name: name.trim() });
       return { prev };
     },
     onError: (e, _v, ctx) => {
@@ -58,12 +58,12 @@ export default function Profile() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (dirty && name.trim() && validAvatar) save.mutate();
+          if (dirty && name.trim()) save.mutate();
         }}
       >
         <Section>
           <div className="flex items-center gap-4 border-b border-line-soft py-4">
-            <Avatar name={name || user.email} src={validAvatar ? avatar.trim() || null : null} size="xl" />
+            <Avatar name={name || user.email} src={user.avatar_url} size="xl" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[14px] font-semibold tracking-[-0.01em]">{name.trim() || user.email}</div>
               <div className="mono mt-0.5 truncate text-xs text-fg-3">{user.email}</div>
@@ -78,14 +78,19 @@ export default function Profile() {
           <Row label={t("profile.name")} htmlFor="profile-name">
             <TextInput id="profile-name" className="w-[280px]" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
           </Row>
-          <Row label={t("profile.photo")} description={t("profile.photoHint")} htmlFor="profile-avatar">
-            <TextInput
-              id="profile-avatar"
-              className="w-[280px]"
-              value={avatar}
-              invalid={!validAvatar}
-              placeholder="https://"
-              onChange={(e) => setAvatar(e.target.value)}
+          <Row label={t("profile.photo")} description={t("profile.photoHint")}>
+            <ImageUpload
+              name={name.trim() || user.email}
+              shape="round"
+              size="md"
+              value={user.avatar_url}
+              source={user.avatar_source}
+              onChange={async (blob) => {
+                await picture.upload.mutateAsync(blob);
+              }}
+              onRemove={async () => {
+                await picture.remove.mutateAsync();
+              }}
             />
           </Row>
           <Row
@@ -108,13 +113,12 @@ export default function Profile() {
               variant="ghost"
               onClick={() => {
                 setName(user.name);
-                setAvatar(user.avatar_url ?? "");
               }}
             >
               {t("profile.discard")}
             </Button>
           )}
-          <Button type="submit" variant="primary" disabled={!dirty || !name.trim() || !validAvatar} loading={save.isPending}>
+          <Button type="submit" variant="primary" disabled={!dirty || !name.trim()} loading={save.isPending}>
             {t("profile.save")}
           </Button>
         </div>

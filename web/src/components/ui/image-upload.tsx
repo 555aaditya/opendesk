@@ -5,7 +5,7 @@
 // Blob, 512 px on its short side; send it as the multipart `file`.
 
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from "motion/react";
-import { Camera, ImageUp, Minus, Plus } from "lucide-react";
+import { Camera, ImageUp, Minus, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
@@ -14,6 +14,8 @@ import { Avatar } from "./avatar";
 import { Button } from "./button";
 import { useConfirm } from "./confirm";
 import { Dialog } from "./dialog";
+import { Menu, MenuContent, MenuItem, MenuTrigger } from "./menu";
+import { toast } from "./toast";
 import { ACCEPTED, checkFile, clampOffset, MAX_ZOOM, MIN_ZOOM, renderCrop, scaleFor, windowSize, type CropView } from "./image-crop";
 
 const SIZES = {
@@ -52,6 +54,7 @@ export function ImageUpload({
   disabled,
   className,
   hint = true,
+  compact,
 }: {
   value?: string | null;
   /** Whose picture: initials, the identity hue and the copy use it. */
@@ -74,6 +77,8 @@ export function ImageUpload({
   className?: string;
   /** Show the file-type hint under the buttons. */
   hint?: boolean;
+  /** Only the picture (drawer headers): a click opens a small menu, errors arrive as toasts. */
+  compact?: boolean;
 }) {
   const { t } = useTranslation("setup");
   const confirm = useConfirm();
@@ -140,15 +145,42 @@ export function ImageUpload({
   };
 
   const open = () => !disabled && !busy && input.current?.click();
+  useEffect(() => {
+    if (compact && error) {
+      toast.error(error);
+      setError(null);
+    }
+  }, [compact, error]);
+  const canRefresh = !!onRefresh && source !== "upload";
+  const canRemove = !!onRemove && !!value;
+  const withMenu = compact && (canRefresh || canRemove);
   const src = preview ?? value ?? null;
   const fromLabel = source && source !== "upload" ? t(`upload.source_${source}`) : null;
   const rounded = { borderRadius: radius };
 
   return (
-    <div className={cn("flex items-center gap-4", className)}>
+    <div className={cn("flex items-center gap-4", compact && "contents", className)}>
+      <MenuIf on={!!withMenu} items={
+        <>
+          <MenuItem icon={<ImageUp />} onSelect={open}>
+            {value ? t("upload.change") : t("upload.upload")}
+          </MenuItem>
+          {canRefresh && (
+            <MenuItem icon={<RefreshCw />} onSelect={() => void refresh()}>
+              {t("upload.refresh")}
+            </MenuItem>
+          )}
+          {canRemove && (
+            <MenuItem icon={<Trash2 />} danger onSelect={remove}>
+              {t("upload.remove")}
+            </MenuItem>
+          )}
+          {fromLabel && value && <p className="px-2 pb-1 pt-1.5 text-[11.5px] text-fg-4">{fromLabel}</p>}
+        </>
+      }>
       <button
         type="button"
-        onClick={open}
+        onClick={withMenu ? undefined : open}
         disabled={disabled}
         aria-label={value ? t("upload.change") : t("upload.upload")}
         aria-describedby={live}
@@ -217,18 +249,24 @@ export function ImageUpload({
           )}
         </AnimatePresence>
       </button>
+      </MenuIf>
 
+      {compact ? (
+        <span id={live} className="sr-only" aria-live="polite">
+          {busy ? t("upload.uploading") : phase === "done" ? t("upload.uploaded") : refreshing ? t("upload.refreshing") : ""}
+        </span>
+      ) : (
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-1.5">
           <Button size="sm" onClick={open} disabled={disabled || busy}>
             {value ? t("upload.change") : t("upload.upload")}
           </Button>
-          {onRefresh && source !== "upload" && (
+          {canRefresh && (
             <Button size="sm" variant="ghost" onClick={refresh} loading={refreshing} disabled={disabled || busy}>
               {t("upload.refresh")}
             </Button>
           )}
-          {onRemove && value && (
+          {canRemove && (
             <Button size="sm" variant="ghost" onClick={remove} disabled={disabled || busy}>
               {t("upload.remove")}
             </Button>
@@ -249,6 +287,7 @@ export function ImageUpload({
           {busy ? t("upload.uploading") : phase === "done" ? t("upload.uploaded") : refreshing ? t("upload.refreshing") : ""}
         </span>
       </div>
+      )}
 
       <input
         ref={input}
@@ -272,6 +311,17 @@ export function ImageUpload({
         />
       )}
     </div>
+  );
+}
+
+/** Wraps the picture in a menu trigger when it has more than one action. */
+function MenuIf({ on, items, children }: { on: boolean; items: ReactNode; children: ReactNode }) {
+  if (!on) return <>{children}</>;
+  return (
+    <Menu>
+      <MenuTrigger asChild>{children}</MenuTrigger>
+      <MenuContent align="start">{items}</MenuContent>
+    </Menu>
   );
 }
 
@@ -370,7 +420,7 @@ function CropDialog({
 }) {
   const { t } = useTranslation("setup");
   const [img, setImg] = useState<HTMLImageElement | null>(null);
-  const [url] = useState(() => URL.createObjectURL(file));
+  const [url, setUrl] = useState<string | null>(null);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [busy, setBusy] = useState(false);
   const x = useMotionValue(0);
@@ -379,12 +429,24 @@ function CropDialog({
   const reduce = useReducedMotion();
 
   useEffect(() => {
+    // The URL lives with the effect so a re-run (StrictMode) never loads a revoked one.
+    const u = URL.createObjectURL(file);
+    let live = true;
     const i = new Image();
-    i.onload = () => setImg(i);
-    i.onerror = onUnreadable;
-    i.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps
+    i.onload = () => {
+      if (!live) return;
+      setUrl(u);
+      setImg(i);
+    };
+    i.onerror = () => {
+      if (live) onUnreadable();
+    };
+    i.src = u;
+    return () => {
+      live = false;
+      URL.revokeObjectURL(u);
+    };
+  }, [file]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const view = useCallback(
     (z = zoom, ox = x.get(), oy = y.get()): CropView => ({ w: img?.naturalWidth || 1, h: img?.naturalHeight || 1, crop: CROP, zoom: z, x: ox, y: oy, aspect }),
@@ -484,7 +546,7 @@ function CropDialog({
           className="relative cursor-grab touch-none select-none overflow-hidden rounded-lg bg-sunken outline-none active:cursor-grabbing focus-visible:shadow-[0_0_0_2px_var(--surface),0_0_0_4px_var(--focus)]"
           style={{ width: FRAME, height: FRAME }}
         >
-          {img ? (
+          {img && url ? (
             <motion.img
               src={url}
               alt=""

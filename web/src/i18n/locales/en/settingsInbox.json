@@ -148,7 +148,7 @@
     "off": "Off",
     "editTitle": "Edit SLA policy",
     "newTitle": "New SLA policy",
-    "dialogHint": "Business hours aren't applied: targets count calendar time.",
+    "dialogHint": "Targets count every minute unless the policy counts business hours only.",
     "save": "Save policy",
     "create": "Create policy",
     "saved": "Policy saved",
@@ -170,8 +170,13 @@
     },
     "emptyTips": {
       "order": "The first matching policy applies",
-      "calendar": "Targets count calendar time"
-    }
+      "calendar": "Policies can pause outside business hours"
+    },
+    "businessHours": "Count business hours only",
+    "businessHoursHint": "The clock pauses outside business hours and on holidays.",
+    "businessHoursOff": "Business hours are off, so every minute counts until you turn them on.",
+    "businessHoursLink": "Set business hours",
+    "businessHoursBadge": "Business hours"
   },
   "automations": {
     "reorderAria": "Reorder {{name}}. Hold Alt and press the arrow keys to move it.",
@@ -352,6 +357,228 @@
         "gte": "is at least",
         "lt": "is less than",
         "lte": "is at most"
+      }
+    }
+  },
+  "assignment": {
+    "title": "Assignment",
+    "description": "Decide who new tickets go to. Only teammates who are online and under their cap are picked.",
+    "saveFailed": "Couldn't save assignment",
+    "defaultTitle": "Default mode",
+    "defaultHint": "Used for every ticket unless its team or mailbox has its own rule.",
+    "modes": {
+      "none": {
+        "label": "Off",
+        "hint": "Tickets wait in Unassigned until someone takes them."
+      },
+      "round_robin": {
+        "label": "Round robin",
+        "hint": "Teammates take turns, so the next ticket goes to the next person."
+      },
+      "load_balanced": {
+        "label": "Load balanced",
+        "hint": "The next ticket goes to whoever has the fewest open tickets."
+      }
+    },
+    "stats": {
+      "eligible": "Can take tickets",
+      "eligibleHint": "Online and under their cap",
+      "atCap": "At their cap"
+    },
+    "presence": {
+      "online": "Online",
+      "away": "Away",
+      "offline": "Offline",
+      "idle": "Away, idle"
+    },
+    "rules": {
+      "title": "Rules",
+      "hint": "Give a team or a mailbox its own mode. A team rule wins over a mailbox rule.",
+      "add": "Add rule",
+      "search": "Find a team or mailbox",
+      "noTargets": "Every team and mailbox has a rule",
+      "teams": "Teams",
+      "mailboxes": "Mailboxes",
+      "team": "Team",
+      "mailbox": "Mailbox",
+      "teamMeta_one": "{{count}} member",
+      "teamMeta_other": "{{count}} members",
+      "missing": "Deleted",
+      "modeFor": "Mode for {{name}}",
+      "remove": "Remove rule",
+      "removeFor": "Remove the rule for {{name}}",
+      "removed": "Rule for {{name}} removed",
+      "emptyTitle": "No rules yet",
+      "emptyHint": "Every ticket uses the default mode. Add a rule when one team or mailbox should share work differently, like load balancing billing.",
+      "tips": {
+        "order": "A ticket's team rule comes first, then its mailbox rule",
+        "pool": "Only members of that team are picked"
+      }
+    },
+    "awayTitle": "Away",
+    "awayHint": "Teammates who step away stop getting new tickets until they are back.",
+    "away": {
+      "label": "Mark idle teammates away",
+      "on_one": "After {{count}} minute without activity",
+      "on_other": "After {{count}} minutes without activity",
+      "off": "Teammates stay online until they change it themselves",
+      "after": "Idle for",
+      "afterHint": "Between 10 minutes and 24 hours.",
+      "min": "min"
+    },
+    "teamTitle": "Team availability",
+    "teamHint": "Who can be assigned right now and how much each person has open. Viewers are never assigned.",
+    "teamEmpty": {
+      "title": "Nobody to assign yet",
+      "description": "Invite agents or admins so new tickets have someone to go to.",
+      "action": "Invite people",
+      "tips": {
+        "viewers": "Viewers can read tickets but are never assigned",
+        "online": "Only online teammates get new tickets"
+      }
+    },
+    "member": {
+      "setAvailability": "Set availability for {{name}}",
+      "noCap": "no cap",
+      "open": "open",
+      "setCap": "Set cap",
+      "capShort_one": "Cap {{count}}",
+      "capShort_other": "Cap {{count}}",
+      "capFor": "Ticket cap for {{name}}",
+      "capTitle": "Open ticket cap",
+      "capHint": "{{name}} stops getting new tickets at this many open and pending tickets.",
+      "limit": "Limit open tickets",
+      "tickets": "tickets",
+      "saveCap": "Save",
+      "saveFailed": "Couldn't update this teammate"
+    }
+  },
+  "triage": {
+    "title": "Triage",
+    "description": "{{name}} reads each new ticket and sorts it, so your team starts with the right priority and labels.",
+    "saveFailed": "Couldn't save triage settings",
+    "unavailable": {
+      "title": "AI is not set up",
+      "body": "{{name}} needs an AI provider before it can triage tickets.",
+      "action": "Open AI settings"
+    },
+    "explainer": {
+      "title": "How {{name}} triages",
+      "on": "On",
+      "off": "Off",
+      "body": "Every change {{name}} makes shows in the ticket timeline as made by {{name}}, so anyone can see why a ticket moved and change it back."
+    },
+    "sample": {
+      "aria": "Example of a triaged ticket",
+      "subject": "Charged twice for my annual plan",
+      "from": "Maria Lopez · just now",
+      "priority": "Priority raised to high",
+      "label": "Billing",
+      "labelAdded": "label added",
+      "sentiment": "Sentiment and language recorded",
+      "assigned": "Assigned to the next teammate"
+    },
+    "section": "Triage",
+    "auto": {
+      "label": "Triage new tickets",
+      "hint": "{{name}} looks at every new ticket as soon as it arrives."
+    },
+    "fields": {
+      "label": "What {{name}} may change",
+      "hint": "Pick what triage is allowed to set on a ticket.",
+      "always": "Always recorded:",
+      "sentiment": "Sentiment",
+      "language": "Language",
+      "category": "Category",
+      "priority": {
+        "label": "Priority",
+        "hint": "Raise the priority when a ticket looks urgent. It never lowers it."
+      },
+      "labels": {
+        "label": "Labels",
+        "hint": "Add labels that match what the ticket is about."
+      }
+    },
+    "after": {
+      "section": "After triage",
+      "label": "Assign after triage",
+      "hintMode": "The ticket is then assigned with your {{mode}} mode.",
+      "hintNone": "Assignment is off, so the ticket goes to whoever has the fewest open tickets.",
+      "link": "Assignment settings"
+    }
+  },
+  "hours": {
+    "title": "Business hours",
+    "description": "When your team is open. SLA policies can count only these hours, so nights, weekends and holidays don't run the clock.",
+    "saved": "Business hours saved",
+    "saveFailed": "Couldn't save business hours",
+    "openNow": "Open now",
+    "closedNow": "Closed now",
+    "enabled": "Use business hours",
+    "enabledOn": "SLA policies that count business hours pause outside these times",
+    "enabledOff": "Every minute counts toward SLA targets",
+    "timezone": "Time zone",
+    "timezoneHint": "Opening hours and holidays follow this time zone. It is also the workspace time zone.",
+    "searchTimezones": "Search time zones",
+    "sla": "SLA policies",
+    "slaHint": "Turn on business hours per policy.",
+    "slaLink": "Open SLA policies",
+    "weekTitle": "Weekly hours",
+    "weekHint": "Up to three ranges a day, on the quarter hour.",
+    "perWeek": "{{hours}} h a week",
+    "days": {
+      "mon": "Monday",
+      "tue": "Tuesday",
+      "wed": "Wednesday",
+      "thu": "Thursday",
+      "fri": "Friday",
+      "sat": "Saturday",
+      "sun": "Sunday"
+    },
+    "openOn": "Open on {{day}}",
+    "closed": "Closed",
+    "to": "to",
+    "startOf": "{{day}} range {{n}} start",
+    "endOf": "{{day}} range {{n}} end",
+    "addRange": "Add hours",
+    "addRangeOn": "Add hours on {{day}}",
+    "maxRanges": "Up to three ranges a day",
+    "removeRange": "Remove these hours",
+    "removeRangeOf": "Remove {{day}} range {{n}}",
+    "copyMenu": "More for {{day}}",
+    "copyWeekdays": "Copy to all weekdays",
+    "copyAll": "Copy to every day",
+    "errors": {
+      "order": "Each range has to end after it starts.",
+      "overlap": "These ranges overlap."
+    },
+    "holidays": {
+      "title": "Holidays",
+      "hint": "Closed all day. SLA clocks that count business hours stay paused.",
+      "add": "Add holiday",
+      "addConfirm": "Add",
+      "done": "Done",
+      "date": "Holiday date",
+      "name": "Holiday name",
+      "namePlaceholder": "New Year's Day",
+      "needDate": "Pick a date.",
+      "needName": "Give the holiday a name.",
+      "duplicate": "There is already a holiday on that date.",
+      "tooMany": "You can add up to {{count}} holidays.",
+      "today": "today",
+      "past": "past",
+      "inDays_one": "in {{count}} day",
+      "inDays_other": "in {{count}} days",
+      "remove": "Remove holiday",
+      "removeNamed": "Remove {{name}}",
+      "pastCount_one": "{{count}} past holiday.",
+      "pastCount_other": "{{count}} past holidays.",
+      "clearPast": "Clear past holidays",
+      "emptyTitle": "No holidays yet",
+      "emptyHint": "Add the days your team is closed, like public holidays, so SLA clocks don't run while nobody is around.",
+      "tips": {
+        "closed": "A holiday is closed for the whole day",
+        "sla": "Only policies that count business hours pause"
       }
     }
   }

@@ -391,6 +391,13 @@ const sMailboxDetail = createRoute({
 });
 const sTags = settingsPage("/tags", "Labels", () => import("./pages/settings/Tags"), (qc) => qc.ensureQueryData(q.tags()));
 const sCustomFields = settingsPage("/custom-fields", "Custom fields", () => import("./pages/settings/CustomFields"));
+const sAssignment = settingsPage("/assignment", "Assignment", () => import("./pages/settings/Assignment"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.assignment()), qc.ensureQueryData(q.members())]),
+);
+const sTriage = settingsPage("/triage", "Triage", () => import("./pages/settings/Triage"), (qc) => qc.ensureQueryData(q.triage()));
+const sBusinessHours = settingsPage("/business-hours", "Business hours", () => import("./pages/settings/BusinessHours"), (qc) =>
+  qc.ensureQueryData(q.businessHours()),
+);
 const sSavedReplies = settingsPage("/saved-replies", "Saved replies", () => import("./pages/settings/SavedReplies"), (qc) =>
   qc.ensureQueryData(q.savedReplies()),
 );
@@ -476,6 +483,9 @@ const routeTree = rootRoute.addChildren([
       sMailboxDetail,
       sTags,
       sCustomFields,
+      sAssignment,
+      sTriage,
+      sBusinessHours,
       sSavedReplies,
       sViews,
       sSla,

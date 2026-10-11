@@ -1,0 +1,503 @@
+// Settings > Assignment: who new tickets go to. The workspace default mode,
+// per team and per mailbox rules, auto-away, and the team's availability and
+// load with an inline cap for admins (contracts/api.md "Assignment").
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { motion, useReducedMotion } from "motion/react";
+import { CircleSlash, Inbox, Moon, Plus, Repeat, Scale, Sparkles, UsersRound, X } from "lucide-react";
+import { useId, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { ListRow, Row, Section, SettingsPage } from "@/components/layout";
+import { AvailabilityDot, AvailabilityMenuItems } from "@/components/presence/availability";
+import { IconTile, ListSkeleton, RolePill, SummaryStrip } from "@/components/settings2/bits";
+import { MotionList, MotionRow } from "@/components/settings2/motion";
+import { SettingsEmpty } from "@/components/settings2/SettingsEmpty";
+import { Stepper } from "@/components/settings2/Stepper";
+import { Avatar } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Menu, MenuContent, MenuTrigger } from "@/components/ui/menu";
+import { Picker } from "@/components/ui/picker";
+import { Popover } from "@/components/ui/popover";
+import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "@/components/ui/toast";
+import { Tooltip } from "@/components/ui/tooltip";
+import { api } from "@/lib/api/endpoints";
+import type { Assignment as A, AssignMode, AssignmentRule, Member } from "@/lib/api/types";
+import { cn } from "@/lib/cn";
+import { springs } from "@/lib/motion";
+import { useSetAvailability } from "@/lib/pictures";
+import { q, qk } from "@/lib/queries";
+import { atLeast, useRole } from "@/lib/session";
+import { tone, type Tone } from "@/lib/tones";
+
+export const MODES: AssignMode[] = ["none", "round_robin", "load_balanced"];
+const modeIcon: Record<AssignMode, ReactNode> = { none: <CircleSlash />, round_robin: <Repeat />, load_balanced: <Scale /> };
+const modeTone: Record<AssignMode, Tone> = { none: "gray", round_robin: "blue", load_balanced: "violet" };
+const AWAY_DEFAULT = 30;
+
+/** PATCH /v1/assignment with an optimistic cache write. */
+function useAssignmentWrite() {
+  const qc = useQueryClient();
+  const { t } = useTranslation("settingsInbox");
+  return useMutation({
+    mutationFn: (b: Partial<A>) => api.assignment.update(b),
+    onMutate: async (b) => {
+      await qc.cancelQueries({ queryKey: qk.assignment });
+      const prev = qc.getQueryData<A>(qk.assignment);
+      if (prev) qc.setQueryData<A>(qk.assignment, { ...prev, ...b });
+      return { prev };
+    },
+    onError: (e, _b, ctx) => {
+      if (ctx?.prev) qc.setQueryData(qk.assignment, ctx.prev);
+      toast.error(e, t("assignment.saveFailed"));
+    },
+    onSuccess: (a) => {
+      qc.setQueryData(qk.assignment, a);
+      void qc.invalidateQueries({ queryKey: qk.workspace });
+      void qc.invalidateQueries({ queryKey: qk.onboarding });
+    },
+  });
+}
+
+export default function Assignment() {
+  const { t } = useTranslation("settingsInbox");
+  const canEdit = atLeast(useRole(), "admin");
+  const { data: a, isLoading } = useQuery(q.assignment());
+  const { data: members, isLoading: membersLoading } = useQuery(q.members());
+  const write = useAssignmentWrite();
+
+  const assignable = (members ?? []).filter((m) => m.role !== "viewer");
+  const count = (p: Member["presence"]) => assignable.filter((m) => m.presence === p).length;
+  const atCap = assignable.filter((m) => m.max_open_tickets != null && m.open_tickets >= m.max_open_tickets).length;
+  const eligible = assignable.filter((m) => m.presence === "online" && (m.max_open_tickets == null || m.open_tickets < m.max_open_tickets)).length;
+
+  return (
+    <SettingsPage wide title={t("assignment.title")} description={t("assignment.description")}>
+      {members && (
+        <SummaryStrip
+          items={[
+            { label: t("assignment.stats.eligible"), value: eligible, hint: t("assignment.stats.eligibleHint"), tone: eligible ? "green" : "red" },
+            { label: t("assignment.presence.online"), value: count("online"), tone: "green" },
+            { label: t("assignment.presence.away"), value: count("away"), tone: "amber" },
+            { label: t("assignment.presence.offline"), value: count("offline") },
+            { label: t("assignment.stats.atCap"), value: atCap, tone: atCap ? "orange" : undefined },
+          ]}
+        />
+      )}
+
+      <Section flush title={t("assignment.defaultTitle")} description={t("assignment.defaultHint")}>
+        {isLoading || !a ? (
+          <div className="grid gap-2 p-2 md:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-[76px] rounded-md" />
+            ))}
+          </div>
+        ) : (
+          <ModeChoice value={a.mode} disabled={!canEdit} onChange={(mode) => write.mutate({ mode })} />
+        )}
+      </Section>
+
+      <RulesSection a={a} loading={isLoading} canEdit={canEdit} onRules={(rules) => write.mutate({ rules })} />
+
+      <Section title={t("assignment.awayTitle")} description={t("assignment.awayHint")}>
+        {a ? (
+          <AwayRow minutes={a.auto_away_minutes} disabled={!canEdit} onChange={(auto_away_minutes) => write.mutate({ auto_away_minutes })} />
+        ) : (
+          <div className="py-4">
+            <Skeleton className="h-5 w-1/2" />
+          </div>
+        )}
+      </Section>
+
+      <Section flush title={t("assignment.teamTitle")} description={t("assignment.teamHint")}>
+        {membersLoading ? (
+          <ListSkeleton rows={4} />
+        ) : !assignable.length ? (
+          <SettingsEmpty
+            art="contacts"
+            ghost="people"
+            title={t("assignment.teamEmpty.title")}
+            description={t("assignment.teamEmpty.description")}
+            action={
+              <Button variant="primary" asChild>
+                <Link to="/settings/members">{t("assignment.teamEmpty.action")}</Link>
+              </Button>
+            }
+            tips={[
+              { label: t("assignment.teamEmpty.tips.viewers"), icon: <UsersRound /> },
+              { label: t("assignment.teamEmpty.tips.online"), icon: <Sparkles /> },
+            ]}
+          />
+        ) : (
+          <MotionList>
+            {assignable.map((m) => (
+              <MotionRow key={m.user.id}>
+                <MemberLoad m={m} canEdit={canEdit} />
+              </MotionRow>
+            ))}
+          </MotionList>
+        )}
+      </Section>
+    </SettingsPage>
+  );
+}
+
+/** Three radio cards; a sliding outline marks the chosen one. */
+export function ModeChoice({ value, onChange, disabled }: { value: AssignMode; onChange: (m: AssignMode) => void; disabled?: boolean }) {
+  const { t } = useTranslation("settingsInbox");
+  const id = useId();
+  const reduce = useReducedMotion();
+  const move = (dir: 1 | -1) => {
+    const i = MODES.indexOf(value);
+    onChange(MODES[(i + dir + MODES.length) % MODES.length]);
+  };
+  return (
+    <div role="radiogroup" aria-label={t("assignment.defaultTitle")} className="grid gap-1 p-1 md:grid-cols-3">
+      {MODES.map((m) => {
+        const on = m === value;
+        return (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            disabled={disabled}
+            onClick={() => onChange(m)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+                e.preventDefault();
+                move(1);
+              } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+                e.preventDefault();
+                move(-1);
+              }
+            }}
+            className={cn(
+              "group relative flex items-start gap-3 rounded-md p-3 text-left outline-none transition-colors duration-150",
+              "focus-visible:ring-2 focus-visible:ring-focus/30 disabled:cursor-default",
+              !on && "enabled:hover:bg-sunken",
+            )}
+          >
+            {on && (
+              <motion.span
+                layoutId={`${id}-mode`}
+                aria-hidden
+                transition={reduce ? { duration: 0 } : springs.glide}
+                className="pointer-events-none absolute inset-0 rounded-md bg-sunken shadow-[inset_0_0_0_1px_var(--line)]"
+              />
+            )}
+            <IconTile tone={on ? modeTone[m] : "gray"} className="relative">
+              {modeIcon[m]}
+            </IconTile>
+            <span className="relative min-w-0 flex-1">
+              <span className="flex items-center gap-2 text-[13px] font-medium">{t(`assignment.modes.${m}.label`)}</span>
+              <span className="mt-0.5 block text-[12px] leading-[17px] text-fg-3">{t(`assignment.modes.${m}.hint`)}</span>
+            </span>
+            <span
+              aria-hidden
+              className={cn(
+                "relative mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full border transition-colors duration-150",
+                on ? "border-fg bg-fg" : "border-line-strong bg-surface",
+              )}
+            >
+              <span className={cn("size-1.5 rounded-full bg-surface transition-transform duration-150 motion-reduce:transition-none", on ? "scale-100" : "scale-0")} />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RulesSection({ a, loading, canEdit, onRules }: { a?: A; loading: boolean; canEdit: boolean; onRules: (r: AssignmentRule[]) => void }) {
+  const { t } = useTranslation("settingsInbox");
+  const { data: teams } = useQuery(q.teams());
+  const { data: mailboxes } = useQuery(q.mailboxes());
+  const rules = a?.rules ?? [];
+  const key = (r: Pick<AssignmentRule, "target_type" | "target_id">) => `${r.target_type}:${r.target_id}`;
+  const taken = new Set(rules.map(key));
+  const nameOf = (r: AssignmentRule) =>
+    r.target_type === "team" ? teams?.find((x) => x.id === r.target_id)?.name : mailboxes?.find((x) => x.id === r.target_id)?.name;
+  const detailOf = (r: AssignmentRule) => {
+    if (r.target_type === "team") {
+      const n = teams?.find((x) => x.id === r.target_id)?.member_ids.length ?? 0;
+      return t("assignment.rules.teamMeta", { count: n });
+    }
+    return mailboxes?.find((x) => x.id === r.target_id)?.email ?? "";
+  };
+  const items = [
+    ...(teams ?? []).map((x) => ({ value: `team:${x.id}`, label: x.name, group: t("assignment.rules.teams"), icon: <UsersRound className="size-3.5 text-fg-3" /> })),
+    ...(mailboxes ?? []).map((x) => ({
+      value: `mailbox:${x.id}`,
+      label: x.name,
+      hint: x.email,
+      group: t("assignment.rules.mailboxes"),
+      icon: <Inbox className="size-3.5 text-fg-3" />,
+    })),
+  ].filter((i) => !taken.has(i.value));
+  // Team rules first: they win over mailbox rules.
+  const sorted = [...rules].sort((x, y) => (x.target_type === y.target_type ? 0 : x.target_type === "team" ? -1 : 1));
+
+  const add = (v: string) => {
+    const [target_type, target_id] = v.split(":") as [AssignmentRule["target_type"], string];
+    onRules([...rules, { target_type, target_id, mode: a?.mode === "none" ? "round_robin" : (a?.mode ?? "round_robin") }]);
+  };
+  const remove = (r: AssignmentRule) => {
+    const before = rules;
+    onRules(rules.filter((x) => key(x) !== key(r)));
+    toast.undo(t("assignment.rules.removed", { name: nameOf(r) ?? "" }), () => onRules(before));
+  };
+  const addButton = (variant: "secondary" | "primary") =>
+    canEdit && (
+      <Picker
+        items={items}
+        value={null}
+        onSelect={add}
+        placeholder={t("assignment.rules.search")}
+        emptyText={t("assignment.rules.noTargets")}
+        width={280}
+        align="end"
+        trigger={
+          <Button variant={variant} size={variant === "secondary" ? "sm" : undefined} icon={<Plus className="size-3.5" />} disabled={!items.length}>
+            {t("assignment.rules.add")}
+          </Button>
+        }
+      />
+    );
+
+  return (
+    <Section flush title={t("assignment.rules.title")} description={t("assignment.rules.hint")} actions={rules.length > 0 && addButton("secondary")}>
+      {loading ? (
+        <ListSkeleton rows={2} />
+      ) : !rules.length ? (
+        <SettingsEmpty
+          className="min-h-[280px]"
+          art="settings"
+          title={t("assignment.rules.emptyTitle")}
+          description={t("assignment.rules.emptyHint")}
+          action={addButton("primary")}
+          tips={[
+            { label: t("assignment.rules.tips.order"), icon: <UsersRound /> },
+            { label: t("assignment.rules.tips.pool"), icon: <Inbox /> },
+          ]}
+        />
+      ) : (
+        <MotionList>
+          {sorted.map((r) => (
+            <MotionRow key={key(r)}>
+              <ListRow>
+                <IconTile tone={r.target_type === "team" ? "teal" : "blue"}>{r.target_type === "team" ? <UsersRound /> : <Inbox />}</IconTile>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-medium">{nameOf(r) ?? t("assignment.rules.missing")}</div>
+                  <div className="mt-0.5 truncate text-[12px] text-fg-3">
+                    {r.target_type === "team" ? t("assignment.rules.team") : t("assignment.rules.mailbox")}
+                    {detailOf(r) && <span className="text-fg-4"> · {detailOf(r)}</span>}
+                  </div>
+                </div>
+                <Select
+                  size="sm"
+                  className="w-[160px]"
+                  aria-label={t("assignment.rules.modeFor", { name: nameOf(r) ?? "" })}
+                  disabled={!canEdit}
+                  value={r.mode}
+                  onChange={(mode) => onRules(rules.map((x) => (key(x) === key(r) ? { ...x, mode } : x)))}
+                  options={MODES.map((m) => ({ value: m, label: t(`assignment.modes.${m}.label`), icon: <span className={cn("flex", tone[modeTone[m]].text)}>{modeIcon[m]}</span> }))}
+                />
+                {canEdit && (
+                  <Tooltip content={t("assignment.rules.remove")}>
+                    <Button size="sm" variant="ghost" square aria-label={t("assignment.rules.removeFor", { name: nameOf(r) ?? "" })} onClick={() => remove(r)}>
+                      <X className="size-3.5" />
+                    </Button>
+                  </Tooltip>
+                )}
+              </ListRow>
+            </MotionRow>
+          ))}
+        </MotionList>
+      )}
+    </Section>
+  );
+}
+
+function AwayRow({ minutes, onChange, disabled }: { minutes: number; onChange: (n: number) => void; disabled?: boolean }) {
+  const { t } = useTranslation("settingsInbox");
+  const on = minutes > 0;
+  const [draft, setDraft] = useState(on ? minutes : AWAY_DEFAULT);
+  const [prev, setPrev] = useState(minutes);
+  if (prev !== minutes) {
+    setPrev(minutes);
+    if (minutes > 0) setDraft(minutes);
+  }
+  return (
+    <>
+      <Row label={t("assignment.away.label")} description={on ? t("assignment.away.on", { count: minutes }) : t("assignment.away.off")}>
+        <Switch aria-label={t("assignment.away.label")} checked={on} disabled={disabled} onCheckedChange={(v) => onChange(v ? draft : 0)} />
+      </Row>
+      {on && (
+        <Row label={t("assignment.away.after")} description={t("assignment.away.afterHint")}>
+          <Moon className="size-3.5 text-tone-amber" aria-hidden />
+          <Stepper
+            aria-label={t("assignment.away.after")}
+            value={draft}
+            min={10}
+            max={1440}
+            step={5}
+            suffix={t("assignment.away.min")}
+            disabled={disabled}
+            className="w-[132px]"
+            onChange={(n) => {
+              setDraft(n);
+              onChange(n);
+            }}
+          />
+        </Row>
+      )}
+    </>
+  );
+}
+
+function loadTone(open: number, max: number | null): Tone {
+  if (max == null) return "gray";
+  const r = open / Math.max(1, max);
+  return r >= 1 ? "red" : r >= 0.75 ? "amber" : "green";
+}
+
+function MemberLoad({ m, canEdit }: { m: Member; canEdit: boolean }) {
+  const { t } = useTranslation("settingsInbox");
+  const setAvail = useSetAvailability();
+  const reduce = useReducedMotion();
+  const idle = m.availability === "online" && m.presence === "away";
+  const cap = m.max_open_tickets;
+  const pct = cap ? Math.min(1, m.open_tickets / Math.max(1, cap)) : 0;
+  const lt = loadTone(m.open_tickets, cap);
+  const save = (v: { availability?: Member["availability"]; max_open_tickets?: number | null }) =>
+    setAvail.mutate({ userId: m.user.id, ...v }, { onError: (e) => toast.error(e, t("assignment.member.saveFailed")) });
+
+  const status = (
+    <span className="inline-flex items-center gap-1.5 text-[12px] text-fg-2">
+      <AvailabilityDot value={m.presence} />
+      {idle ? t("assignment.presence.idle") : t(`assignment.presence.${m.presence}`)}
+    </span>
+  );
+
+  return (
+    <ListRow className="gap-4">
+      <Avatar name={m.user.name} src={m.user.avatar_url} size="md" presence={m.presence} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[13px] font-medium">{m.user.name}</span>
+          <RolePill role={m.role} />
+        </div>
+        <div className="mt-0.5 truncate text-[12px] text-fg-3">{m.user.email}</div>
+      </div>
+      <div className="hidden w-[120px] shrink-0 sm:block">
+        {canEdit ? (
+          <Menu>
+            <MenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={t("assignment.member.setAvailability", { name: m.user.name })}
+                className="-ml-1.5 inline-flex h-7 items-center rounded-md px-1.5 transition-colors hover:bg-hover"
+              >
+                {status}
+              </button>
+            </MenuTrigger>
+            <MenuContent align="start" className="w-[200px]">
+              <AvailabilityMenuItems value={m.availability} onChange={(availability) => save({ availability })} openTickets={m.open_tickets} maxOpenTickets={cap} />
+            </MenuContent>
+          </Menu>
+        ) : (
+          status
+        )}
+      </div>
+      <div className="flex w-[150px] shrink-0 flex-col gap-1">
+        <span className="flex items-baseline justify-between text-[12px] tabular-nums">
+          <span className="text-fg-2">
+            <span className="font-medium text-fg">{m.open_tickets}</span>
+            {cap != null && <span className="text-fg-4"> / {cap}</span>}
+          </span>
+          <span className="text-[11px] text-fg-4">{cap == null ? t("assignment.member.noCap") : t("assignment.member.open")}</span>
+        </span>
+        <span className="h-1 overflow-hidden rounded-full bg-hover" aria-hidden>
+          {cap != null && (
+            <motion.span
+              className={cn("block h-full rounded-full", tone[lt].solid)}
+              initial={false}
+              animate={{ width: `${Math.max(4, pct * 100)}%` }}
+              transition={reduce ? { duration: 0 } : springs.glide}
+            />
+          )}
+        </span>
+      </div>
+      {canEdit && <CapEditor m={m} onSave={(max_open_tickets) => save({ max_open_tickets })} />}
+    </ListRow>
+  );
+}
+
+function CapEditor({ m, onSave }: { m: Member; onSave: (n: number | null) => void }) {
+  const { t } = useTranslation("settingsInbox");
+  const [open, setOpen] = useState(false);
+  const [limited, setLimited] = useState(m.max_open_tickets != null);
+  const [n, setN] = useState(m.max_open_tickets ?? 10);
+  const reset = () => {
+    setLimited(m.max_open_tickets != null);
+    setN(m.max_open_tickets ?? 10);
+  };
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        if (o) reset();
+        setOpen(o);
+      }}
+      align="end"
+      className="w-[260px] p-3"
+      trigger={
+        <Button size="sm" variant="ghost" className="w-[84px] justify-center" aria-label={t("assignment.member.capFor", { name: m.user.name })}>
+          {m.max_open_tickets == null ? t("assignment.member.setCap") : t("assignment.member.capShort", { count: m.max_open_tickets })}
+        </Button>
+      }
+    >
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave(limited ? n : null);
+          setOpen(false);
+        }}
+      >
+        <div>
+          <div className="text-[13px] font-medium">{t("assignment.member.capTitle")}</div>
+          <p className="mt-0.5 text-[12px] leading-[17px] text-fg-3">{t("assignment.member.capHint", { name: m.user.name.split(" ")[0] })}</p>
+        </div>
+        <label className="flex items-center justify-between gap-3 text-[12.5px]">
+          {t("assignment.member.limit")}
+          <Switch checked={limited} onCheckedChange={setLimited} aria-label={t("assignment.member.limit")} />
+        </label>
+        {limited && (
+          <Stepper
+            aria-label={t("assignment.member.capTitle")}
+            value={n}
+            min={1}
+            max={500}
+            suffix={t("assignment.member.tickets")}
+            className="w-full"
+            onChange={setN}
+          />
+        )}
+        <div className="flex justify-end gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button type="submit" size="sm" variant="primary">
+            {t("assignment.member.saveCap")}
+          </Button>
+        </div>
+      </form>
+    </Popover>
+  );
+}

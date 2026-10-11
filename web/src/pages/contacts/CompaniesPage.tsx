@@ -151,7 +151,7 @@ export default function CompaniesPage() {
                       className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
                     >
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <CompanyGlyph name={c.name} />
+                        <CompanyGlyph name={c.name} src={c.avatar_url} />
                         <span className="truncate font-medium">{c.name}</span>
                       </span>
                       <span className={`mono truncate text-xs text-fg-2 ${md}`}>{c.domain || <span className="text-fg-4">–</span>}</span>

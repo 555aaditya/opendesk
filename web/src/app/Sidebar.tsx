@@ -32,13 +32,18 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { ChecklistMini } from "@/components/onboarding/Checklist";
+import { AvailabilityMenuItems } from "@/components/presence/availability";
 import { Avatar } from "@/components/ui/avatar";
+import { toast } from "@/components/ui/toast";
 import { Kbd } from "@/components/ui/kbd";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
 import { folders, type FolderId } from "@/lib/folders";
+import { useAI } from "@/lib/ai";
+import { useDismissOnboarding, useSetAvailability } from "@/lib/pictures";
 import { q } from "@/lib/queries";
 import { atLeast, selectWorkspace, signOut, useRole, useSession, useWorkspace } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
@@ -282,6 +287,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
       </div>
 
       <div className="flex shrink-0 flex-col gap-px py-1.5">
+        <SetupChecklist rail={rail} />
         <NavTip rail={rail} label={t("nav.settings")}>
           <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>{withPill(<>
             <Settings />
@@ -411,13 +417,38 @@ export function ThemeSwitch() {
   );
 }
 
+/** The onboarding checklist, above Settings until it is dismissed. */
+function SetupChecklist({ rail }: { rail: boolean }) {
+  const { t } = useTranslation("setup");
+  const { data } = useQuery(q.onboarding());
+  const dismiss = useDismissOnboarding();
+  const ai = useAI();
+  const role = useRole();
+  if (!data || data.dismissed || !data.steps.length) return null;
+  return (
+    <div className={rail ? "mx-3" : "mx-2.5"}>
+      <ChecklistMini
+        collapsed={rail}
+        data={data}
+        isAdmin={atLeast(role, "admin")}
+        unavailable={ai.enabled ? undefined : { try_jev: t("checklist.needs_ai") }}
+        onDismiss={() => dismiss.mutateAsync()}
+        triggerClassName={cn("h-7 hover:bg-chrome-hover data-[state=open]:bg-chrome-hover", rail && "h-8")}
+      />
+    </div>
+  );
+}
+
 function UserMenu({ rail }: { rail: boolean }) {
   const user = useSession((s) => s.user);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { t } = useTranslation("shell");
+  const { data: members } = useQuery(q.members());
+  const setAvailability = useSetAvailability();
   if (!user) return null;
   const name = user.name || user.email;
+  const me = members?.find((m) => m.user.id === user.id);
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -429,7 +460,7 @@ function UserMenu({ rail }: { rail: boolean }) {
             rail ? "mx-3 w-8 justify-center py-0.5" : "mx-2.5 w-[calc(100%-1.25rem)] gap-2.5 px-1.5 py-1",
           )}
         >
-          <Avatar name={name} src={user.avatar_url} size="lg" />
+          <Avatar name={name} src={user.avatar_url} size="lg" presence={me?.presence} />
           {!rail && (
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[12.5px] font-medium text-fg">{name}</span>
@@ -449,6 +480,17 @@ function UserMenu({ rail }: { rail: boolean }) {
           <ThemeSwitch />
         </div>
         <MenuSeparator />
+        {me && (
+          <>
+            <AvailabilityMenuItems
+              value={me.availability}
+              onChange={(v) => setAvailability.mutate({ userId: "me", availability: v }, { onError: (e) => toast.error(e) })}
+              openTickets={me.role === "viewer" ? undefined : me.open_tickets}
+              maxOpenTickets={me.max_open_tickets}
+            />
+            <MenuSeparator />
+          </>
+        )}
         <MenuItem icon={<User />} onSelect={() => void navigate({ to: "/settings/profile" })}>
           {t("account.profile")}
         </MenuItem>

@@ -75,7 +75,7 @@ export function BulkBar({ ids, onClear, spamView, compact }: { ids: string[]; on
               { value: "__none", label: t("bulk.unassigned"), icon: <span className="size-4 rounded-xs border border-dashed border-line-strong" /> },
               ...(members ?? [])
                 .filter((m) => m.role !== "viewer")
-                .map((m) => ({ value: m.user.id, label: m.user.name, icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> })),
+                .map((m) => ({ value: m.user.id, label: m.user.name, icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" presence={m.presence} /> })),
             ]}
             onSelect={(v) => run({ ids, patch: { assignee_id: v === "__none" ? null : v } }, t("bulk.assigned", { count: n }))}
             trigger={

@@ -247,6 +247,12 @@
     "accentSuffix": "comes from workspace settings.",
     "noAccent": "Set a brand colour in workspace settings to tint the launcher and send button.",
     "secret": "Widget secret",
-    "secretHint": "Rotating it invalidates every identify hash until your server uses the new one."
+    "secretHint": "Rotating it invalidates every identify hash until your server uses the new one.",
+    "branding": "Avatar and launcher",
+    "brandingHint": "Pictures visitors see. They save as soon as you upload them.",
+    "avatar": "Avatar",
+    "avatarHint": "Shown in the widget header next to your workspace name.",
+    "launcher": "Launcher icon",
+    "launcherHint": "Replaces the chat bubble on the round button visitors click."
   }
 }

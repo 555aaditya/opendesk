@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, ListOrdered, MoreHorizontal, Pencil, Plus, Timer, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "@tanstack/react-router";
 import { SettingsPage, Section, ListRow, NoAccess } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -180,6 +181,12 @@ export default function Sla() {
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                         <TargetChip label={t("sla.firstResponse")} mins={p.first_response_minutes} kind="reply" muted={!p.enabled} />
                         <TargetChip label={t("sla.resolution")} mins={p.resolution_minutes} kind="resolve" muted={!p.enabled} />
+                        {p.business_hours && (
+                          <span className="inline-flex h-5 items-center gap-1 rounded-sm bg-hover px-1.5 text-[11px] font-medium text-fg-2">
+                            <Clock className="size-3 text-fg-3" />
+                            {t("sla.businessHoursBadge")}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <Switch
@@ -277,6 +284,8 @@ function PolicyDialog({ policy, nextPosition, onClose }: { policy: SlaPolicy | n
   const [priority, setPriority] = useState<Priority | "any">(policy?.priority ?? "any");
   const [first, setFirst] = useState(policy?.first_response_minutes ?? 60);
   const [resolution, setResolution] = useState(policy?.resolution_minutes ?? 1440);
+  const [businessHours, setBusinessHours] = useState(policy?.business_hours ?? false);
+  const { data: hours } = useQuery(q.businessHours());
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -286,6 +295,7 @@ function PolicyDialog({ policy, nextPosition, onClose }: { policy: SlaPolicy | n
         priority: priority === "any" ? null : priority,
         first_response_minutes: first,
         resolution_minutes: resolution,
+        business_hours: businessHours,
         enabled: policy?.enabled ?? true,
         position: policy?.position ?? nextPosition,
       };
@@ -355,6 +365,18 @@ function PolicyDialog({ policy, nextPosition, onClose }: { policy: SlaPolicy | n
         </Field>
         <DurationField label={t("sla.firstWithin")} value={first} onChange={setFirst} hint={t("sla.currently", { time: minutes(first) })} />
         <DurationField label={t("sla.resolveWithin")} value={resolution} onChange={setResolution} hint={t("sla.currently", { time: minutes(resolution) })} />
+        <div className="flex items-start justify-between gap-4 rounded-md border border-line-soft bg-sunken/60 px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="text-[12.5px] font-medium">{t("sla.businessHours")}</div>
+            <p className="mt-0.5 text-[12px] leading-[17px] text-fg-3">
+              {hours && !hours.enabled && businessHours ? t("sla.businessHoursOff") : t("sla.businessHoursHint")}{" "}
+              <Link to="/settings/business-hours" className="text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">
+                {t("sla.businessHoursLink")}
+              </Link>
+            </p>
+          </div>
+          <Switch checked={businessHours} onCheckedChange={setBusinessHours} aria-label={t("sla.businessHours")} className="mt-0.5" />
+        </div>
         <button type="submit" className="hidden" />
       </form>
     </Dialog>

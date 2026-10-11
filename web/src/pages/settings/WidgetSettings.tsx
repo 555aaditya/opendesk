@@ -15,6 +15,9 @@ import { CopyField } from "@/components/ui/copy-button";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { WidgetPreview } from "@/components/settings2/WidgetPreview";
+import { ImageUpload } from "@/components/ui/image-upload";
+import { useWorkspaceImage } from "@/lib/pictures";
+import type { WorkspaceImageSlot } from "@/lib/api/types";
 import { UnsavedGuard } from "@/components/settings2/UnsavedGuard";
 import { api } from "@/lib/api/endpoints";
 import { ApiError, errorMessage } from "@/lib/api/client";
@@ -218,6 +221,8 @@ export default function WidgetSettings() {
             )}
           </Section>
 
+          {ws && <WidgetBranding />}
+
           <AnimatePresence initial={false}>
             {dirty && draft && (
               <motion.div
@@ -280,6 +285,7 @@ export default function WidgetSettings() {
             requireEmail={draft?.require_email ?? false}
             enabled={draft?.enabled ?? true}
             dark={previewDark}
+            avatarUrl={ws?.images?.widget_avatar}
           />
           <p className="mt-2 text-[12px] text-fg-3">
             {ws?.settings.brand_color ? (
@@ -368,5 +374,47 @@ function RotateSecret() {
         </div>
       </Dialog>
     </>
+  );
+}
+
+/** The widget's header avatar and launcher icon, uploaded straight away (not part of the draft). */
+function WidgetBranding() {
+  const { t } = useTranslation("settingsDev");
+  const ws = useWorkspace();
+  const images = useWorkspaceImage();
+  if (!ws) return null;
+  const upload = async (slot: WorkspaceImageSlot, file: Blob) => {
+    await images.upload.mutateAsync({ slot, file });
+  };
+  const remove = async (slot: WorkspaceImageSlot) => {
+    try {
+      await images.remove.mutateAsync(slot);
+    } catch (e) {
+      toast.error(e);
+    }
+  };
+  return (
+    <Section title={t("widget.branding")} description={t("widget.brandingHint")}>
+      <Row label={t("widget.avatar")} description={t("widget.avatarHint")}>
+        <ImageUpload
+          name={ws.name}
+          shape="round"
+          size="md"
+          value={ws.images?.widget_avatar}
+          onChange={(f) => upload("widget_avatar", f)}
+          onRemove={ws.images?.widget_avatar ? () => remove("widget_avatar") : undefined}
+        />
+      </Row>
+      <Row label={t("widget.launcher")} description={t("widget.launcherHint")}>
+        <ImageUpload
+          name={ws.name}
+          shape="round"
+          size="md"
+          value={ws.images?.widget_launcher}
+          onChange={(f) => upload("widget_launcher", f)}
+          onRemove={ws.images?.widget_launcher ? () => remove("widget_launcher") : undefined}
+        />
+      </Row>
+    </Section>
   );
 }

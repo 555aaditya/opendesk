@@ -8,6 +8,7 @@ import { dur, ease, springs } from "@/lib/motion";
 import { Drawer } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar } from "@/components/ui/avatar";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, Textarea, TextInput } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { CompanyRef, Contact } from "@/lib/api/types";
 import { fullDate, relShort, shortDate } from "@/lib/format";
+import { useContactAvatar } from "@/lib/pictures";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { CompanyPicker } from "./CompanyPicker";
@@ -45,6 +47,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const { data: c, isLoading, error } = useQuery({ ...q.contact(contactId ?? ""), enabled: !!contactId });
+  const picture = useContactAvatar();
 
   useEffect(() => {
     setTab("overview");
@@ -94,7 +97,28 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
       ) : (
         <div className="flex min-h-full flex-col">
           <div className="flex items-start gap-3.5 px-5 pb-4 pt-5">
-            <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="xl" />
+            {canEdit ? (
+              <ImageUpload
+                compact
+                size="md"
+                shape="round"
+                name={c.name || c.email || "?"}
+                value={c.avatar_url}
+                source={c.avatar_source}
+                onChange={async (file) => {
+                  await picture.upload.mutateAsync({ id: c.id, file });
+                }}
+                onRemove={async () => {
+                  await picture.remove.mutateAsync(c.id);
+                }}
+                onRefresh={async () => {
+                  await picture.refresh.mutateAsync(c.id);
+                  toast.info(t("drawer.pictureRefresh"));
+                }}
+              />
+            ) : (
+              <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="xl" />
+            )}
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
                 <h2 className="truncate text-[16px] font-semibold tracking-[-0.015em]" data-ph-mask>
@@ -116,7 +140,7 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                     search={{ q: undefined }}
                     className="flex items-center gap-1.5 rounded-sm text-fg-2 hover:text-fg"
                   >
-                    <CompanyGlyph name={c.company.name} size="xs" />
+                    <CompanyGlyph name={c.company.name} src={c.company.avatar_url} size="xs" />
                     {c.company.name}
                   </Link>
                 )}

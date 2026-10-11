@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ArrowRight, ChevronDown, ExternalLink } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ImageUpload } from "@/components/ui/image-upload";
+import { useWorkspaceImage } from "@/lib/pictures";
+import type { WorkspaceImageSlot } from "@/lib/api/types";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DisplayOverridesEditor, type Overrides } from "@/components/settings2/DisplayOverrides";
@@ -13,7 +17,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { TextInput } from "@/components/ui/input";
 import { Picker } from "@/components/ui/picker";
 import { Switch } from "@/components/ui/switch";
-import { Segmented } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { ReauthNotice } from "@/components/settings/ReauthNotice";
@@ -27,7 +30,7 @@ import { LOCALE_NAMES, matchLocale, SUPPORTED } from "@/i18n";
 type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority> };
 type Draft = {
   name: string;
-  settings: Required<Pick<WS, "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "auto_assign">> & { brand_color: string; locale: string };
+  settings: Required<Pick<WS, "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "gravatar" | "domain_logos">> & { brand_color: string; locale: string };
   display: Required<DisplaySettings>;
 };
 
@@ -41,7 +44,8 @@ function toDraft(w: Workspace): Draft {
       help_center_enabled: w.settings.help_center_enabled ?? false,
       help_center_title: w.settings.help_center_title ?? "",
       csat_enabled: w.settings.csat_enabled ?? false,
-      auto_assign: w.settings.auto_assign ?? "none",
+      gravatar: w.settings.gravatar ?? false,
+      domain_logos: w.settings.domain_logos ?? true,
       brand_color: w.settings.brand_color ?? "",
       locale: matchLocale(w.settings.locale) ?? "en",
     },
@@ -69,6 +73,19 @@ export default function WorkspaceSettings() {
   useEffect(() => {
     if (ws) setDraft(toDraft(ws));
   }, [ws]);
+
+  const images = useWorkspaceImage();
+  const image = async (slot: "logo" | WorkspaceImageSlot, file: Blob) => {
+    await images.upload.mutateAsync({ slot, file });
+  };
+  const unimage = async (slot: "logo" | WorkspaceImageSlot) => {
+    try {
+      await images.remove.mutateAsync(slot);
+    } catch (e) {
+      toast.error(e);
+    }
+  };
+  const assignModeLabel = t(`workspace.assignModes.${ws?.settings.auto_assign ?? "none"}`);
 
   const tzItems = useMemo(() => timezones().map((t) => ({ value: t, label: t.replace(/_/g, " ") })), []);
 
@@ -125,6 +142,18 @@ export default function WorkspaceSettings() {
     <SettingsPage title={t("workspace.title")} description={t("workspace.description")}>
       <fieldset disabled={!canEdit} className="flex flex-col gap-8">
         <Section>
+          <Row label={t("workspace.logo")} description={t("workspace.logoHint")}>
+            <ImageUpload
+              name={ws.name}
+              shape="square"
+              size="lg"
+              aspect={1}
+              value={ws.avatar_url}
+              disabled={!canEdit}
+              onChange={(file) => image("logo", file)}
+              onRemove={ws.avatar_url ? () => unimage("logo") : undefined}
+            />
+          </Row>
           <Row label={t("workspace.name")} htmlFor="ws-name">
             <TextInput id="ws-name" className="w-[280px]" value={draft.name} maxLength={60} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           </Row>
@@ -170,6 +199,29 @@ export default function WorkspaceSettings() {
           <Row label={t("workspace.publish")} description={draft.settings.help_center_enabled ? t("workspace.publishOn") : t("workspace.publishOff")}>
             <Switch aria-label={t("workspace.publish")} checked={draft.settings.help_center_enabled} onCheckedChange={(v) => set("help_center_enabled", v)} disabled={!canEdit} />
           </Row>
+          <Row label={t("workspace.hcLogo")} description={t("workspace.hcLogoHint")}>
+            <ImageUpload
+              name={draft.settings.help_center_title || ws.name}
+              shape="square"
+              size="md"
+              aspect={4}
+              value={ws.images?.help_center_logo}
+              disabled={!canEdit}
+              onChange={(file) => image("help_center_logo", file)}
+              onRemove={ws.images?.help_center_logo ? () => unimage("help_center_logo") : undefined}
+            />
+          </Row>
+          <Row label={t("workspace.hcFavicon")} description={t("workspace.hcFaviconHint")}>
+            <ImageUpload
+              name={ws.name}
+              shape="square"
+              size="sm"
+              value={ws.images?.help_center_favicon}
+              disabled={!canEdit}
+              onChange={(file) => image("help_center_favicon", file)}
+              onRemove={ws.images?.help_center_favicon ? () => unimage("help_center_favicon") : undefined}
+            />
+          </Row>
           <Row label={t("workspace.hcTitle")} htmlFor="hc-title">
             <TextInput
               id="hc-title"
@@ -193,15 +245,10 @@ export default function WorkspaceSettings() {
           <Row label={t("workspace.csat")} description={t("workspace.csatHint")}>
             <Switch aria-label={t("workspace.csat")} checked={draft.settings.csat_enabled} onCheckedChange={(v) => set("csat_enabled", v)} disabled={!canEdit} />
           </Row>
-          <Row label={t("workspace.autoAssign")} description={t("workspace.autoAssignHint")}>
-            <Segmented
-              value={draft.settings.auto_assign}
-              onChange={(v) => canEdit && set("auto_assign", v)}
-              options={[
-                { value: "none", label: t("workspace.off") },
-                { value: "round_robin", label: t("workspace.roundRobin") },
-              ]}
-            />
+          <Row label={t("workspace.autoAssign")} description={assignModeLabel}>
+            <Button asChild size="sm" variant="ghost" iconRight={<ArrowRight className="size-3.5" />}>
+              <Link to="/settings/assignment">{t("workspace.autoAssignLink")}</Link>
+            </Button>
           </Row>
           <Row label={t("workspace.brand")} description={t("workspace.brandHint")}>
             <span
@@ -221,6 +268,15 @@ export default function WorkspaceSettings() {
                 set("brand_color", v && !v.startsWith("#") ? `#${v}` : v);
               }}
             />
+          </Row>
+        </Section>
+
+        <Section title={t("workspace.pictures")} description={t("workspace.picturesHint")}>
+          <Row label={t("workspace.gravatar")} description={t("workspace.gravatarHint")}>
+            <Switch aria-label={t("workspace.gravatar")} checked={draft.settings.gravatar} onCheckedChange={(v) => set("gravatar", v)} disabled={!canEdit} />
+          </Row>
+          <Row label={t("workspace.domainLogos")} description={t("workspace.domainLogosHint")}>
+            <Switch aria-label={t("workspace.domainLogos")} checked={draft.settings.domain_logos} onCheckedChange={(v) => set("domain_logos", v)} disabled={!canEdit} />
           </Row>
         </Section>
 

@@ -19,6 +19,9 @@ import {
   MessageSquareText,
   Shield,
   SlidersHorizontal,
+  Shuffle,
+  Sparkles,
+  Clock,
   Tag,
   User,
   Users,
@@ -37,6 +40,9 @@ type NavPath =
   | "/settings/mailboxes"
   | "/settings/tags"
   | "/settings/custom-fields"
+  | "/settings/assignment"
+  | "/settings/triage"
+  | "/settings/business-hours"
   | "/settings/saved-replies"
   | "/settings/views"
   | "/settings/sla"
@@ -72,6 +78,9 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
     items: [
       { to: "/settings/tags", label: "Labels", icon: <Tag /> },
       { to: "/settings/custom-fields", label: "Custom fields", icon: <SlidersHorizontal /> },
+      { to: "/settings/assignment", label: "Assignment", icon: <Shuffle /> },
+      { to: "/settings/triage", label: "Triage", icon: <Sparkles /> },
+      { to: "/settings/business-hours", label: "Business hours", icon: <Clock /> },
       { to: "/settings/saved-replies", label: "Saved replies", icon: <MessageSquareText /> },
       { to: "/settings/views", label: "Views", icon: <Layers /> },
       { to: "/settings/sla", label: "SLA policies", icon: <Gauge /> },

@@ -242,7 +242,7 @@ function TeamDrawer({ team, members, onClose }: { team: Team | null; members: Me
               <div className="rounded-md border border-line">
                 {selected.map((m) => (
                   <div key={m.user.id} className="group flex h-10 items-center gap-2.5 border-b border-line-soft px-3 last:border-0">
-                    <Avatar name={m.user.name} src={m.user.avatar_url} size="sm" />
+                    <Avatar name={m.user.name} src={m.user.avatar_url} size="sm" presence={m.presence} />
                     <span className="flex-1 truncate text-[12.5px]">{m.user.name}</span>
                     <button
                       type="button"

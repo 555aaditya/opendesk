@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { Dialog as D } from "radix-ui";
 import { identify } from "@/lib/analytics";
 import { useHotkeys } from "@/lib/hotkeys";
+import { useHeartbeat } from "@/lib/pictures";
 import { startRealtime, stopRealtime } from "@/lib/realtime/manager";
 import { reloadSession, useSession } from "@/lib/session";
 import { useUpgrade } from "@/lib/upgrade";
@@ -77,6 +78,7 @@ export function AppLayout() {
   // The top-level area (inbox, views, contacts, settings/...) keys the route transition.
   const section = useRouterState({ select: (s) => { const p = s.location.pathname.split("/").filter(Boolean); return p[0] ?? ""; } });
   useRealtimeConnection();
+  useHeartbeat();
   const navigate = useNavigate();
   const newTicketOpen = useShell((s) => s.newTicketOpen);
   const sidebarOpen = useShell((s) => s.sidebarOpen);

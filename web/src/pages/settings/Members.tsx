@@ -195,7 +195,7 @@ function MembersList({ onInvite }: { onInvite?: () => void }) {
               return (
                 <MotionRow key={m.user.id}>
                   <ListRow>
-                    <Avatar name={m.user.name || m.user.email} src={m.user.avatar_url} size="lg" />
+                    <Avatar name={m.user.name || m.user.email} src={m.user.avatar_url} size="lg" presence={m.presence} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 text-[13px] font-medium">
                         <span className="truncate">{m.user.name}</span>

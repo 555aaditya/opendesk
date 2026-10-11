@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Building2, Mail, Pencil, Phone } from "lucide-react";
+import { Mail, Pencil, Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
+import { CompanyGlyph } from "./bits";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -55,7 +56,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
               search={{ q: undefined }}
               className="mt-0.5 flex items-center gap-1 truncate text-xs text-fg-3 hover:text-fg"
             >
-              <Building2 className="size-3" />
+              <CompanyGlyph name={c.company.name} src={c.company.avatar_url} size="xs" />
               {c.company.name}
             </Link>
           )}

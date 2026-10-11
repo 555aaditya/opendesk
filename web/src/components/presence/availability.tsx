@@ -5,10 +5,11 @@
 import { DropdownMenu as M } from "radix-ui";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { presenceDot, type Presence } from "@/components/ui/avatar";
+import { presenceDot } from "@/components/ui/avatar";
+import type { Availability } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 
-export type Availability = Presence;
+export type { Availability };
 export const AVAILABILITY: Availability[] = ["online", "away", "offline"];
 
 /** The coloured dot on its own, for rows and triggers. */
