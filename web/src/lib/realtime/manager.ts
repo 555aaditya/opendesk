@@ -12,6 +12,9 @@ import { SeqSync } from "./seq";
 import { clearPresence, noteCustomerTyping, noteTyping, setPresence, useRealtime } from "./store";
 import { createSocket, type RtChannel, type RtSocket } from "./transport";
 
+/** Query roots that realtime events keep current (see apply.ts). */
+const LIVE_ROOTS = new Set(["tickets", "contacts", "companies", "notifications", "members", "kb"]);
+
 export type ManagerOptions = {
   qc: QueryClient;
   workspaceId: string;
@@ -99,11 +102,18 @@ export class RealtimeManager {
     ws.join().receive("ok", () => {
       if (!joinedOnce) {
         joinedOnce = true;
+        const joinedAt = Date.now();
         if (this.sync.last === null) {
           api
             .events(0, 1)
             .then((page) => {
-              if (this.sync.last === null) this.sync.baseline(page.latest_seq);
+              if (this.sync.last !== null) return;
+              this.sync.baseline(page.latest_seq);
+              // Lists loaded before the join can miss events published in between,
+              // which the channel never delivers: refetch those once.
+              void this.opts.qc.invalidateQueries({
+                predicate: (q) => LIVE_ROOTS.has(String(q.queryKey[0])) && q.state.dataUpdatedAt > 0 && q.state.dataUpdatedAt < joinedAt,
+              });
             })
             .catch(() => {});
         }
