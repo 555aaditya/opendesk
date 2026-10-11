@@ -101,7 +101,8 @@ http
         res.writeHead(422, { "content-type": "application/json" }).end(JSON.stringify({ detail: "Invalid JSON." }));
         return;
       }
-      const text = JSON.stringify(j.state ?? "").toLowerCase();
+      // Heuristics read the ticket (or the whole state), never the SLA keys ("breached").
+      const text = JSON.stringify(j.state?.ticket ?? j.state ?? "").toLowerCase();
       const answers = Object.fromEntries(Object.entries(j.questions ?? {}).map(([id, q]) => [id, answer(id, q, text)]));
       // Counts only: never the state or the questions.
       console.log(`systemone ${Object.keys(answers).length} questions`);
