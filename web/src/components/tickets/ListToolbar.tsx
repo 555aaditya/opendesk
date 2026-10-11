@@ -11,6 +11,7 @@ import { encodeFieldFilters, parseFieldFilters, type InboxSearch } from "@/lib/f
 import { fieldText, useTicketFields, type CustomField } from "./fields";
 import { q } from "@/lib/queries";
 import { cn } from "@/lib/cn";
+import { AnimatedNumber } from "@/components/motion";
 import { TagSwatch } from "./TagSwatch";
 import { ChannelIcon, PriorityIcon, channelLabel, priorityLabel, priorityOrder } from "./bits";
 
@@ -148,9 +149,7 @@ export function ListToolbar({
           <div className="ml-1 flex min-w-0 flex-1 items-baseline gap-2">
             <h1 className="truncate text-[14px] font-semibold tracking-[-0.01em]">{title}</h1>
             {count !== null && count !== undefined && (
-              <motion.span key={count} initial={reduced ? false : { opacity: 0, y: -3 }} animate={{ opacity: 1, y: 0 }} className="mono text-[11.5px] text-fg-4 tabular-nums">
-                {count}
-              </motion.span>
+              <AnimatedNumber value={count} flash className="mono text-[11.5px] text-fg-4" />
             )}
           </div>
         )}

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2, MessageSquareText, Paperclip, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, MessageSquareText, Paperclip, X } from "lucide-react";
+import { Morph } from "@/components/motion";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -217,6 +218,20 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
   const busyUploads = uploads.some((u) => u.status === "uploading");
   const canSend = !!draft.html && !busyUploads && !disabled && !ai.busy;
 
+  // The send button's moment: sending while the request is out, then a check.
+  const [sent, setSent] = useState(false);
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (wasPending.current && send.isSuccess) {
+      setSent(true);
+      const id = setTimeout(() => setSent(false), 1200);
+      wasPending.current = send.isPending;
+      return () => clearTimeout(id);
+    }
+    wasPending.current = send.isPending;
+  }, [send.isPending, send.isSuccess]);
+  const phase = send.isPending ? "sending" : sent ? "sent" : "idle";
+
   const submit = (status?: TicketStatus) => {
     if (!canSend) return;
     const body: SendMessageBody = {
@@ -398,7 +413,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
                   }
                 />
                 <span className="mx-1 h-4 w-px bg-line" />
-                <SendButton note={note} disabled={!canSend} busy={busyUploads} onSend={submit} current={ticket.status} />
+                <SendButton note={note} disabled={!canSend} busy={busyUploads} onSend={submit} current={ticket.status} phase={phase} />
               </>
             }
           />
@@ -436,15 +451,41 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
   );
 });
 
-function SendButton({ note, disabled, busy, onSend, current }: { note: boolean; disabled: boolean; busy: boolean; onSend: (s?: TicketStatus) => void; current: TicketStatus }) {
+function SendButton({
+  note,
+  disabled,
+  busy,
+  onSend,
+  current,
+  phase,
+}: {
+  note: boolean;
+  disabled: boolean;
+  busy: boolean;
+  onSend: (s?: TicketStatus) => void;
+  current: TicketStatus;
+  phase: "idle" | "sending" | "sent";
+}) {
   const { t } = useTranslation("inbox");
   const label = note ? t("composer.addNote") : t("composer.send");
   const options: TicketStatus[] = (["pending", "on_hold", "solved"] as TicketStatus[]).filter((s) => s !== current);
   return (
     <div className="flex items-center">
       <Tooltip content={busy ? t("composer.waitUploads") : note ? t("composer.addNote") : t("composer.sendReply")} shortcut="mod enter">
-        <Button variant="primary" size="sm" disabled={disabled} onClick={() => onSend()} className="rounded-r-none">
-          {label}
+        <Button variant="primary" size="sm" disabled={disabled && phase === "idle"} onClick={() => onSend()} className="rounded-r-none active:scale-[0.97]">
+          {/* The label keeps the width while the spinner and check swap in. */}
+          <span className="relative inline-grid place-items-center">
+            <span className={cn("col-start-1 row-start-1 transition-opacity", phase !== "idle" && "opacity-0")}>{label}</span>
+            <span className="col-start-1 row-start-1 flex">
+              <Morph k={phase}>
+                {phase === "sending" ? (
+                  <Loader2 className="size-3.5 animate-spin" aria-label={t("composer.sending")} />
+                ) : phase === "sent" ? (
+                  <Check className="size-3.5" strokeWidth={2.5} aria-label={t("composer.sent")} />
+                ) : null}
+              </Morph>
+            </span>
+          </span>
         </Button>
       </Tooltip>
       <M.Root>

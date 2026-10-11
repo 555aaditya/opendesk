@@ -44,7 +44,7 @@ export async function run(t) {
   });
 
   await t.step("snooze puts the ticket on hold", async () => {
-    await owner.getByRole("button", { name: "Snooze" }).click();
+    await owner.getByRole("button", { name: "Snooze", exact: true }).click();
     await owner.getByRole("button", { name: /^Tomorrow/ }).click();
     const tk = await until(async () => {
       const x = await getTicket(t.ticketId);
@@ -54,7 +54,7 @@ export async function run(t) {
   });
 
   await t.step("solving clears the snooze", async () => {
-    await owner.getByRole("button", { name: "Solve" }).click();
+    await owner.getByRole("button", { name: "Solve", exact: true }).click();
     const tk = await until(async () => {
       const x = await getTicket(t.ticketId);
       return x.status === "solved" ? x : null;

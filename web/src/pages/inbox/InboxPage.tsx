@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { CircleCheck, CircleDashed, Clock, Inbox, Layers, ShieldAlert, User } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,10 +11,13 @@ import { useHotkeys } from "@/lib/hotkeys";
 import { realtime } from "@/lib/realtime/manager";
 import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/ui/empty";
+import { springs } from "@/lib/motion";
+import { snoozeOptions } from "@/components/tickets/detail/SnoozeMenu";
+import { InboxEmpty } from "./InboxEmpty";
 import { Skeleton, SkeletonRows } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { TicketRow, awaitingReply } from "@/components/tickets/TicketRow";
+import { TicketRow, awaitingReply, type QuickAction } from "@/components/tickets/TicketRow";
 import { BulkBar } from "@/components/tickets/BulkBar";
 import { ListToolbar, type InboxLayout } from "@/components/tickets/ListToolbar";
 import { TicketPreview } from "@/components/tickets/TicketPreview";
@@ -22,9 +25,8 @@ import { SummaryStrip } from "@/components/tickets/SummaryStrip";
 import { useUpdateTicket } from "@/components/tickets/useTicketActions";
 import { intent } from "@/components/tickets/motion";
 import { focusField, missingForSolve, useTicketFields } from "@/components/tickets/fields";
-import { atLeast, useRole } from "@/lib/session";
+import { atLeast, useRole, useSession } from "@/lib/session";
 import { useDocumentTitle } from "@/app/RootLayout";
-import { shell } from "@/app/shellStore";
 
 const TicketDetail = lazy(() => import("@/components/tickets/detail/TicketDetail"));
 
@@ -37,7 +39,6 @@ const folderIcon: Record<FolderId, ReactNode> = {
   spam: <ShieldAlert />,
 };
 
-const emptyLit: Record<FolderId | "view", 0 | 1 | 2 | 3> = { unassigned: 1, mine: 0, open: 2, pending: 3, solved: 0, spam: 3, view: 1 };
 
 // Wide screens show the list beside a preview of the focused ticket.
 // Phones always get the stacked rows.
@@ -59,6 +60,46 @@ function readLayout(): InboxLayout {
   } catch {
     return "split";
   }
+}
+
+/** One soft highlight that glides between rows as the focus moves (j/k). */
+function FocusGlide({ listRef, id, active, rows }: { listRef: React.RefObject<HTMLDivElement | null>; id: string | undefined; active: boolean; rows: unknown }) {
+  const reduce = useReducedMotion();
+  const [box, setBox] = useState<{ y: number; h: number } | null>(null);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !id) return setBox(null);
+    let raf = 0;
+    const measure = () => {
+      const el = list.querySelector<HTMLElement>(`[data-ticket-id="${id}"]`);
+      setBox(el ? { y: el.offsetTop, h: el.offsetHeight } : null);
+    };
+    measure();
+    // Rows animate their height in and out; follow them until they settle.
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(measure);
+    });
+    for (const c of Array.from(list.children)) ro.observe(c);
+    const t = setTimeout(measure, 260);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  }, [listRef, id, rows]);
+  if (!box) return null;
+  return (
+    <motion.div
+      aria-hidden
+      className="pointer-events-none absolute inset-x-0 top-0 z-0 bg-sunken"
+      initial={false}
+      animate={{ y: box.y, height: box.h }}
+      transition={reduce ? { duration: 0 } : springs.glide}
+    >
+      <span className={cn("absolute inset-y-2 left-0 w-0.5 rounded-r-xs transition-colors", active ? "bg-fg" : "bg-fg-4")} />
+    </motion.div>
+  );
 }
 
 function DetailFallback() {
@@ -87,6 +128,7 @@ export default function InboxPage() {
   const { data: ticketFields } = useTicketFields();
   const { data: views } = useQuery(q.views());
   const { data: counts } = useQuery(q.counts());
+  const me = useSession((s) => s.user);
 
   const folder = params.folder ? folderById(params.folder) : undefined;
   const view = params.viewId ? views?.find((v) => v.id === params.viewId) : undefined;
@@ -100,6 +142,8 @@ export default function InboxPage() {
   const list = useInfiniteQuery(q.tickets(query));
   const tickets = useMemo(() => list.data?.pages.flatMap((p) => p.data) ?? [], [list.data]);
   const openId = params.ticketId;
+  // Rows newer than this arrived live; they get a short tint.
+  const shownAt = useMemo(() => Date.now(), [listKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wide = useMedia("(min-width: 1280px)");
   const phone = useMedia("(max-width: 767px)");
@@ -122,6 +166,7 @@ export default function InboxPage() {
   const lastToggled = useRef<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSelected(new Set());
@@ -208,9 +253,9 @@ export default function InboxPage() {
   };
 
   // Solve the focused ticket from the list; the row leaves and the focus stays put.
-  const solveFocused = () => {
-    const t = tickets[focusIdx];
-    if (!t || !canEdit) return;
+  const solveFocused = () => tickets[focusIdx] && solveTicket(tickets[focusIdx]);
+  function solveTicket(t: Ticket) {
+    if (!canEdit) return;
     const done = t.status === "solved" || t.status === "closed";
     const missing = done ? [] : missingForSolve(ticketFields, t);
     if (missing.length) {
@@ -225,6 +270,37 @@ export default function InboxPage() {
       done ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
       done ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
     );
+  }
+  const quick = useCallback(
+    (t: Ticket, a: QuickAction) => {
+      if (!canEdit) return;
+      if (a === "solve") {
+        const i = tickets.findIndex((x) => x.id === t.id);
+        if (i >= 0) setFocusIdx(i);
+        solveTicket(t);
+      } else if (a === "assign" && me) {
+        update.mutate({ id: t.id, patch: { assignee_id: me.id } });
+        toast.success(tr("quick.assigned", { number: t.number }), {
+          action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { assignee_id: t.assignee?.id ?? null } }) },
+        });
+      } else if (a === "snooze") {
+        const at = snoozeOptions().find((o) => o.key === "tomorrow")!.at;
+        update.mutate({ id: t.id, patch: { snoozed_until: at.toISOString() } });
+        toast.success(tr("quick.snoozed", { number: t.number }), {
+          action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { snoozed_until: t.snoozed_until } }) },
+        });
+      }
+    },
+    [canEdit, me, tickets, update, tr], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const spamFocused = () => {
+    const t = tickets[focusIdx];
+    if (!t || !canEdit) return;
+    const to = !t.spam;
+    update.mutate({ id: t.id, patch: { spam: to } });
+    toast.success(to ? tr("toast.spammed") : tr("toast.unspammed"), {
+      action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { spam: !to } }) },
+    });
   };
   const replyFocused = () => {
     const t = tickets[focusIdx];
@@ -241,7 +317,15 @@ export default function InboxPage() {
     enter: () => !openId && open(tickets[focusIdx]),
     o: () => open(tickets[focusIdx]),
     x: () => tickets[focusIdx] && toggle(tickets[focusIdx], false),
-    ...(openId ? {} : { e: solveFocused, r: replyFocused }),
+    ...(openId
+      ? {}
+      : {
+          e: solveFocused,
+          r: replyFocused,
+          i: () => tickets[focusIdx] && !tickets[focusIdx].assignee && quick(tickets[focusIdx], "assign"),
+          h: () => tickets[focusIdx] && quick(tickets[focusIdx], "snooze"),
+          s: (e: KeyboardEvent) => e.shiftKey && spamFocused(),
+        }),
     "/": () => {
       searchRef.current?.focus();
       if (!searchRef.current) (document.querySelector('[aria-label="Search"]') as HTMLButtonElement | null)?.click();
@@ -282,7 +366,6 @@ export default function InboxPage() {
   const fid = folder?.id ?? "view";
   const selecting = selected.size > 0;
   const idx = tickets.findIndex((t) => t.id === openId || String(t.number) === openId);
-  const filtered = !!(search.q || search.priority || search.channel || search.tag || search.mailbox || search.fields);
   const focusedTicket = tickets[focusIdx];
   const summary = useMemo(() => {
     const now = Date.now();
@@ -302,17 +385,6 @@ export default function InboxPage() {
     }
     return { awaiting, urgent, overdue, dueSoon };
   }, [tickets]);
-
-  const emptyAction =
-    fid === "unassigned" || fid === "open" ? (
-      <Button onClick={() => shell.newTicket()}>{tr("empty.newTicket")}</Button>
-    ) : fid === "mine" || fid === "pending" ? (
-      <Button onClick={() => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } })}>
-        {tr("empty.goUnassigned")}
-      </Button>
-    ) : fid === "view" ? (
-      <Button onClick={() => void navigate({ to: "/settings/views" })}>{tr("empty.editViews")}</Button>
-    ) : undefined;
 
   return (
     <div className="relative flex h-full min-h-0">
@@ -346,18 +418,10 @@ export default function InboxPage() {
               action={<Button onClick={() => void list.refetch()}>{tr("error.retry")}</Button>}
             />
           ) : !tickets.length ? (
-            filtered ? (
-              <EmptyState
-                lit={2}
-                title={tr("empty.filtered.title")}
-                description={tr("empty.filtered.description")}
-                action={<Button onClick={() => setSearch({ sort: search.sort, order: search.order })}>{tr("empty.filtered.clear")}</Button>}
-              />
-            ) : (
-              <EmptyState lit={emptyLit[fid]} title={tr(`empty.${fid}.title`)} description={tr(`empty.${fid}.description`)} action={emptyAction} />
-            )
+            <InboxEmpty folder={fid} counts={counts} search={search} onSearch={setSearch} viewId={params.viewId} />
           ) : (
-            <>
+            <div ref={rowsRef} className="relative shrink-0">
+              <FocusGlide listRef={rowsRef} rows={tickets} id={focusedTicket?.id} active={!!focusedTicket && (focusedTicket.id === openId || String(focusedTicket.number) === openId)} />
               <AnimatePresence initial={false} key={listKey}>
                 {tickets.map((t, i) => (
                   <TicketRow
@@ -369,16 +433,20 @@ export default function InboxPage() {
                     selecting={selecting}
                     compact={compact}
                     hideAssignee={fid === "mine"}
+                    fresh={Date.parse(t.last_message_at) > shownAt}
                     onOpen={open}
                     onToggle={toggle}
                     onHover={prefetch}
+                    onQuick={canEdit ? quick : undefined}
                   />
                 ))}
               </AnimatePresence>
+            </div>
+          )}
+          {tickets.length > 0 && (
               <div ref={sentinel} className="shrink-0">
                 {list.isFetchingNextPage ? <SkeletonRows rows={2} /> : <div className="h-14" />}
               </div>
-            </>
           )}
         </div>
         <BulkBar ids={[...selected]} onClear={() => setSelected(new Set())} spamView={fid === "spam"} compact={compact} />

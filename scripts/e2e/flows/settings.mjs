@@ -171,7 +171,7 @@ export async function run(t) {
     await owner.goto(cfg.app + "/inbox/unassigned");
     await openTicket(owner, subject);
     const tid = owner.url().split("/").pop();
-    await owner.getByRole("button", { name: "Solve" }).click();
+    await owner.getByRole("button", { name: "Solve", exact: true }).click();
     const link = await mailLink("/csat/", email, 20_000);
     const { page, problems } = await newPage("customer");
     t.problems.push(problems);

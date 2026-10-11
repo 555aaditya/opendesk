@@ -8,12 +8,13 @@ import { cn } from "@/lib/cn";
 import { tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PriorityIcon } from "./bits";
+import { AnimatedNumber } from "@/components/motion";
 
 function Item({ icon, n, label, onClick, hint, active }: { icon: ReactNode; n: number; label: string; onClick?: () => void; hint?: string; active?: boolean }) {
   const body = (
     <>
       {icon}
-      <span className="mono tabular-nums text-fg-2">{n}</span>
+      <AnimatedNumber value={n} flash className="mono text-fg-2" />
       <span>{label}</span>
     </>
   );

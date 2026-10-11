@@ -3,7 +3,11 @@
 // and Enter or a click opens it for real.
 
 import { useQuery } from "@tanstack/react-query";
-import { CornerDownLeft, MessageSquare } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronDown, CornerDownLeft, MessageSquare } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/cn";
+import { dur, ease } from "@/lib/motion";
 import { useTranslation } from "react-i18next";
 import type { Ticket } from "@/lib/api/types";
 import { q } from "@/lib/queries";
@@ -12,7 +16,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { TagChip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
-import { ChannelIcon, channelLabel, PriorityPill, SlaPill, StatusPill, TicketNumber } from "./bits";
+import { ChannelIcon, channelLabel, PriorityPill, SlaPill, slaState, StatusPill, TicketNumber } from "./bits";
 import { Timeline } from "./detail/Timeline";
 import { useDisplay } from "./fields";
 
@@ -24,6 +28,8 @@ export function TicketPreview({ ticket: t, onOpen, onReply }: { ticket: Ticket; 
   const activities = useQuery(q.activities(t.id));
   const display = useDisplay();
   const contact = t.contact?.name || t.contact?.email || tr("row.unknown");
+  const sla = slaState(t);
+  const [more, setMore] = useState(false);
 
   return (
     <div className="flex h-full min-h-0 flex-col" aria-label={tr("preview.label")}>
@@ -45,25 +51,12 @@ export function TicketPreview({ ticket: t, onOpen, onReply }: { ticket: Ticket; 
           </Button>
         </Tooltip>
       </header>
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line-soft px-4 py-2.5">
-        <StatusPill status={t.status} label={display.status(t.status)} hue={display.statusTone(t.status)} />
-        {t.priority !== "normal" && <PriorityPill priority={t.priority} label={display.priority(t.priority)} hue={display.priorityTone(t.priority)} />}
-        <SlaPill ticket={t} />
-        {t.tags.map((tag) => (
-          <TagChip key={tag.id} name={tag.name} color={tag.color} />
-        ))}
-        <span className="ml-auto flex min-w-0 items-center gap-3 text-xs text-fg-3">
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Tooltip content={channelLabel[t.channel]}>
-              <span className="flex">
-                <ChannelIcon channel={t.channel} />
-              </span>
-            </Tooltip>
-            <span className="truncate text-fg-2" data-ph-mask>
-              {contact}
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1.5">
+      <div className="shrink-0 border-b border-line-soft px-4 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusPill status={t.status} label={display.status(t.status)} hue={display.statusTone(t.status)} />
+          <PriorityPill priority={t.priority} label={display.priority(t.priority)} hue={display.priorityTone(t.priority)} />
+          {sla && sla.state !== "on_track" && <SlaPill ticket={t} />}
+          <span className="ml-1 flex shrink-0 items-center gap-1.5 text-xs">
             {t.assignee ? (
               <>
                 <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="xs" />
@@ -73,8 +66,42 @@ export function TicketPreview({ ticket: t, onOpen, onReply }: { ticket: Ticket; 
               <span className="text-fg-4">{tr("preview.unassigned")}</span>
             )}
           </span>
-          <span className="hidden shrink-0 text-fg-4 2xl:inline">{tr("preview.created", { when: relLong(t.created_at) })}</span>
-        </span>
+          <button
+            type="button"
+            aria-expanded={more}
+            onClick={() => setMore((m) => !m)}
+            className="ml-auto flex h-6 items-center gap-1 rounded-sm px-1.5 text-xs text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:ring-1 focus-visible:ring-line-strong"
+          >
+            {more ? tr("preview.less") : tr("preview.more")}
+            <ChevronDown className={cn("size-3 transition-transform duration-150", more && "rotate-180")} />
+          </button>
+        </div>
+        <AnimatePresence initial={false}>
+          {more && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: dur.base, ease: ease.out }}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-2 text-xs text-fg-3">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <ChannelIcon channel={t.channel} plain />
+                  <span className="truncate text-fg-2" data-ph-mask>
+                    {contact}
+                  </span>
+                  <span className="text-fg-4">· {channelLabel[t.channel]}</span>
+                </span>
+                {sla && sla.state === "on_track" && <SlaPill ticket={t} />}
+                {t.tags.map((tag) => (
+                  <TagChip key={tag.id} name={tag.name} color={tag.color} />
+                ))}
+                <span className="text-fg-4">{tr("preview.created", { when: relLong(t.created_at) })}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">
         <Timeline

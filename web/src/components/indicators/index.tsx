@@ -99,7 +99,14 @@ export function StatusPill({ status, className, label, hue }: { status: TicketSt
 // Priority: three signal bars that rise and warm with priority; urgent is a
 // filled square with an exclamation, the one mark that shouts.
 
-export function PriorityIcon({ priority, className, muted }: { priority: Priority; className?: string; muted?: boolean }) {
+export function PriorityIcon({ priority, className, muted }: { priority: Priority | null | undefined; className?: string; muted?: boolean }) {
+  // No priority yet: a faint dashed outline holds the slot so columns align.
+  if (!priority)
+    return (
+      <Glyph k="none" label="No priority" className={className}>
+        <rect x="2" y="2" width="12" height="12" rx="3" stroke="var(--line-strong)" strokeWidth={SW} strokeDasharray="2.2 2" />
+      </Glyph>
+    );
   if (priority === "urgent")
     return (
       <Glyph k={priority} label={priorityLabel.urgent} className={className}>

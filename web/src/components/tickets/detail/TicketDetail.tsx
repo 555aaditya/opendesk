@@ -24,7 +24,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { copyText } from "@/components/ui/copy-button";
-import { ChannelIcon, channelLabel, SlaPill, StatusPill, TicketNumber } from "../bits";
+import { ChannelIcon, channelLabel, PriorityPill, SlaPill, slaState, StatusPill, TicketNumber } from "../bits";
+import { Morph } from "@/components/motion";
+import { CheckBurst } from "../CheckBurst";
 import { intent } from "../motion";
 import { focusField, missingForSolve, useDisplay, useTicketFields } from "../fields";
 import { usePageCrumb } from "@/app/useBreadcrumbs";
@@ -119,6 +121,7 @@ export default function TicketDetail({
   const { t: tr } = useTranslation("inbox");
   const [picker, setPicker] = useState<PropPicker>(null);
   const [snoozeOpen, setSnoozeOpen] = useState(false);
+  const [burst, setBurst] = useState(0);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [panel, setPanel] = useState(readPanel);
   const display = useDisplay();
@@ -166,12 +169,18 @@ export default function TicketDetail({
       solved ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
       solved ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
     );
-    if (!solved && onNext) onNext();
+    if (solved) return;
+    // A short check burst on the button, then on to the next ticket.
+    setBurst((n) => n + 1);
+    if (onNext) setTimeout(onNext, reduced ? 0 : 520);
   };
   const spam = () => {
-    if (!t) return;
-    update.mutate({ id: t.id, patch: { spam: !t.spam } });
-    toast.success(t.spam ? tr("toast.unspammed") : tr("toast.spammed"));
+    if (!t || !canEdit) return;
+    const was = t.spam;
+    update.mutate({ id: t.id, patch: { spam: !was } });
+    toast.success(was ? tr("toast.unspammed") : tr("toast.spammed"), {
+      action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { spam: was } }) },
+    });
     if (!t.spam) onClose();
   };
   const remove = () =>
@@ -197,7 +206,7 @@ export default function TicketDetail({
       r: () => composer.current?.focus("reply"),
       n: () => composer.current?.focus("note"),
       a: () => openPicker("assignee"),
-      s: () => openPicker("status"),
+      s: (e: KeyboardEvent) => (e.shiftKey ? spam() : openPicker("status")),
       h: () => setSnoozeOpen(true),
       p: () => openPicker("priority"),
       e: solve,
@@ -272,16 +281,19 @@ export default function TicketDetail({
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {t ? (
             <>
-              <Tooltip content={channelLabel[t.channel]}>
-                <span className="hidden shrink-0 sm:flex">
-                  <ChannelIcon channel={t.channel} />
-                </span>
-              </Tooltip>
+              {t.channel !== "email" && (
+                <Tooltip content={channelLabel[t.channel]}>
+                  <span className="hidden shrink-0 sm:flex">
+                    <ChannelIcon channel={t.channel} plain />
+                  </span>
+                </Tooltip>
+              )}
               <TicketNumber n={t.number} className="shrink-0" />
               <SubjectEditor value={t.subject} disabled={!canEdit} onSave={(subject) => update.mutate({ id: t.id, patch: { subject } })} />
               <span className="hidden shrink-0 items-center gap-1.5 md:flex">
                 <StatusPill status={t.status} label={display.status(t.status)} hue={display.statusTone(t.status)} />
-                <SlaPill ticket={t} />
+                <PriorityPill priority={t.priority} label={display.priority(t.priority)} hue={display.priorityTone(t.priority)} />
+                {slaState(t) && slaState(t)!.state !== "on_track" && <SlaPill ticket={t} />}
                 {t.spam && <Badge tone="red">{tr("detail.spam")}</Badge>}
               </span>
             </>
@@ -302,7 +314,17 @@ export default function TicketDetail({
               <Button
                 size="sm"
                 variant="secondary"
-                icon={solved ? <RotateCcw className="size-3.5" /> : <CircleCheck className={cn("size-3.5", tone.green.text)} />}
+                icon={
+                  <Morph k={burst ? `b${burst}` : solved ? "reopen" : "solve"}>
+                    {burst && solved ? (
+                      <CheckBurst size={14} />
+                    ) : solved ? (
+                      <RotateCcw className="size-3.5" />
+                    ) : (
+                      <CircleCheck className={cn("size-3.5", tone.green.text)} />
+                    )}
+                  </Morph>
+                }
                 onClick={solve}
               >
                 <span className="max-sm:sr-only">{solved ? tr("detail.reopen") : tr("detail.solve")}</span>

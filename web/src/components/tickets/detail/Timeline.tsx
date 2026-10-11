@@ -14,6 +14,7 @@ import { AI_TONE, tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PriorityIcon, priorityLabel, StatusIcon, statusLabel } from "../bits";
 import { MessageItem } from "./MessageItem";
+import { isAIActor, JevAvatar, useAssistantName } from "../jev";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
 
 type Item = { kind: "message"; at: string; m: Message } | { kind: "activity"; at: string; a: Activity };
@@ -25,12 +26,12 @@ function ref(v: unknown, members: Member[] | undefined): UserRef | null {
   return null;
 }
 
-function actorName(a: Activity, t: TFunction<"inbox">) {
+function actorName(a: Activity, t: TFunction<"inbox">, jev: string) {
   if (a.actor.user) return a.actor.user.name;
   if (typeof a.data.automation_name === "string") return t("activity.automationNamed", { name: a.data.automation_name });
   if (a.actor.type === "automation") return t("activity.automation");
   if (a.actor.type === "contact") return t("activity.customer");
-  if (a.actor.type === "ai") return t("activity.ai");
+  if (isAIActor(a.actor)) return jev;
   return "opendesk";
 }
 
@@ -39,10 +40,10 @@ const M = <span className="mono text-fg-2" />;
 
 type Line = { icon: ReactNode; text: ReactNode; hue?: "red" | "ai" };
 
-type Ctx = { teams?: Team[]; members?: Member[]; tags?: Tag[]; fields?: CustomField[]; display: ReturnType<typeof useDisplay> };
+type Ctx = { teams?: Team[]; members?: Member[]; tags?: Tag[]; fields?: CustomField[]; display: ReturnType<typeof useDisplay>; jev: string };
 
-function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fields, display }: Ctx): Line {
-  const who = actorName(a, t);
+function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fields, display, jev }: Ctx): Line {
+  const who = actorName(a, t, jev);
   const d = a.data;
   const line = (key: Parameters<TFunction<"inbox">>[0], values: Record<string, unknown> = {}) => (
     <Trans t={t} i18nKey={key as never} values={{ who, ...values }} components={{ b: B, m: M }} />
@@ -145,13 +146,18 @@ function ActivityLine({ a }: { a: Activity }) {
   const { data: tags } = useQuery(q.tags());
   const { data: fields } = useTicketFields();
   const display = useDisplay();
-  const { icon, text, hue } = describe(a, t, { teams, members, tags, fields, display });
+  const jev = useAssistantName();
+  const line = describe(a, t, { teams, members, tags, fields, display, jev });
+  // Anything the AI did carries its violet mark as the actor.
+  const ai = isAIActor(a.actor) || line.hue === "ai";
+  const { text, hue } = line;
+  const icon = ai ? <JevAvatar size={20} className="rounded-sm" /> : line.icon;
   return (
     <div className="flex items-center gap-2.5 py-1 pl-[18px] text-[12px] text-fg-3">
       <span
         className={cn(
           "flex size-5 shrink-0 items-center justify-center rounded-sm [&_svg]:size-3",
-          hue === "red" ? tone.red.chip : hue === "ai" ? tone[AI_TONE].chip : "bg-sunken text-fg-3",
+          ai ? "" : hue === "red" ? tone.red.chip : hue === "ai" ? tone[AI_TONE].chip : "bg-sunken text-fg-3",
         )}
       >
         {icon}
@@ -223,7 +229,16 @@ export function Timeline({
   // Items present when the conversation first showed stay still; later ones rise in.
   const seen = useRef<Set<string> | null>(null);
   const sentBodies = useRef(new Set<string>());
-  if (!seen.current && !loading) seen.current = new Set(items.map((it) => (it.kind === "message" ? it.m.id : it.a.id)));
+  const opening = useRef(false);
+  if (!seen.current && !loading) {
+    seen.current = new Set(items.map((it) => (it.kind === "message" ? it.m.id : it.a.id)));
+    opening.current = true;
+  }
+  useEffect(() => {
+    if (!opening.current) return;
+    const id = setTimeout(() => (opening.current = false), 600);
+    return () => clearTimeout(id);
+  });
 
   // Open at the latest message; follow new ones only if already at the bottom.
   useLayoutEffect(() => {
@@ -260,12 +275,14 @@ export function Timeline({
             ))}
           </div>
         ) : (
-          items.map((it) => {
+          items.map((it, idx) => {
             const id = it.kind === "message" ? it.m.id : it.a.id;
             // A sent message swaps its temporary id for the real one; it has already risen.
             const swapped = it.kind === "message" && !id.startsWith("tmp-") && sentBodies.current.has(it.m.body_html);
             const fresh = !!seen.current && !seen.current.has(id) && !swapped;
             if (it.kind === "message" && id.startsWith("tmp-")) sentBodies.current.add(it.m.body_html);
+            // On open the latest few rise in one after another; older ones sit still.
+            const intro = opening.current ? items.length - 1 - idx : 99;
             const day = dayLabel(it.at);
             const sep = day !== lastDay;
             lastDay = day;
@@ -278,7 +295,10 @@ export function Timeline({
                     <span className="h-px flex-1 bg-line-soft" />
                   </div>
                 )}
-                <div className={cn(fresh && "animate-rise-in motion-reduce:animate-none")}>
+                <div
+                  className={cn((fresh || intro < 6) && "animate-rise-in motion-reduce:animate-none [animation-fill-mode:both]")}
+                  style={intro < 6 && !fresh ? { animationDelay: `${Math.max(0, Math.min(5, items.length - 1) - intro) * 35}ms` } : undefined}
+                >
                   {it.kind === "message" ? <MessageItem m={it.m} onRetry={onRetry} /> : <ActivityLine a={it.a} />}
                 </div>
               </Fragment>

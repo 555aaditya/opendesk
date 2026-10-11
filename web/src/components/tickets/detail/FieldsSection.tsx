@@ -224,7 +224,9 @@ export function FieldsSection({
       {fields.map((f) => {
         const v = values[f.key];
         const missing = f.required_on_solve && !hasValue(f, v);
-        const flagged = focus.key === f.key;
+        // A focus request is for the ticket on screen now; a stale one (another
+        // ticket, long ago) must not pop a picker open.
+        const flagged = focus.key === f.key && Date.now() - focus.at < 3000;
         return (
           <div
             key={f.id}
@@ -240,7 +242,12 @@ export function FieldsSection({
               </span>
             </Tooltip>
             <div className="flex min-w-0 flex-1">
-              <FieldControl key={flagged ? focus.at : "f"} field={f} value={v} disabled={disabled} autoOpen={flagged} onSave={(nv) => onChange(f.key, nv)} />
+              <FieldControl key={flagged ? focus.at : "f"} field={f} value={v} disabled={disabled} autoOpen={flagged}
+                onSave={(nv) => {
+                  if (focus.key === f.key) useFieldFocus.setState({ key: null });
+                  onChange(f.key, nv);
+                }}
+              />
             </div>
           </div>
         );

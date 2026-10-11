@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
+import { JevAvatar, useAssistantName } from "../jev";
 import { AiAuthorLabel, TranslateButton, TranslatedNote, useMessageTranslation } from "@/components/ai/ticket/MessageAi";
 
 function authorName(m: Message): string {
@@ -141,7 +142,9 @@ function Delivery({ m, onRetry }: { m: Message; onRetry?: () => void }) {
 
 export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: { m: Message; onRetry?: (m: Message) => void; highlight?: boolean }) {
   const [showOriginal, setShowOriginal] = useState(false);
-  const name = authorName(m);
+  const jev = useAssistantName();
+  // The widget answer bot speaks as the workspace's AI teammate.
+  const name = m.ai ? jev : authorName(m);
   const note = m.kind === "note";
   const outbound = m.direction === "outbound" && !note;
   const failed = m.delivery_status === "failed" || m.delivery_status === "bounced";
@@ -164,7 +167,7 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
       )}
     >
       <header className="flex items-center gap-2.5 px-4 pt-3">
-        <Avatar name={name} src={avatar} size="md" />
+        {m.ai ? <JevAvatar size={24} /> : <Avatar name={name} src={avatar} size="md" />}
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="truncate text-[13px] font-medium" data-ph-mask={m.author.contact ? true : undefined}>
             {name}

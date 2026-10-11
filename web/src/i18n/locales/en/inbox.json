@@ -64,41 +64,74 @@
   },
   "empty": {
     "unassigned": {
-      "title": "Nothing waiting for an owner",
-      "description": "New conversations land here until someone picks them up."
+      "title": "Inbox zero",
+      "description": "Every conversation has an owner. New ones land here until someone picks them up."
     },
     "mine": {
       "title": "You're all caught up",
-      "description": "Tickets assigned to you show up here."
+      "description": "Nothing assigned to you needs an answer. Tickets you own show up here.",
+      "pickUp": "Pick up from Unassigned",
+      "solvedToday_one": "ticket solved today",
+      "solvedToday_other": "tickets solved today"
     },
     "open": {
-      "title": "No open tickets",
-      "description": "When customers write in, their conversations appear here."
+      "title": "Inbox zero",
+      "description": "No open conversations. When customers write in, they show up here."
     },
     "pending": {
       "title": "Nothing pending",
-      "description": "Tickets waiting on the customer or on hold collect here."
+      "description": "Pending means you replied and are waiting on the customer. Their next message moves the ticket back to open."
     },
     "solved": {
       "title": "No solved tickets yet",
-      "description": "Solved conversations are kept here for reference."
+      "description": "Solved conversations stay here for reference. A reply from the customer reopens them.",
+      "csat_one": "Customer rating {{avg}} of 5 from {{count}} response in the last 30 days",
+      "csat_other": "Customer rating {{avg}} of 5 from {{count}} responses in the last 30 days",
+      "csatHint": "Customer ratings appear here once people rate their solved tickets"
     },
     "spam": {
       "title": "No spam",
-      "description": "Messages marked as spam are kept here, out of the way."
+      "description": "Messages marked as spam are kept here, out of the way.",
+      "how": "Messages flagged by your mail provider, from blocked senders, or marked by an agent land here, out of the inbox.",
+      "on": "Spam filter on",
+      "caught_one": "{{count}} message in spam",
+      "caught_other": "{{count}} messages in spam",
+      "tipMark": "Mark a ticket as spam",
+      "tipBlocked": "Spam from a sender is skipped next time"
     },
     "view": {
       "title": "Nothing matches this view",
-      "description": "Tickets that match the view's filters appear here."
+      "description": "No tickets match this view's filters right now.",
+      "edit": "Edit filters"
     },
     "filtered": {
       "title": "No tickets match",
-      "description": "Try a different search or clear the filters.",
+      "description": "Try removing a filter or widening the search.",
       "clear": "Clear filters"
     },
     "newTicket": "New ticket",
     "goUnassigned": "Go to Unassigned",
-    "editViews": "Edit views"
+    "search": {
+      "title": "No results for “{{q}}”",
+      "all": "Search everywhere",
+      "spelling": "Check the spelling or try fewer words",
+      "focus": "Search this list",
+      "everywhere": "Search tickets, contacts and articles"
+    },
+    "goOpen": "Go to All open",
+    "settings": "Mailbox settings",
+    "connect": "Connect a mailbox",
+    "backToInbox": "Back to inbox",
+    "tips": {
+      "unassigned": "Go to Unassigned",
+      "assignMe": "Assign the focused ticket to you",
+      "solve": "Solve the focused ticket",
+      "sendSolve": "Send and solve",
+      "setPending": "Change status",
+      "snooze": "Snooze until later",
+      "newTicket": "New ticket",
+      "mine": "Go to Mine"
+    }
   },
   "error": {
     "title": "Couldn't load tickets",
@@ -155,7 +188,9 @@
     "reply": "Open and reply",
     "replyShort": "Reply",
     "unassigned": "Unassigned",
-    "created": "Opened {{when}}"
+    "created": "Opened {{when}}",
+    "more": "More",
+    "less": "Less"
   },
   "bulk": {
     "selected_one": "{{count}} ticket selected",
@@ -189,7 +224,9 @@
     "deleteBody_other": "{{count}} tickets will be deleted for everyone in the workspace.",
     "deleted_one": "Deleted {{count}} ticket",
     "deleted_other": "Deleted {{count}} tickets",
-    "clear": "Clear selection"
+    "clear": "Clear selection",
+    "selectedWord_one": "selected",
+    "selectedWord_other": "selected"
   },
   "props": {
     "status": "Status",
@@ -268,7 +305,7 @@
     "triagedAs": "<b>{{who}}</b> triaged this as <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> answered from the knowledge base",
     "handoffCustomer": "The customer asked for a person",
-    "handoffAi": "AI handed this to the team",
+    "handoffAi": "<b>{{who}}</b> handed this to the team",
     "other": "<b>{{who}}</b> updated this ticket <m>{{type}}</m>"
   },
   "typing_one": "{{who}} is typing",
@@ -301,7 +338,9 @@
     "sendReply": "Send reply",
     "waitUploads": "Waiting for uploads",
     "andStatus": "{{label}} and set status",
-    "andMark": "{{label}} and mark {{status}}"
+    "andMark": "{{label}} and mark {{status}}",
+    "sending": "Sending",
+    "sent": "Sent"
   },
   "message": {
     "from": "Message from {{name}}",
@@ -386,5 +425,16 @@
     "other": "Other labels",
     "typeToCreate": "Type to create a label",
     "none": "No labels match"
+  },
+  "quick": {
+    "assign": "Assign #{{number}} to me",
+    "snooze": "Snooze #{{number}} until tomorrow",
+    "solve": "Solve #{{number}}",
+    "assigned": "Assigned #{{number}} to you",
+    "snoozed": "Snoozed #{{number}} until tomorrow"
+  },
+  "jev": {
+    "setBy": "Set by {{name}}",
+    "said": "{{name}} replied"
   }
 }

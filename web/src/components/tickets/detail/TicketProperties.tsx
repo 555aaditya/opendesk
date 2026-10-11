@@ -17,6 +17,7 @@ import { ContactCard } from "@/components/contacts/ContactCard";
 import { TicketAiPanel } from "@/components/ai/ticket/AiPanel";
 import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, slaState, StatusIcon, statusOrder } from "../bits";
 import { LabelPicker } from "./LabelPicker";
+import { SetByJev, useAISet } from "../jev";
 import { FieldsSection } from "./FieldsSection";
 import { useDisplay, type FieldPatch, type TicketWithFields } from "../fields";
 import { useUpdateTicket } from "../useTicketActions";
@@ -127,6 +128,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
   const { data: members } = useQuery(q.members());
   const { data: teams } = useQuery(q.teams());
   const display = useDisplay();
+  const aiSet = useAISet(t.id);
   const { data: mailboxes } = useQuery(q.mailboxes());
   const patch = (p: Parameters<typeof update.mutate>[0]["patch"]) => update.mutate({ id: t.id, patch: p });
   const team = teams?.find((x) => x.id === t.team_id);
@@ -148,6 +150,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               <PropButton disabled={!canEdit}>
                 <StatusIcon status={t.status} />
                 {display.status(t.status)}
+                {aiSet.status && <SetByJev />}
               </PropButton>
             }
           />
@@ -163,6 +166,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               <PropButton disabled={!canEdit}>
                 <PriorityIcon priority={t.priority} />
                 {display.priority(t.priority)}
+                {aiSet.priority && <SetByJev />}
               </PropButton>
             }
           />
@@ -205,8 +209,9 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
           <span className="w-[76px] shrink-0 pt-1.5 text-[12px] text-fg-3">{tr("props.tags")}</span>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-1 py-1">
             {t.tags.map((tag) => (
-              <span key={tag.id} className="animate-pop-in motion-reduce:animate-none">
+              <span key={tag.id} className="relative animate-pop-in motion-reduce:animate-none">
                 <TagChip name={tag.name} color={tag.color} onRemove={canEdit ? () => patch({ tags: tagNames.filter((n) => n !== tag.name) }) : undefined} />
+                {aiSet.tags.has(tag.name) && <SetByJev className="absolute -right-1 -top-1 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
               </span>
             ))}
             {canEdit && (

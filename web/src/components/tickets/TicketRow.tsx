@@ -1,16 +1,21 @@
 import { motion, useReducedMotion } from "motion/react";
-import { forwardRef, memo } from "react";
+import { AlarmClock, Check, UserPlus } from "lucide-react";
+import { forwardRef, memo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { relShort, fullDate } from "@/lib/format";
+import { ease } from "@/lib/motion";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { PriorityIcon, priorityLabel, SlaBadge, StatusIcon, statusLabel } from "./bits";
+import { ChannelIcon, channelLabel, PriorityIcon, SlaPill, slaState, StatusIcon } from "./bits";
+import { useDisplay } from "./fields";
+import { SetByJev, useAssistantName } from "./jev";
 import { useTicketViewers } from "./presence";
 import { rowMotion } from "./motion";
+
+export type QuickAction = "assign" | "snooze" | "solve";
 
 export type RowProps = {
   ticket: Ticket;
@@ -21,9 +26,13 @@ export type RowProps = {
   compact: boolean;
   /** Hide the assignee (a folder where everyone is the same person). */
   hideAssignee?: boolean;
+  /** Arrived live after the list was shown: tint it briefly. */
+  fresh?: boolean;
   onOpen: (t: Ticket) => void;
   onToggle: (t: Ticket, shift: boolean) => void;
   onHover?: (t: Ticket) => void;
+  /** Hover actions; left out for viewers. */
+  onQuick?: (t: Ticket, a: QuickAction) => void;
 };
 
 /** The customer wrote last and nobody has answered yet. */
@@ -42,23 +51,57 @@ function Viewers({ ticketId }: { ticketId: string }) {
   const label = v.map((x) => t(x.state === "replying" ? "presence.replying" : "presence.viewing", { name: x.name })).join(", ");
   return (
     <Tooltip content={label}>
-      <span className="flex animate-pop-in motion-reduce:animate-none">
+      <span className="flex shrink-0 animate-pop-in motion-reduce:animate-none">
         <AvatarStack size="xs" max={3} people={v.map((x) => ({ id: x.user_id, name: x.name, avatar: x.avatar, state: x.state }))} />
       </span>
     </Tooltip>
   );
 }
 
+/** SLA only when it matters: due soon or breached. On track says nothing. */
+function SlaIfAtRisk({ ticket }: { ticket: Ticket }) {
+  const s = slaState(ticket);
+  if (!s || s.state === "on_track") return null;
+  return <SlaPill ticket={ticket} />;
+}
+
+function QuickButton({ label, shortcut, onClick, children }: { label: string; shortcut: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <Tooltip content={label} shortcut={shortcut}>
+      <button
+        type="button"
+        aria-label={label}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        className="flex size-6 items-center justify-center rounded-sm text-fg-3 outline-none transition-colors duration-100 hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg focus-visible:ring-1 focus-visible:ring-line-strong active:scale-95"
+      >
+        {children}
+      </button>
+    </Tooltip>
+  );
+}
+
 const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
-  { ticket: t, active, focused, selected, selecting, compact, hideAssignee, onOpen, onToggle, onHover },
+  { ticket: t, active, focused, selected, selecting, compact, hideAssignee, fresh, onOpen, onToggle, onHover, onQuick },
   ref,
 ) {
   const { t: tr } = useTranslation("inbox");
   const reduced = useReducedMotion();
+  const display = useDisplay();
+  const jev = useAssistantName();
   const unread = awaitingReply(t);
   const contactName = t.contact?.name || t.contact?.email || tr("row.unknown");
   const subject = t.subject || tr("row.noSubject");
   const showCheck = selecting || selected;
+  const done = t.status === "solved" || t.status === "closed";
+  const aiSet = !!t.custom?.ai_triaged_at;
+  const assignee = !hideAssignee && t.assignee;
+  const motionProps = rowMotion(reduced);
+  const initial = fresh && !reduced ? { ...motionProps.initial, backgroundColor: "var(--tone-blue-soft)" } : motionProps.initial;
+  const animate = fresh && !reduced ? { ...motionProps.animate, backgroundColor: "rgba(0,0,0,0)" } : motionProps.animate;
+
   const check = (
     <Checkbox
       checked={selected}
@@ -74,12 +117,82 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
     />
   );
 
-  // The focus marker: a short ink bar at the row's left edge.
-  const marker = (focused || active) && (
-    <span
-      aria-hidden
-      className={cn("absolute inset-y-2 left-0 w-[2px] rounded-r-xs transition-colors", active ? "bg-fg" : "bg-fg-4")}
-    />
+  // Status, swapped for a checkbox on hover or while selecting.
+  const statusSlot = (
+    <span className="relative flex size-4 shrink-0 items-center justify-center">
+      <Tooltip content={display.status(t.status)}>
+        <span className={cn("flex transition-opacity duration-100", showCheck ? "opacity-0" : "md:group-hover:opacity-0")}>
+          <StatusIcon status={t.status} />
+        </span>
+      </Tooltip>
+      <span
+        className={cn(
+          "absolute inset-0 flex items-center justify-center transition-opacity duration-100",
+          showCheck ? "opacity-100" : "pointer-events-none opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100",
+        )}
+      >
+        {check}
+      </span>
+    </span>
+  );
+
+  // Every row shows its priority in the same slot, so the column lines up.
+  const prioritySlot = (
+    <Tooltip content={aiSet ? `${tr("row.priority", { priority: display.priority(t.priority) })} · ${tr("jev.setBy", { name: jev })}` : tr("row.priority", { priority: display.priority(t.priority) })}>
+      <span className="relative flex size-4 shrink-0 items-center justify-center">
+        <PriorityIcon priority={t.priority} />
+        {aiSet && <SetByJev className="absolute -right-1.5 -top-1.5 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+      </span>
+    </Tooltip>
+  );
+
+  const channel = t.channel !== "email" && (
+    <Tooltip content={channelLabel[t.channel]}>
+      <span className="flex shrink-0">
+        <ChannelIcon channel={t.channel} plain className="size-3" />
+      </span>
+    </Tooltip>
+  );
+
+  // Time and avatar, replaced in place by quick actions on hover or focus.
+  const end = (
+    <span className={cn("relative flex shrink-0 items-center justify-end", compact ? "h-4 w-[60px]" : "h-6 w-[84px]")}>
+      <span className={cn("flex items-center gap-2 transition-opacity duration-100", onQuick && "md:group-hover:opacity-0 md:group-focus-within:opacity-0")}>
+        {assignee && (
+          <Tooltip content={assignee.name}>
+            <span className="flex">
+              <Avatar name={assignee.name} src={assignee.avatar_url} size={compact ? "xs" : "sm"} />
+            </span>
+          </Tooltip>
+        )}
+        <span className={cn("mono text-right tabular-nums", compact ? "whitespace-nowrap text-[10.5px] text-fg-4" : "min-w-9 whitespace-nowrap text-[11px] text-fg-3")} title={fullDate(t.last_message_at)}>
+          {relShort(t.last_message_at)}
+        </span>
+      </span>
+      {onQuick && (
+        <span
+          className={cn(
+            "absolute inset-y-0 right-0 hidden items-center gap-0.5 opacity-0 transition-opacity duration-100 md:flex",
+            "pointer-events-none group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+            compact && "-my-1",
+          )}
+        >
+          {!t.assignee && (
+            <QuickButton label={tr("quick.assign", { number: t.number })} shortcut="i" onClick={() => onQuick(t, "assign")}>
+              <UserPlus className="size-3.5" />
+            </QuickButton>
+          )}
+          <QuickButton label={tr("quick.snooze", { number: t.number })} shortcut="h" onClick={() => onQuick(t, "snooze")}>
+            <AlarmClock className="size-3.5" />
+          </QuickButton>
+          {!done && (
+            <QuickButton label={tr("quick.solve", { number: t.number })} shortcut="e" onClick={() => onQuick(t, "solve")}>
+              <Check className="size-3.5" />
+            </QuickButton>
+          )}
+        </span>
+      )}
+    </span>
   );
 
   return (
@@ -88,119 +201,74 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
       role="option"
       aria-selected={active}
       data-ticket-id={t.id}
+      data-focused={focused || undefined}
       tabIndex={-1}
       onClick={() => onOpen(t)}
       onMouseEnter={() => onHover?.(t)}
-      {...rowMotion(reduced)}
-      className="relative shrink-0 overflow-hidden outline-none"
+      {...motionProps}
+      initial={initial}
+      animate={animate}
+      transition={fresh ? { ...motionProps.transition, backgroundColor: { duration: 1.4, ease: ease.out } } : motionProps.transition}
+      className="relative z-[1] shrink-0 overflow-hidden outline-none"
     >
       {compact ? (
         <div
           className={cn(
             "group relative flex cursor-pointer gap-2.5 border-b border-line-soft py-2.5 pl-3.5 pr-3 transition-colors duration-100",
-            active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken",
+            active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken/70",
           )}
         >
-          {marker}
-          <div className="relative flex size-5 shrink-0 items-center justify-center">
-            {/* The status, swapped for a checkbox on hover or while selecting. */}
-            <span className={cn("flex transition-opacity duration-100", showCheck ? "opacity-0" : "md:group-hover:opacity-0")}>
-              <StatusIcon status={t.status} />
-            </span>
-            <span
-              className={cn(
-                "absolute inset-0 flex items-center justify-center transition-opacity duration-100",
-                showCheck ? "opacity-100" : "pointer-events-none opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100",
-              )}
-            >
-              {check}
-            </span>
+          <div className="flex w-4 shrink-0 flex-col items-center gap-[7px] pt-px">
+            {statusSlot}
+            {prioritySlot}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
+            <div className="flex items-center gap-1.5">
+              <span className={cn("min-w-0 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
                 {contactName}
               </span>
+              {channel}
               <Viewers ticketId={t.id} />
-              <span className="mono shrink-0 text-[10.5px] text-fg-4 tabular-nums" title={fullDate(t.last_message_at)}>
-                {relShort(t.last_message_at)}
-              </span>
+              <span className="flex-1" />
+              {end}
             </div>
-            <div className={cn("mt-0.5 flex items-center gap-1.5 text-[12.5px]", unread ? "font-medium text-fg" : "text-fg")}>
-              <span className="min-w-0 truncate" data-ph-mask>
-                {subject}
-              </span>
+            <div className={cn("mt-0.5 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg")} data-ph-mask>
+              {subject}
             </div>
             <div className="mt-1 flex items-center gap-1.5">
               <span className="min-w-0 flex-1 truncate text-xs text-fg-3" data-ph-mask>
                 {t.last_message_preview}
               </span>
-              {t.priority === "urgent" || t.priority === "high" ? (
-                <Tooltip content={tr("row.priority", { priority: priorityLabel[t.priority] })}>
-                  <span className="flex">
-                    <PriorityIcon priority={t.priority} className="size-3" />
-                  </span>
-                </Tooltip>
-              ) : null}
-              <SlaBadge ticket={t} />
-              {t.assignee && !hideAssignee && <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="xs" />}
+              <SlaIfAtRisk ticket={t} />
             </div>
           </div>
         </div>
       ) : (
         <div
           className={cn(
-            "group relative flex h-11 cursor-pointer items-center gap-3 border-b border-line-soft pl-3.5 pr-5 transition-colors duration-100",
-            selected ? "bg-hover" : "hover:bg-sunken",
+            "group relative flex h-11 cursor-pointer items-center gap-3 border-b border-line-soft pl-3.5 pr-4 transition-colors duration-100",
+            active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken/70",
           )}
         >
-          {marker}
-          <span className={cn("flex size-5 shrink-0 items-center justify-center transition-opacity duration-100", showCheck ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100")}>
-            {check}
-          </span>
-          <Tooltip content={statusLabel[t.status]}>
-            <span className="flex">
-              <StatusIcon status={t.status} />
+          {statusSlot}
+          {prioritySlot}
+          <span className="flex w-[180px] shrink-0 items-center gap-1.5">
+            <span className={cn("min-w-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
+              {contactName}
             </span>
-          </Tooltip>
-          <Tooltip content={tr("row.priority", { priority: priorityLabel[t.priority] })}>
-            <span className="flex w-4 shrink-0 justify-center">
-              <PriorityIcon priority={t.priority} muted={t.priority === "low"} />
-            </span>
-          </Tooltip>
-          <span className={cn("w-[168px] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
-            {contactName}
+            {channel}
+            <Viewers ticketId={t.id} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
             <span className={cn("max-w-[60%] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
               {subject}
             </span>
+            <SlaIfAtRisk ticket={t} />
             <span className="min-w-0 truncate text-[12.5px] text-fg-4" data-ph-mask>
               {t.last_message_preview}
             </span>
           </span>
-          <span className="hidden shrink-0 items-center gap-1 lg:flex">
-            {t.tags.slice(0, 2).map((tag) => (
-              <TagChip key={tag.id} name={tag.name} color={tag.color} />
-            ))}
-            {t.tags.length > 2 && <span className="mono text-[10.5px] text-fg-4">+{t.tags.length - 2}</span>}
-          </span>
-          <Viewers ticketId={t.id} />
-          <SlaBadge ticket={t} />
-          {!hideAssignee && (
-            <span className="flex w-5 shrink-0 justify-center">
-              {t.assignee && (
-                <Tooltip content={t.assignee.name}>
-                  <span className="flex">
-                    <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="sm" />
-                  </span>
-                </Tooltip>
-              )}
-            </span>
-          )}
-          <span className="mono w-11 shrink-0 text-right text-[11px] text-fg-3 tabular-nums" title={fullDate(t.last_message_at)}>
-            {relShort(t.last_message_at)}
-          </span>
+          {end}
         </div>
       )}
     </motion.div>

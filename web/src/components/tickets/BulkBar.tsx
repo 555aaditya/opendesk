@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { AnimatedNumber } from "@/components/motion";
+import { springs } from "@/lib/motion";
 import { ShieldAlert, Signal, Tag as TagIcon, Trash2, UserRound, X, CircleDot } from "lucide-react";
 import { forwardRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -55,14 +57,15 @@ export function BulkBar({ ids, onClear, spamView, compact }: { ids: string[]; on
           initial={{ opacity: 0, y: 12, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 8, scale: 0.98 }}
-          transition={{ type: "spring", stiffness: 520, damping: 38 }}
+          transition={springs.pop}
           role="toolbar"
           aria-label="Bulk actions"
           className="absolute bottom-5 left-1/2 z-20 flex max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-lg border border-line bg-raised p-1 pl-3 shadow-float"
         >
-          <motion.span key={n} initial={{ opacity: 0.4, y: -2 }} animate={{ opacity: 1, y: 0 }} className="mr-2 whitespace-nowrap text-[12px] text-fg-2 tabular-nums">
-            {compact ? n : t("bulk.selected", { count: n })}
-          </motion.span>
+          <span className="mr-2 whitespace-nowrap text-[12px] text-fg-2">
+            <AnimatedNumber value={n} className="font-medium text-fg" />
+            {!compact && <> {t("bulk.selectedWord", { count: n })}</>}
+          </span>
           <span className="mx-1 h-5 w-px bg-line" />
           <Picker
             side="top"
@@ -122,7 +125,18 @@ export function BulkBar({ ids, onClear, spamView, compact }: { ids: string[]; on
             compact={compact}
             icon={<ShieldAlert className="size-3.5" />}
             label={spamView ? t("bulk.notSpam") : t("bulk.spam")}
-            onClick={() => run({ ids, patch: { spam: !spamView } }, spamView ? t("bulk.unspammed", { count: n }) : t("bulk.spammed", { count: n }))}
+            onClick={() => {
+              const those = [...ids];
+              bulk.mutate(
+                { ids: those, patch: { spam: !spamView } },
+                {
+                  onSuccess: () =>
+                    toast.success(spamView ? t("bulk.unspammed", { count: n }) : t("bulk.spammed", { count: n }), {
+                      action: { label: t("toast.undo"), onClick: () => bulk.mutate({ ids: those, patch: { spam: spamView } }) },
+                    }),
+                },
+              );
+            }}
           />
           <Tooltip content={t("bulk.delete")}>
             <Button
