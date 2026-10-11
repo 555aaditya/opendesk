@@ -12,9 +12,14 @@ import type {
   Notification,
   Page,
   Ticket,
+  Workspace,
 } from "../api/types";
 import { qk, removeFromList, upsertInList } from "../queries";
+import { updateWorkspace, useSession } from "../session";
 import { patchTicketEverywhere, removeTicketEverywhere } from "../ticketCache";
+
+// Events that can tick off a setup checklist step (contracts/api.md "Onboarding").
+const onboardingResources = new Set(["mailbox", "member", "tag", "kb_article", "workspace"]);
 
 export type ApplyContext = {
   me: string;
@@ -107,6 +112,7 @@ function patchContactLists(qc: QueryClient, c: Contact | null, removeId?: string
 export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext): void {
   const d = env.data as Record<string, unknown>;
   const [resource, verb] = splitType(env.type);
+  if (onboardingResources.has(resource) && verb !== "deleted") void qc.invalidateQueries({ queryKey: qk.onboarding });
 
   switch (env.type) {
     case "ticket.created":
@@ -184,6 +190,17 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
     return;
   }
 
+  if (resource === "workspace") {
+    const w = d.workspace as Workspace | undefined;
+    if (w) {
+      qc.setQueryData(qk.workspace, w);
+      updateWorkspace(w);
+    }
+    void qc.invalidateQueries({ queryKey: qk.assignment });
+    void qc.invalidateQueries({ queryKey: qk.businessHours });
+    return;
+  }
+
   if (resource === "member") {
     if (verb === "removed") {
       const uid = d.user_id as string;
@@ -191,12 +208,22 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       if (uid === ctx.me) ctx.onSelfMembershipChanged?.();
     } else {
       const m = d.member as Member;
+      const before = qc.getQueryData<Member[]>(qk.members)?.find((x) => x.user.id === m.user.id);
       qc.setQueryData<Member[]>(qk.members, (old) => {
         if (!old) return old;
         const i = old.findIndex((x) => x.user.id === m.user.id);
         return i >= 0 ? old.map((x, j) => (j === i ? m : x)) : [...old, m];
       });
-      if (m.user.id === ctx.me) ctx.onSelfMembershipChanged?.();
+      // Assignees embed the member's picture.
+      if (before && before.user.avatar_url !== m.user.avatar_url) void qc.invalidateQueries({ queryKey: ["tickets"] });
+      if (m.user.id === ctx.me) {
+        const roleChanged = verb !== "updated" || !before || before.role !== m.role;
+        if (roleChanged) ctx.onSelfMembershipChanged?.();
+        else {
+          const u = useSession.getState().user;
+          if (u && u.avatar_url !== m.user.avatar_url) useSession.setState({ user: { ...u, avatar_url: m.user.avatar_url, avatar_source: m.user.avatar_source } });
+        }
+      }
     }
     return;
   }

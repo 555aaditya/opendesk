@@ -32,7 +32,8 @@ import {
   TEAM,
   type TeamKey,
 } from "./content";
-import { contactRef, db, userRef, type WsData } from "./db";
+import { contactRef, db, defaultRouting, userRef, type WsData } from "./db";
+import { logoMark, portrait } from "./avatars";
 import { teammatePresence, type Meta } from "./gateway";
 import { seedDefaultLabels } from "./labels";
 import { labelName, seedFieldnoteFields, seedFieldnoteLabels, seedTicketTypes } from "./seedLabels";
@@ -73,6 +74,9 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
       slug,
       widget_key: `wk_${slug}_${uuid().slice(0, 8)}`,
       settings: {},
+      avatar_url: null,
+      avatar_source: null,
+      images: { help_center_logo: null, help_center_favicon: null, widget_avatar: null, widget_launcher: null },
       created_at: ago(400 * DAY),
     },
     members: [],
@@ -107,6 +111,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     billing: defaultBilling(),
     ai: { enabled: true, auto_triage: false, auto_summarize: false, widget_answers: false, tone: "friendly", reply_language: "customer", instructions: "" },
     aiUsage: [],
+    routing: defaultRouting(),
   };
 }
 
@@ -134,7 +139,9 @@ function seedUsers() {
       id: uuid(),
       email: p.email,
       name: p.name,
-      avatar_url: "",
+      // Maya uploaded a photo, Jonas and Lea signed in with Google; the others have none.
+      avatar_url: p.key === "maya" || p.key === "jonas" || p.key === "lea" ? portrait(p.email) : null,
+      avatar_source: p.key === "maya" ? "upload" : p.key === "jonas" || p.key === "lea" ? "oauth" : null,
       email_verified: true,
       totp_enabled: p.key === "jonas",
       created_at: ago(int(120, 380) * DAY),
@@ -162,11 +169,32 @@ function seedFieldnote(): WsData {
   };
   ws.widget = { greeting: "Hi! Ask us anything about Fieldnote.", require_email: true, enabled: true, allowed_origins: ["https://fieldnote.app", "https://www.fieldnote.app"] };
 
-  TEAM.forEach((p, i) => ws.members.push({ user_id: db.users[i].id, role: p.role, created_at: ago((380 - i * 40) * DAY) }));
+  const availability = { maya: "online", jonas: "online", priya: "away", sam: "online", lea: "offline", theo: "online" } as const;
+  TEAM.forEach((p, i) =>
+    ws.members.push({
+      user_id: db.users[i].id,
+      role: p.role,
+      created_at: ago((380 - i * 40) * DAY),
+      availability: availability[p.key],
+      max_open_tickets: p.key === "sam" ? 12 : null,
+      last_seen_at: ago((i + 1) * 7 * MIN),
+    }),
+  );
+  ws.workspace.avatar_url = logoMark("Fieldnote");
+  ws.workspace.avatar_source = "upload";
+  ws.workspace.images.help_center_favicon = logoMark("Fieldnote");
+  ws.routing.autoAwayMinutes = 30;
+  ws.routing.widgetSeen = true;
+  ws.routing.hours = {
+    enabled: true,
+    schedule: { mon: [{ start: "08:00", end: "18:00" }], tue: [{ start: "08:00", end: "18:00" }], wed: [{ start: "08:00", end: "18:00" }], thu: [{ start: "08:00", end: "18:00" }], fri: [{ start: "08:00", end: "16:00" }], sat: [], sun: [] },
+    holidays: [{ date: "2026-12-24", name: "Christmas Eve" }, { date: "2026-12-25", name: "Christmas Day" }, { date: "2027-01-01", name: "New Year's Day" }],
+  };
   ws.teams = [
     { id: uuid(), name: "Support", member_ids: [uid("maya"), uid("jonas"), uid("priya"), uid("sam")], created_at: ago(300 * DAY) },
     { id: uuid(), name: "Billing", member_ids: [uid("lea"), uid("maya")], created_at: ago(280 * DAY) },
   ];
+  ws.routing.rules = [{ target_type: "team", target_id: ws.teams[1].id, mode: "load_balanced" }];
   const teamId = (n: "Support" | "Billing" | null) => (n ? ws.teams.find((t) => t.name === n)!.id : null);
 
   ws.invitations = [
@@ -177,9 +205,9 @@ function seedFieldnote(): WsData {
   // Tags, SLA, mailboxes.
   seedFieldnoteLabels(ws);
   const sla: SlaPolicy[] = [
-    { id: uuid(), name: "Urgent", priority: "urgent", first_response_minutes: 60, resolution_minutes: 8 * 60, enabled: true, position: 0 },
-    { id: uuid(), name: "High priority", priority: "high", first_response_minutes: 2 * 60, resolution_minutes: 24 * 60, enabled: true, position: 1 },
-    { id: uuid(), name: "Standard", priority: null, first_response_minutes: 8 * 60, resolution_minutes: 3 * 24 * 60, enabled: true, position: 2 },
+    { id: uuid(), name: "Urgent", priority: "urgent", first_response_minutes: 60, resolution_minutes: 8 * 60, business_hours: false, enabled: true, position: 0 },
+    { id: uuid(), name: "High priority", priority: "high", first_response_minutes: 2 * 60, resolution_minutes: 24 * 60, business_hours: true, enabled: true, position: 1 },
+    { id: uuid(), name: "Standard", priority: null, first_response_minutes: 8 * 60, resolution_minutes: 3 * 24 * 60, business_hours: true, enabled: true, position: 2 },
   ];
   ws.sla = sla;
 
@@ -240,6 +268,9 @@ function seedFieldnote(): WsData {
     id: uuid(),
     name: c.name,
     domain: c.domain,
+    // Most companies have a website icon, one uploaded its logo, a few have nothing usable.
+    avatar_url: i % 4 === 3 ? null : logoMark(c.name),
+    avatar_source: i % 4 === 3 ? null : i === 0 ? "upload" : "domain",
     notes: c.notes,
     custom: { plan: ["Enterprise", "Business", "Team", "Startup"][i % 4] },
     tags: [],
@@ -276,8 +307,10 @@ function seedFieldnote(): WsData {
       email,
       name,
       phone: chance(0.4) ? `+49 30 ${int(1000000, 9999999)}` : "",
-      avatar_url: "",
-      company: company ? { id: company.id, name: company.name, domain: company.domain } : null,
+      // Roughly a third have a picture: Gravatar for most, the verified chat widget for some.
+      avatar_url: i % 3 === 0 ? portrait(email) : null,
+      avatar_source: i % 3 === 0 ? (i % 2 === 0 ? "gravatar" : "widget") : null,
+      company: company ? { id: company.id, name: company.name, domain: company.domain, avatar_url: company.avatar_url } : null,
       external_id: chance(0.5) ? `usr_${int(10000, 99999)}` : null,
       notes: i === 0 ? "IT lead. Prefers email, very responsive. Escalate SSO issues to Jonas." : "",
       custom: chance(0.5) ? { plan: pick(["Team", "Business", "Enterprise"]), seats: int(3, 240) } : {},
@@ -650,7 +683,7 @@ function seedLumen(): WsData {
     { user_id: db.users[0].id, role: "agent", created_at: ago(60 * DAY) },
     { user_id: db.users[3].id, role: "owner", created_at: ago(200 * DAY) },
   ];
-  ws.sla = [{ id: uuid(), name: "Default", priority: null, first_response_minutes: 240, resolution_minutes: 2880, enabled: true, position: 0 }];
+  ws.sla = [{ id: uuid(), name: "Default", priority: null, first_response_minutes: 240, resolution_minutes: 2880, business_hours: false, enabled: true, position: 0 }];
   seedDefaultLabels(ws);
   ws.mailboxes = [
     {
@@ -679,7 +712,8 @@ function seedLumen(): WsData {
     email: `${name.split(" ")[0].toLowerCase()}@example.com`,
     name,
     phone: "",
-    avatar_url: "",
+    avatar_url: null,
+    avatar_source: null,
     company: null,
     external_id: null,
     notes: "",

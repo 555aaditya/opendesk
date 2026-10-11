@@ -21,20 +21,20 @@ export default function Profile() {
   const role = useRole();
   const workspace = useSession((s) => s.memberships.find((m) => m.workspace.id === s.workspaceId)?.workspace.name);
   const [name, setName] = useState(user.name);
-  const [avatar, setAvatar] = useState(user.avatar_url);
+  const [avatar, setAvatar] = useState(user.avatar_url ?? "");
   useEffect(() => {
     setName(user.name);
-    setAvatar(user.avatar_url);
+    setAvatar(user.avatar_url ?? "");
   }, [user.name, user.avatar_url]);
 
-  const dirty = name.trim() !== user.name || avatar.trim() !== user.avatar_url;
+  const dirty = name.trim() !== user.name || avatar.trim() !== (user.avatar_url ?? "");
   const validAvatar = !avatar.trim() || /^https:\/\/\S+$/i.test(avatar.trim());
 
   const save = useMutation({
     mutationFn: () => api.me.update({ name: name.trim(), avatar_url: avatar.trim() }),
     onMutate: () => {
       const prev: User = user;
-      updateUser({ ...user, name: name.trim(), avatar_url: avatar.trim() });
+      updateUser({ ...user, name: name.trim(), avatar_url: avatar.trim() || null });
       return { prev };
     },
     onError: (e, _v, ctx) => {
@@ -108,7 +108,7 @@ export default function Profile() {
               variant="ghost"
               onClick={() => {
                 setName(user.name);
-                setAvatar(user.avatar_url);
+                setAvatar(user.avatar_url ?? "");
               }}
             >
               {t("profile.discard")}

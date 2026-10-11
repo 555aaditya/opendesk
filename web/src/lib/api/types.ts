@@ -2,16 +2,21 @@
 
 export type Role = "owner" | "admin" | "agent" | "viewer";
 
+/** Where a picture came from (contracts/api.md "Profile pictures and logos"). */
+export type AvatarSource = "upload" | "oauth" | "gravatar" | "domain" | "widget";
+
 export type User = {
   id: string;
   email: string;
   name: string;
-  avatar_url: string;
+  /** null when there is no picture: show initials. */
+  avatar_url: string | null;
+  avatar_source: AvatarSource | null;
   email_verified: boolean;
   totp_enabled: boolean;
   created_at: string;
 };
-export type UserRef = { id: string; name: string; email: string; avatar_url: string };
+export type UserRef = { id: string; name: string; email: string; avatar_url: string | null };
 
 export type WorkspaceSettings = {
   brand_color?: string;
@@ -19,7 +24,12 @@ export type WorkspaceSettings = {
   help_center_enabled?: boolean;
   help_center_title?: string;
   csat_enabled?: boolean;
-  auto_assign?: "none" | "round_robin";
+  /** The workspace default assignment mode; see Assignment. */
+  auto_assign?: AssignMode;
+  /** Look up contact pictures on Gravatar. Default false. */
+  gravatar?: boolean;
+  /** Fetch company logos from the company's website. Default true. */
+  domain_logos?: boolean;
   /** Default language (BCP 47) for customer-facing pages when the visitor's browser has no match. */
   locale?: string;
   ai?: AISettings;
@@ -36,10 +46,29 @@ export type Workspace = {
   slug: string;
   widget_key: string;
   settings: WorkspaceSettings;
+  /** The workspace logo. */
+  avatar_url: string | null;
+  avatar_source: "upload" | null;
+  images: WorkspaceImages;
   created_at: string;
 };
+export type WorkspaceImageSlot = "help_center_logo" | "help_center_favicon" | "widget_avatar" | "widget_launcher";
+export type WorkspaceImages = Record<WorkspaceImageSlot, string | null>;
 export type Membership = { workspace: Workspace; role: Role };
-export type Member = { user: UserRef; role: Role; created_at: string };
+export type Availability = "online" | "away" | "offline";
+export type Member = {
+  user: UserRef & { avatar_source: AvatarSource | null };
+  role: Role;
+  /** What the member set. */
+  availability: Availability;
+  /** availability, or "away" when auto-away applies. */
+  presence: Availability;
+  /** Auto-assignment cap on open and pending tickets; null is no cap. */
+  max_open_tickets: number | null;
+  open_tickets: number;
+  last_seen_at: string | null;
+  created_at: string;
+};
 export type Invitation = {
   id: string;
   email: string;
@@ -50,13 +79,14 @@ export type Invitation = {
 };
 export type Team = { id: string; name: string; member_ids: string[]; created_at: string };
 
-export type CompanyRef = { id: string; name: string; domain: string };
+export type CompanyRef = { id: string; name: string; domain: string; avatar_url?: string | null };
 export type Contact = {
   id: string;
   email: string | null;
   name: string;
   phone: string;
-  avatar_url: string;
+  avatar_url: string | null;
+  avatar_source: AvatarSource | null;
   company: CompanyRef | null;
   external_id: string | null;
   notes: string;
@@ -68,11 +98,14 @@ export type Contact = {
   created_at: string;
   updated_at: string;
 };
-export type ContactRef = { id: string; email: string | null; name: string; avatar_url: string };
+export type ContactRef = { id: string; email: string | null; name: string; avatar_url: string | null };
 export type Company = {
   id: string;
   name: string;
   domain: string;
+  /** The company logo. */
+  avatar_url: string | null;
+  avatar_source: "upload" | "domain" | null;
   notes: string;
   custom: Record<string, unknown>;
   tags: TagRef[];
@@ -283,9 +316,52 @@ export type SlaPolicy = {
   priority: Priority | null;
   first_response_minutes: number;
   resolution_minutes: number;
+  /** Count only the workspace's open business hours. */
+  business_hours: boolean;
   enabled: boolean;
   position: number;
 };
+
+// Triage, assignment and setup (contracts/api.md "Assignment", "Triage", "Business hours", "Onboarding").
+export type AssignMode = "none" | "round_robin" | "load_balanced";
+export type AssignmentRule = { target_type: "mailbox" | "team"; target_id: string; mode: AssignMode };
+export type Assignment = {
+  /** settings.auto_assign */
+  mode: AssignMode;
+  rules: AssignmentRule[];
+  /** 0 is off, else 10..1440. */
+  auto_away_minutes: number;
+};
+export type TriageField = "priority" | "labels";
+export type TriageSettings = {
+  auto_triage: boolean;
+  fields: TriageField[];
+  assign_after_triage: boolean;
+  /** AI is configured and on for the workspace. */
+  available: boolean;
+};
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export type TimeRange = { start: string; end: string };
+export type Holiday = { date: string; name: string };
+export type BusinessHours = {
+  enabled: boolean;
+  timezone: string;
+  /** "HH:MM", 24h, up to 3 ranges a day. */
+  schedule: Record<Weekday, TimeRange[]>;
+  holidays: Holiday[];
+};
+export type OnboardingStepId =
+  | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_jev";
+export type OnboardingStep = {
+  id: OnboardingStepId;
+  title: string;
+  description: string;
+  done: boolean;
+  /** App path that completes the step. */
+  href: string;
+  requires: "admin" | "agent";
+};
+export type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
 
 export type AutomationTrigger = "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
 export type ConditionField =
@@ -511,7 +587,7 @@ export type CsatSurvey = {
   locale: string;
 };
 
-export type PublicHelpHome = { title: string; collections: KbCollection[]; featured: KbArticle[]; locale?: string };
+export type PublicHelpHome = { title: string; collections: KbCollection[]; featured: KbArticle[]; locale?: string; logo_url?: string | null; favicon_url?: string | null };
 export type PublicCollection = { collection: KbCollection; articles: KbArticle[] };
 
 export type TicketPatch = {

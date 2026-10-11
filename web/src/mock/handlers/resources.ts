@@ -41,7 +41,7 @@ function setCompany(ws: WsData, c: Contact, companyId: unknown) {
   else if (typeof companyId === "string") {
     const co = ws.companies.find((x) => x.id === companyId);
     if (!co) throw invalid("Unknown company");
-    c.company = { id: co.id, name: co.name, domain: co.domain };
+    c.company = { id: co.id, name: co.name, domain: co.domain, avatar_url: co.avatar_url };
   }
 }
 
@@ -92,7 +92,7 @@ export function registerResources() {
     const name = s(ctx, "name")?.trim() || email?.split("@")[0] || "";
     if (!name) throw invalid("Name or email is required");
     if (email && ctx.ws.contacts.some((c) => c.email === email)) throw new HttpError(409, "conflict", "A contact with this email already exists");
-    const c: Contact = { id: uuid(), email, name: name.slice(0, 80), phone: s(ctx, "phone") ?? "", avatar_url: "", company: null, external_id: s(ctx, "external_id") ?? null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    const c: Contact = { id: uuid(), email, name: name.slice(0, 80), phone: s(ctx, "phone") ?? "", avatar_url: null, avatar_source: null, company: null, external_id: s(ctx, "external_id") ?? null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
     setCompany(ctx.ws, c, ctx.body.company_id);
     writeLabels(ctx, "contacts", c);
     writeFields(ctx, "contact", c);
@@ -142,7 +142,7 @@ export function registerResources() {
   get("/v1/companies/:id", (ctx) => companyOut(ctx.ws, findCompany(ctx)));
   post("/v1/companies", (ctx) => {
     const name = required(ctx, "name").slice(0, 80);
-    const c: Company = { id: uuid(), name, domain: (s(ctx, "domain") ?? "").toLowerCase(), notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    const c: Company = { id: uuid(), name, domain: (s(ctx, "domain") ?? "").toLowerCase(), avatar_url: null, avatar_source: null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
     writeLabels(ctx, "companies", c);
     writeFields(ctx, "company", c);
     ctx.ws.companies.push(c);
@@ -156,7 +156,7 @@ export function registerResources() {
     writeFields(ctx, "company", c);
     assign(c, ctx.body, ["name", "domain", "notes", "custom"]);
     c.updated_at = nowIso();
-    for (const ct of ctx.ws.contacts) if (ct.company?.id === c.id) ct.company = { id: c.id, name: c.name, domain: c.domain };
+    for (const ct of ctx.ws.contacts) if (ct.company?.id === c.id) ct.company = { id: c.id, name: c.name, domain: c.domain, avatar_url: c.avatar_url };
     publish(ctx.ws, "company.updated", { company: companyOut(ctx.ws, c) });
     return c;
   });
@@ -206,11 +206,12 @@ export function registerResources() {
       priority: (s(ctx, "priority") as Priority | undefined) ?? null,
       first_response_minutes: positive(ctx.body.first_response_minutes, "first_response_minutes"),
       resolution_minutes: positive(ctx.body.resolution_minutes, "resolution_minutes"),
+      business_hours: ctx.body.business_hours === true,
       enabled: ctx.body.enabled !== false,
       position: typeof ctx.body.position === "number" ? ctx.body.position : ctx.ws.sla.length,
     }),
     update: (ctx, row) => {
-      assign(row, ctx.body, ["name", "enabled", "position"]);
+      assign(row, ctx.body, ["name", "enabled", "position", "business_hours"]);
       if ("priority" in ctx.body) row.priority = (s(ctx, "priority") as Priority | undefined) ?? null;
       if ("first_response_minutes" in ctx.body) row.first_response_minutes = positive(ctx.body.first_response_minutes, "first_response_minutes");
       if ("resolution_minutes" in ctx.body) row.resolution_minutes = positive(ctx.body.resolution_minutes, "resolution_minutes");

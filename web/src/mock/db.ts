@@ -34,9 +34,31 @@ import type {
   WidgetSettings,
   Workspace,
   Attachment,
+  AssignmentRule,
+  Availability,
+  BusinessHours,
+  TriageField,
 } from "@/lib/api/types";
 
-export type MemberRow = { user_id: string; role: Role; created_at: string };
+export type MemberRow = {
+  user_id: string;
+  role: Role;
+  created_at: string;
+  availability?: Availability;
+  max_open_tickets?: number | null;
+  last_seen_at?: string | null;
+  onboarding_dismissed?: boolean;
+};
+
+/** Triage and assignment state (handlers/pictures.ts). */
+export type RoutingState = {
+  rules: AssignmentRule[];
+  autoAwayMinutes: number;
+  hours: Omit<BusinessHours, "timezone">;
+  triageFields: TriageField[];
+  assignAfterTriage: boolean;
+  widgetSeen: boolean;
+};
 
 export type WsData = {
   workspace: Workspace;
@@ -75,6 +97,8 @@ export type WsData = {
   ai: AISettings;
   /** AI usage rows, counts only (contracts/ai.md). */
   aiUsage: { feature: AIFeature; user_id: string | null; credits: number; at: string }[];
+  /** Assignment rules, auto-away, business hours and triage options. */
+  routing: RoutingState;
 };
 
 export type Db = {
@@ -109,6 +133,18 @@ export function userRef(id: string | null | undefined): UserRef | null {
 
 export function wsById(id: string | null | undefined): WsData | undefined {
   return db.workspaces.find((w) => w.workspace.id === id);
+}
+
+export function defaultRouting(): RoutingState {
+  const day = [{ start: "09:00", end: "17:00" }];
+  return {
+    rules: [],
+    autoAwayMinutes: 0,
+    hours: { enabled: false, schedule: { mon: day, tue: day, wed: day, thu: day, fri: day, sat: [], sun: [] }, holidays: [] },
+    triageFields: ["priority", "labels"],
+    assignAfterTriage: false,
+    widgetSeen: false,
+  };
 }
 
 export function contactRef(c: Contact) {

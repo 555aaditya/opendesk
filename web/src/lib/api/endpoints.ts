@@ -84,6 +84,23 @@ export type CreateMailboxBody = {
 
 const pub = { auth: false, workspace: false } as const;
 
+/** One `file` field, as every picture upload expects. */
+function imageForm(file: File | Blob): FormData {
+  const fd = new FormData();
+  fd.append("file", file);
+  return fd;
+}
+
+/** Upload, remove and refresh routes for a contact or company picture. */
+function pictureRoutes<R>(base: string) {
+  return {
+    uploadAvatar: (id: string, file: File | Blob) => http.put<R>(`${base}/${id}/avatar`, imageForm(file)),
+    removeAvatar: (id: string) => http.del<R>(`${base}/${id}/avatar`),
+    /** Looks the automatic sources up again now (202). */
+    refreshAvatar: (id: string) => http.post<void>(`${base}/${id}/avatar/refresh`),
+  };
+}
+
 export const api = {
   auth: {
     config: () => http.get<T.AuthConfig>("/v1/auth/config", pub),
@@ -108,7 +125,13 @@ export const api = {
   },
   me: {
     get: () => http.get<T.Me>("/v1/me", { workspace: false }),
+    /** `avatar_url` is an https picture to copy (processed in the background), or "" to remove it. */
     update: (b: { name?: string; avatar_url?: string }) => http.patch<T.User>("/v1/me", b, { workspace: false }),
+    /** PNG, JPEG, GIF or WebP, at most 5 MB. */
+    uploadAvatar: (file: File | Blob) => http.put<T.User>("/v1/me/avatar", imageForm(file), { workspace: false }),
+    removeAvatar: () => http.del<T.User>("/v1/me/avatar", undefined, { workspace: false }),
+    /** Marks you as seen, for auto-away. */
+    heartbeat: () => http.post<void>("/v1/me/heartbeat", undefined, { workspace: false }),
     password: (current_password: string, new_password: string) =>
       http.post<void>("/v1/me/password", { current_password, new_password }, { workspace: false }),
     sessions: () => http.get<T.Session[] | T.Page<T.Session>>("/v1/me/sessions", { workspace: false }),
@@ -122,11 +145,36 @@ export const api = {
     delete: (confirm_name: string) => http.del("/v1/workspace", { confirm_name }),
     transfer: (user_id: string) => http.post<void>("/v1/workspace/transfer", { user_id }),
     rotateWidgetSecret: () => http.post<{ secret: string }>("/v1/workspace/widget-secret/rotate"),
+    /** `logo` is the workspace avatar_url; the others fill `images`. Admin. */
+    uploadImage: (slot: "logo" | T.WorkspaceImageSlot, file: File | Blob) =>
+      http.put<T.Workspace>(`/v1/workspace/images/${slot}`, imageForm(file)),
+    removeImage: (slot: "logo" | T.WorkspaceImageSlot) => http.del<T.Workspace>(`/v1/workspace/images/${slot}`),
   },
   members: {
     list: () => http.get<T.Page<T.Member>>("/v1/members"),
     update: (userId: string, role: T.Role) => http.patch<T.Member>(`/v1/members/${userId}`, { role }),
     remove: (userId: string) => http.del(`/v1/members/${userId}`),
+    /** `userId` may be "me". Members set their own availability; admins anyone's, and the cap. */
+    setAvailability: (userId: string, b: { availability?: T.Availability; max_open_tickets?: number | null }) =>
+      http.patch<T.Member>(`/v1/members/${userId}/availability`, b),
+  },
+  assignment: {
+    get: () => http.get<T.Assignment>("/v1/assignment"),
+    /** `rules` replaces the whole list. Admin. */
+    update: (b: Partial<T.Assignment>) => http.patch<T.Assignment>("/v1/assignment", b),
+  },
+  triage: {
+    get: () => http.get<T.TriageSettings>("/v1/triage"),
+    update: (b: Partial<Omit<T.TriageSettings, "available">>) => http.patch<T.TriageSettings>("/v1/triage", b),
+  },
+  businessHours: {
+    get: () => http.get<T.BusinessHours>("/v1/business-hours"),
+    /** The full object; `timezone` sets the workspace timezone. Admin. */
+    put: (b: T.BusinessHours) => http.put<T.BusinessHours>("/v1/business-hours", b),
+  },
+  onboarding: {
+    get: () => http.get<T.Onboarding>("/v1/onboarding"),
+    dismiss: () => http.post<void>("/v1/onboarding/dismiss"),
   },
   invitations: {
     list: () => http.get<T.Page<T.Invitation>>("/v1/invitations"),
@@ -179,10 +227,12 @@ export const api = {
     ...crud<T.Contact, Partial<Pick<T.Contact, "name" | "email" | "phone" | "notes" | "external_id" | "blocked" | "custom">> & { company_id?: string | null } & LabelWrites>("/v1/contacts"),
     search: (q: ContactListQuery) => http.get<T.Page<T.Contact>>("/v1/contacts", { query: listQuery(q) }),
     tickets: (id: string, q?: ListQuery) => http.get<T.Page<T.Ticket>>(`/v1/contacts/${id}/tickets`, { query: q }),
+    ...pictureRoutes<T.Contact>("/v1/contacts"),
   },
   companies: {
     ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
     search: (q: CompanyListQuery) => http.get<T.Page<T.Company>>("/v1/companies", { query: listQuery(q) }),
+    ...pictureRoutes<T.Company>("/v1/companies"),
   },
   /** Labels (contracts/api.md "Labels and custom fields"). Writes need admin. */
   tags: {
@@ -206,7 +256,7 @@ export const api = {
   },
   savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string }>("/v1/saved-replies"),
   views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number }>("/v1/views"),
-  slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id">>("/v1/sla-policies"),
+  slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id" | "business_hours"> & { business_hours?: boolean }>("/v1/sla-policies"),
   automations: crud<T.Automation, Omit<T.Automation, "id" | "run_count">>("/v1/automations"),
   kb: {
     collections: crud<T.KbCollection, { name: string; slug?: string; description: string; position?: number }>("/v1/kb/collections"),

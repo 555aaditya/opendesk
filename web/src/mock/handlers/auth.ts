@@ -159,8 +159,13 @@ export function registerAuth() {
       if (!name.trim()) throw invalid("Name can't be empty");
       u.name = name.trim().slice(0, 80);
     }
+    // The API copies the picture behind an https URL and serves it from /v1/images; "" removes it.
     const avatar = s(ctx, "avatar_url");
-    if (avatar !== undefined) u.avatar_url = avatar;
+    if (avatar !== undefined) {
+      if (avatar && !/^https:\/\/\S+$/i.test(avatar)) throw invalid("Use an https URL for the picture");
+      u.avatar_url = avatar || null;
+      u.avatar_source = avatar ? "upload" : null;
+    }
     return u;
   });
   post("/v1/me/password", (ctx) => {

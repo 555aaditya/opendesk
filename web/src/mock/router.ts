@@ -45,6 +45,7 @@ export function route(method: string, pattern: string, handler: Handler) {
 export const get = (p: string, h: Handler) => route("GET", p, h);
 export const post = (p: string, h: Handler) => route("POST", p, h);
 export const patch = (p: string, h: Handler) => route("PATCH", p, h);
+export const put = (p: string, h: Handler) => route("PUT", p, h);
 export const del = (p: string, h: Handler) => route("DELETE", p, h);
 
 /** Mark a handler result as an explicit response. */

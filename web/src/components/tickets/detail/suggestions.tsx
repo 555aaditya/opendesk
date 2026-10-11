@@ -74,7 +74,7 @@ export function mentionExtension(getMembers: () => Member[], enabled: () => bool
           .filter((m) => m.role !== "viewer")
           .filter((m) => !query || m.user.name.toLowerCase().includes(query.toLowerCase()) || m.user.email.toLowerCase().startsWith(query.toLowerCase()))
           .slice(0, 6)
-          .map((m) => ({ kind: "mention", id: m.user.id, label: m.user.name, sub: m.user.email, avatar: m.user.avatar_url })),
+          .map((m) => ({ kind: "mention", id: m.user.id, label: m.user.name, sub: m.user.email, avatar: m.user.avatar_url ?? undefined })),
       render: renderer("mention"),
     },
   });

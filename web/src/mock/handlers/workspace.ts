@@ -10,6 +10,7 @@ import { seedDefaultLabels } from "../labels";
 import { isRecord, nowIso, randomToken, slugify, uuid, DAY } from "../util";
 import { checkLimit } from "./billing";
 import { crud, assign } from "./crud";
+import { registerPictures } from "./pictures";
 
 const ROLES: Role[] = ["owner", "admin", "agent", "viewer"];
 
@@ -22,9 +23,23 @@ function requireAdmin(ws: WsData) {
   if (r !== "owner" && r !== "admin") throw forbidden("Only admins can change this");
 }
 
-function memberOut(ws: WsData, user_id: string): Member {
+export function memberOut(ws: WsData, user_id: string): Member {
   const m = ws.members.find((x) => x.user_id === user_id)!;
-  return { user: userRef(m.user_id)!, role: m.role, created_at: m.created_at };
+  const u = db.users.find((x) => x.id === m.user_id);
+  const availability = m.availability ?? "online";
+  const lastSeen = m.last_seen_at ?? null;
+  const idle = ws.routing.autoAwayMinutes > 0 && (!lastSeen || Date.now() - Date.parse(lastSeen) > ws.routing.autoAwayMinutes * 60_000);
+  const open = ws.tickets.filter((t) => t.assignee?.id === m.user_id && (t.status === "open" || t.status === "pending") && !ws.deletedTickets.has(t.id)).length;
+  return {
+    user: { ...userRef(m.user_id)!, avatar_source: u?.avatar_source ?? null },
+    role: m.role,
+    availability,
+    presence: availability === "online" && idle ? "away" : availability,
+    max_open_tickets: m.max_open_tickets ?? null,
+    open_tickets: open,
+    last_seen_at: lastSeen,
+    created_at: m.created_at,
+  };
 }
 
 function audit(ws: WsData, action: string, entity_type: string, entity_id: string | null, data: Record<string, unknown> = {}) {
@@ -50,12 +65,13 @@ export function seedNewWorkspace(name: string): WsData {
   ws.members = [{ user_id: db.meId, role: "owner", created_at: nowIso() }];
   seedDefaultLabels(ws);
   ws.views = [{ id: uuid(), name: "Urgent", shared: true, filters: { status: ["open"], priority: ["urgent", "high"] }, position: 0 }];
-  ws.sla = [{ id: uuid(), name: "Standard", priority: null, first_response_minutes: 480, resolution_minutes: 4320, enabled: true, position: 0 }];
+  ws.sla = [{ id: uuid(), name: "Standard", priority: null, first_response_minutes: 480, resolution_minutes: 4320, business_hours: false, enabled: true, position: 0 }];
   db.workspaces.push(ws);
   return ws;
 }
 
 export function registerWorkspace() {
+  registerPictures();
   post("/v1/workspaces", (ctx) => {
     const name = required(ctx, "name").slice(0, 60);
     const ws = seedNewWorkspace(name);

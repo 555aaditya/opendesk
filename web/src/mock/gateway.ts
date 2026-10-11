@@ -70,7 +70,7 @@ class FakeChannel implements RtChannel {
             this.selfMeta = {
               user_id: u.id,
               name: u.name,
-              avatar: u.avatar_url,
+              avatar: u.avatar_url ?? "",
               state: "viewing",
               online_at: new Date().toISOString(),
               phx_ref: `ref${nextRef()}`,

@@ -57,6 +57,10 @@ export const qk = {
   billingUsage: (r: { from: string; to: string }) => ["billing", "usage", r] as const,
   aiConfig: ["ai", "config"] as const,
   aiSearch: (q: string) => ["ai", "search", q] as const,
+  assignment: ["assignment"] as const,
+  triage: ["triage"] as const,
+  businessHours: ["business-hours"] as const,
+  onboarding: ["onboarding"] as const,
 };
 
 const list = <R>(key: readonly unknown[], fn: () => Promise<R[] | Page<R>>) =>
@@ -135,6 +139,10 @@ export const q = {
     }),
   aiSearch: (query: string) => queryOptions({ queryKey: qk.aiSearch(query), queryFn: () => api.ai.search(query), enabled: query.trim().length > 1 }),
   widgetSettings: () => queryOptions({ queryKey: qk.widgetSettings, queryFn: api.widgetSettings.get }),
+  assignment: () => queryOptions({ queryKey: qk.assignment, queryFn: api.assignment.get }),
+  triage: () => queryOptions({ queryKey: qk.triage, queryFn: api.triage.get }),
+  businessHours: () => queryOptions({ queryKey: qk.businessHours, queryFn: api.businessHours.get }),
+  onboarding: () => queryOptions({ queryKey: qk.onboarding, queryFn: api.onboarding.get, staleTime: 30_000 }),
   publicHelp: (slug: string) => queryOptions({ queryKey: qk.publicHelp(slug), queryFn: () => api.public.help(slug) }),
   publicCollection: (slug: string, c: string) =>
     queryOptions({ queryKey: qk.publicCollection(slug, c), queryFn: () => api.public.collection(slug, c) }),
