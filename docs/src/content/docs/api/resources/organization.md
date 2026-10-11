@@ -1,11 +1,11 @@
 ---
-title: Tags, views and saved replies
+title: Views, labels and saved replies
 description: The resources that organize the inbox.
 ---
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET`, `POST` | `/v1/tags` | List or create tags |
+| `GET`, `POST` | `/v1/tags` | List or create labels ([details](/api/resources/labels-fields/)) |
 | `GET`, `PATCH`, `DELETE` | `/v1/tags/{id}` | |
 | `GET`, `POST` | `/v1/views` | List or create views |
 | `GET`, `PATCH`, `DELETE` | `/v1/views/{id}` | |
@@ -15,8 +15,6 @@ description: The resources that organize the inbox.
 ## Objects
 
 ```ts
-type Tag = { id: string; name: string };
-
 type View = {
   id: string;
   name: string;
@@ -31,6 +29,7 @@ type View = {
     tag?: string;
     channel?: Channel;
     q?: string;
+    fields?: { key: string; op: FieldOp; value: string }[]; // custom field filters
   };
 };
 
@@ -60,4 +59,6 @@ curl https://api.opendesk.sh/v1/saved-replies \
 
 ## Events
 
-`tag.*`, `view.*` and `saved_reply.*` (`created`, `updated`, `deleted`).
+`view.*` and `saved_reply.*` (`created`, `updated`, `deleted`). Label events are listed under [Labels and custom fields](/api/resources/labels-fields/#events).
+
+Labels, label groups and custom fields have [their own page](/api/resources/labels-fields/).

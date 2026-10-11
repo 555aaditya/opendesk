@@ -19,12 +19,14 @@ type Automation = {
   id: string;
   name: string;
   trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
-  conditions: { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag";
-                op: "contains" | "not_contains" | "equals" | "not_equals";
+  conditions: { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag"
+                     | `field.${string}` | `contact.field.${string}`;
+                op: "contains" | "not_contains" | "equals" | "not_equals" | FieldOp;
                 value: string }[];
   actions: { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag"
-                 | "send_reply" | "add_note" | "mark_spam";
-                 value: string }[];
+                 | "send_reply" | "add_note" | "mark_spam" | "set_field";
+                 value: string;
+                 field?: string /* set_field: the ticket field key */ }[];
   enabled: boolean;
   position: number;
   run_count: number;
@@ -40,6 +42,8 @@ type SlaPolicy = {
   position: number;
 };
 ```
+
+Conditions on `field.<key>` (the ticket's custom field) and `contact.field.<key>` (its contact's) take the [operators of the field's type](/api/resources/labels-fields/#filter-and-sort); `equals` and `not_equals` mean `eq` and `ne`. `set_field` writes `value` as a string: `"12.5"`, `"true"`, `"2026-10-11"`, comma separated option ids, or `""` to clear. It is checked when the automation is saved, and skipped at run time if the field was archived or deleted since. `add_tag` respects exclusive label groups.
 
 See [Automations](/guides/automations/) and [SLA policies](/guides/sla-policies/) for how they behave.
 

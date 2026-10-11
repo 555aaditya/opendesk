@@ -7,13 +7,13 @@ Scopes: `contacts:read` to read, `contacts:write` to change.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id` |
+| `GET` | `/v1/contacts` | List contacts. Filters: `q`, `company_id`, `tag`, `field.<key>` |
 | `POST` | `/v1/contacts` | Create a contact |
 | `GET` | `/v1/contacts/{id}` | Get a contact |
 | `PATCH` | `/v1/contacts/{id}` | Update a contact |
 | `DELETE` | `/v1/contacts/{id}` | Delete a contact |
 | `GET` | `/v1/contacts/{id}/tickets` | The contact's tickets |
-| `GET`, `POST` | `/v1/companies` | List or create companies |
+| `GET`, `POST` | `/v1/companies` | List or create companies. Filters: `q`, `tag`, `field.<key>` |
 | `GET`, `PATCH`, `DELETE` | `/v1/companies/{id}` | Get, update or delete a company |
 
 ## Objects
@@ -29,6 +29,8 @@ type Contact = {
   external_id: string | null;
   notes: string;
   custom: Record<string, unknown>;
+  tags: { id: string; name: string; color: LabelColor; group_id: string | null }[];
+  fields: Record<string, FieldValue>;
   blocked: boolean;
   ticket_count: number;
   created_at: string;
@@ -41,6 +43,8 @@ type Company = {
   domain: string;
   notes: string;
   custom: Record<string, unknown>;
+  tags: { id: string; name: string; color: LabelColor; group_id: string | null }[];
+  fields: Record<string, FieldValue>;
   contact_count: number;
   created_at: string;
   updated_at: string;
@@ -48,6 +52,8 @@ type Company = {
 ```
 
 A contact's email is unique within the workspace, and so is its `external_id`, your own id for the person (set by [verified widget sessions](/guides/live-chat/identity-verification/)). A company's domain is unique within the workspace.
+
+Writes to contacts and companies take `tags` (replaces), `add_tags`, `remove_tags` and `fields` (merged, `null` clears), with the same rules as tickets. See [Labels and custom fields](/api/resources/labels-fields/).
 
 ## Examples
 

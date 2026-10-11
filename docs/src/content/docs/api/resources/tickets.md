@@ -33,7 +33,7 @@ type Ticket = {
   contact: ContactRef | null;
   assignee: UserRef | null;
   team_id: string | null;
-  tags: { id: string; name: string }[];
+  tags: { id: string; name: string; color: LabelColor; group_id: string | null }[];
   sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null;
   solved_at: string | null;
@@ -45,6 +45,7 @@ type Ticket = {
   spam: boolean;
   csat: { score: number; comment: string } | null;
   custom: Record<string, unknown>;
+  fields: Record<string, FieldValue>; // custom fields, by key
   created_at: string;
   updated_at: string;
 };
@@ -63,11 +64,12 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
 | `priority` | comma-separated priorities |
 | `assignee` | `me`, `none` or a user id |
 | `team_id`, `mailbox_id`, `contact_id`, `view_id` | ids |
-| `tag` | a tag name |
+| `tag` | a label name |
+| `field.<key>`, `field.<key>[<op>]` | a [custom field filter](/api/resources/labels-fields/#filter-and-sort) |
 | `channel` | `email`, `chat`, `api`, `portal` |
 | `q` | text search |
 | `spam` | `true` or `false` |
-| `sort` | `last_message_at`, `created_at`, `priority`, `due` |
+| `sort` | `last_message_at`, `created_at`, `priority`, `due`, `field.<key>` |
 | `order` | `asc` or `desc` |
 
 Plus [`limit` and `cursor`](/api/pagination/).
@@ -110,7 +112,7 @@ curl https://api.opendesk.sh/v1/tickets \
 | `mailbox_id` | the mailbox to send from, for email tickets |
 | `body_html` | the first message |
 | `kind` | `reply` or `note` |
-| `priority`, `assignee_id`, `team_id`, `tags`, `status` | optional |
+| `priority`, `assignee_id`, `team_id`, `tags`, `fields`, `status` | optional |
 
 An `email` ticket created with a `reply` sends that reply to the contact from the mailbox.
 
@@ -131,7 +133,7 @@ curl -X PATCH https://api.opendesk.sh/v1/tickets/1042 \
   -d '{ "status": "solved", "tags": ["billing", "refund"] }'
 ```
 
-Fields: `subject`, `status`, `priority`, `assignee_id`, `team_id`, `snoozed_until`, `spam`, `tags` (replaces the set), `custom`.
+Fields: `subject`, `status`, `priority`, `assignee_id`, `team_id`, `snoozed_until`, `spam`, `tags` (replaces the set), `add_tags`, `remove_tags`, `fields` (merged, `null` clears), `custom`. See [Labels and custom fields](/api/resources/labels-fields/) for the label rules and value types. Solving a ticket while a required field is empty answers `422 field_required`.
 
 ## Bulk update
 

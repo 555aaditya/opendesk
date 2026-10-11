@@ -25,9 +25,11 @@ All conditions must match. Each condition compares a field with a value.
 | `channel` | `email`, `chat`, `api`, `portal` |
 | `mailbox_id` | the mailbox it arrived on |
 | `priority`, `status` | current values |
-| `tag` | a tag on the ticket |
+| `tag` | a label on the ticket |
+| `field.<key>` | one of the ticket's [custom fields](/guides/labels-and-custom-fields/#custom-fields) |
+| `contact.field.<key>` | one of the contact's custom fields |
 
-Operators are `contains`, `not_contains`, `equals` and `not_equals`. When AI triage has run, a `sentiment` condition can also match its result (`positive`, `neutral`, `negative`, `frustrated`). An automation with no conditions runs for every ticket on its trigger.
+Operators are `contains`, `not_contains`, `equals` and `not_equals`. When AI triage has run, a `sentiment` condition can also match its result (`positive`, `neutral`, `negative`, `frustrated`). Custom field conditions use the operators of the field's type, like `gte` for numbers or `any` for selects, and `set` or `not_set` to check whether it's filled in. An automation with no conditions runs for every ticket on its trigger.
 
 ## Actions
 
@@ -39,7 +41,8 @@ Actions apply in order:
 | `set_priority` | a priority |
 | `assign_user` | a member |
 | `assign_team` | a team |
-| `add_tag`, `remove_tag` | a tag |
+| `add_tag`, `remove_tag` | a label. In an exclusive group, adding one replaces the group's other label |
+| `set_field` | a ticket custom field and its value (empty clears it) |
 | `send_reply` | reply text sent to the customer |
 | `add_note` | an internal note |
 | `mark_spam` | marks the ticket as spam |

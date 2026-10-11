@@ -30,7 +30,7 @@ Every state change that someone else should see is written as an event, in the s
 | Type | Visibility | Extra topics | Data |
 | --- | --- | --- | --- |
 | `ticket.created` | agents | | `{ ticket }` |
-| `ticket.updated` | agents | `user:<assignee>` when the assignee changes | `{ ticket, changes: ["status", "assignee_id", ...] }` |
+| `ticket.updated` | agents | `user:<assignee>` when the assignee changes | `{ ticket, changes: ["status", "assignee_id", "fields", ...] }` |
 | `ticket.deleted` | agents | | `{ ticket_id }` |
 | `message.created` | see below | `contact:<wid>:<cid>` when public | `{ ticket_id, message }` |
 | `message.updated` | agents | | `{ ticket_id, message }`, for delivery status changes |
@@ -41,6 +41,11 @@ Every state change that someone else should see is written as an event, in the s
 | `company.deleted` | agents | | `{ company_id }` |
 | `tag.created`, `tag.updated` | agents | | `{ tag }` |
 | `tag.deleted` | agents | | `{ tag_id }` |
+| `tag.merged` | agents | | `{ tag_id, into }` (records that carried it change without their own events; refetch lists) |
+| `tag_group.created`, `tag_group.updated` | agents | | `{ tag_group }` |
+| `tag_group.deleted` | agents | | `{ tag_group_id }` |
+| `custom_field.created`, `custom_field.updated` | agents | | `{ custom_field }` |
+| `custom_field.deleted` | agents | | `{ custom_field_id, entity, key }` |
 | `mailbox.created`, `mailbox.updated` | agents | | `{ mailbox }` |
 | `mailbox.deleted` | agents | | `{ mailbox_id }` |
 | `member.added`, `member.updated` | agents | `user:<uid>` | `{ member }` |
