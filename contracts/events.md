@@ -47,7 +47,7 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 | type                     | visibility | topics (besides workspace)            | data |
 | ------------------------ | ---------- | ------------------------------------- | ---- |
 | `ticket.created`         | agents     | —                                     | `{ "ticket": Ticket }` |
-| `ticket.updated`         | agents     | `user:<assignee>` when assignee changes | `{ "ticket": Ticket, "changes": ["status","assignee_id",...] }` |
+| `ticket.updated`         | agents     | `user:<assignee>` when assignee changes | `{ "ticket": Ticket, "changes": ["status","assignee_id","tags","fields",...] }` |
 | `ticket.deleted`         | agents     | —                                     | `{ "ticket_id": "..." }` |
 | `message.created`        | agents (note) / public (reply on chat ticket) / agents (reply on email ticket) | `contact:<wid>:<cid>` when public | `{ "ticket_id": "...", "message": Message }` |
 | `message.updated`        | agents     | —                                     | `{ "ticket_id": "...", "message": Message }` (delivery status) |
@@ -55,6 +55,9 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 | `contact.created` / `contact.updated` / `contact.deleted` | agents | — | `{ "contact": Contact }` / `{ "contact_id" }` |
 | `company.created` / `company.updated` / `company.deleted` | agents | — | `{ "company": Company }` / `{ "company_id" }` |
 | `tag.created` / `tag.updated` / `tag.deleted` | agents | — | `{ "tag": Tag }` / `{ "tag_id" }` |
+| `tag.merged`             | agents     | —                                     | `{ "tag_id": "<removed>", "into": Tag }` (records that carried it are updated without per-record events; refetch lists) |
+| `tag_group.created` / `tag_group.updated` / `tag_group.deleted` | agents | — | `{ "tag_group": TagGroup }` / `{ "tag_group_id" }` |
+| `custom_field.created` / `custom_field.updated` / `custom_field.deleted` | agents | — | `{ "custom_field": CustomField }` / `{ "custom_field_id", "entity", "key" }` |
 | `mailbox.created` / `mailbox.updated` / `mailbox.deleted` | agents | — | `{ "mailbox": Mailbox }` / `{ "mailbox_id" }` |
 | `member.added` / `member.updated` / `member.removed` | agents | `user:<uid>` | `{ "member": Member }` / `{ "user_id" }` |
 | `notification.created`   | agents     | `user:<uid>`                          | `{ "notification": Notification }` |
@@ -64,3 +67,6 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 
 Webhooks receive the envelope unchanged (minus `topics`), signed:
 `OD-Signature: t=<unix>,v1=<hex hmac_sha256(secret, "<t>.<body>")>`, `OD-Event-Id`, `OD-Event-Type`.
+
+Reorders (`/v1/tags/reorder`, `/v1/tag-groups/reorder`, `/v1/custom-fields/reorder`) publish one `*.updated` per moved row.
+Deleting a label or field, merging labels and removing select options change records in bulk without a `ticket.updated` per record.

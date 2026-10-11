@@ -24,7 +24,7 @@ it exists, and this file is the contract the parts are built against.
   applied to `/v1/auth/*`, `/v1/me/password`, `/v1/me/passkeys/register/*`, `/v1/realtime/token`, inbound, Stripe, widget and public routes.
 - Rate limits: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` headers.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
-  (mailboxes, members, api keys, webhooks, automations, sla, widget settings) need `admin`.
+  (mailboxes, members, api keys, webhooks, automations, sla, widget settings, labels, label groups, custom fields) need `admin`.
 - API key scopes: `tickets:read`, `tickets:write`, `contacts:read`, `contacts:write`,
   `kb:read`, `kb:write`, `settings:read`, `settings:write`, `realtime`.
 
@@ -34,16 +34,19 @@ it exists, and this file is the contract the parts are built against.
 type User = { id: string; email: string; name: string; avatar_url: string; email_verified: boolean; totp_enabled: boolean; created_at: string };
 type UserRef = { id: string; name: string; email: string; avatar_url: string };
 type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; created_at: string };
-type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean; auto_assign?: "none" | "round_robin"; locale?: string /* BCP 47 default for customer-facing pages (help center, CSAT, widget); "" = the visitor's browser */ };
+type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean; auto_assign?: "none" | "round_robin"; locale?: string /* BCP 47 default for customer-facing pages (help center, CSAT, widget); "" = the visitor's browser */;
+  label_creation?: "anyone" | "admins" /* default "anyone": applying an unknown label name creates it; "admins": only admins (and keys with settings:write) may, others get 422 unknown_label */;
+  status_labels?: Partial<Record<TicketStatus, DisplayOverride>>; priority_labels?: Partial<Record<Priority, DisplayOverride>> /* display only; the API values never change */ };
+type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor };
 type Membership = { workspace: Workspace; role: Role };
 type Role = "owner" | "admin" | "agent" | "viewer";
 type Member = { user: UserRef; role: Role; created_at: string };
 type Invitation = { id: string; email: string; role: Role; expires_at: string; created_at: string; invited_by: UserRef | null };
 type Team = { id: string; name: string; member_ids: string[]; created_at: string };
 
-type Contact = { id: string; email: string | null; name: string; phone: string; avatar_url: string; company: CompanyRef | null; external_id: string | null; notes: string; custom: Record<string, unknown>; blocked: boolean; ticket_count: number; created_at: string; updated_at: string };
+type Contact = { id: string; email: string | null; name: string; phone: string; avatar_url: string; company: CompanyRef | null; external_id: string | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; blocked: boolean; ticket_count: number; created_at: string; updated_at: string };
 type ContactRef = { id: string; email: string | null; name: string; avatar_url: string };
-type Company = { id: string; name: string; domain: string; notes: string; custom: Record<string, unknown>; contact_count: number; created_at: string; updated_at: string };
+type Company = { id: string; name: string; domain: string; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; contact_count: number; created_at: string; updated_at: string };
 type CompanyRef = { id: string; name: string; domain: string };
 
 type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
@@ -52,7 +55,7 @@ type Channel = "email" | "chat" | "api" | "portal";
 type Ticket = {
   id: string; number: number; subject: string; status: TicketStatus; priority: Priority; channel: Channel;
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
-  tags: Tag[]; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
+  tags: TagRef[]; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
   last_message_at: string; last_customer_message_at: string | null; last_message_preview: string; message_count: number;
   spam: boolean; csat: { score: number; comment: string } | null; custom: Record<string, unknown>;
@@ -70,15 +73,44 @@ type Message = {
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
 // activity types: status_changed{from,to} priority_changed{from,to} assigned{from,to} team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
+// field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
 // AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,via} ai_answered{message_id,article_ids} ai_handoff (actor "ai" or "contact")
-type Tag = { id: string; name: string };
+
+// Labels ("tags" in the API). See "Labels and custom fields" below.
+type LabelColor = "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
+type LabelScope = "tickets" | "contacts" | "companies";
+type Tag = {
+  id: string; name: string; color: LabelColor; description: string; group_id: string | null; position: number;
+  archived: boolean; applies_to: LabelScope[]; usage: { tickets: number; contacts: number; companies: number };
+  created_at: string; updated_at: string;
+};
+type TagRef = { id: string; name: string; color: LabelColor; group_id: string | null }; // embedded in tickets, contacts, companies
+type TagGroup = { id: string; name: string; color: LabelColor | null; exclusive: boolean; position: number; tag_count: number; created_at: string; updated_at: string };
+
+// Custom fields. Values live under `fields` on Ticket, Contact and Company, keyed by CustomField.key.
+type FieldEntity = "ticket" | "contact" | "company";
+type FieldType = "text" | "long_text" | "number" | "select" | "multi_select" | "date" | "checkbox" | "url" | "email" | "user";
+type FieldOption = { id: string; label: string; color: LabelColor };
+type CustomField = {
+  id: string; entity: FieldEntity; key: string; name: string; type: FieldType; options: FieldOption[];
+  required_on_solve: boolean; description: string; position: number; archived: boolean; created_at: string; updated_at: string;
+};
+type FieldValue = string | number | boolean | string[];
+type FieldValues = Record<string, FieldValue>; // only keys with a value; a cleared field is absent
+type FieldFilter = { key: string; op: FieldOp; value: string };
+type FieldOp = "eq" | "ne" | "contains" | "not_contains" | "gt" | "gte" | "lt" | "lte" | "any" | "all" | "none" | "set" | "not_set";
+
 type SavedReply = { id: string; title: string; shortcut: string; body_html: string; created_at: string; updated_at: string };
 type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number };
-type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string; tag?: string; channel?: Channel; q?: string };
+type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string; tag?: string; channel?: Channel; q?: string; fields?: FieldFilter[] /* max 20, ANDed */ };
 type SlaPolicy = { id: string; name: string; priority: Priority | null; first_response_minutes: number; resolution_minutes: number; enabled: boolean; position: number };
 type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
-type Condition = { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment"; op: "contains" | "not_contains" | "equals" | "not_equals" | "eq"; value: string }; // sentiment: equals/not_equals only; eq = equals
-type Action = { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "ai_triage"; value: string };
+type Condition = {
+  field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment" | `field.${string}` | `contact.field.${string}`;
+  op: "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "ne" | "gt" | "gte" | "lt" | "lte" | "any" | "all" | "none" | "set" | "not_set";
+  value: string;
+}; // sentiment: equals/not_equals only; eq = equals, ne = not_equals. field.<key>: a ticket custom field, contact.field.<key>: the ticket contact's; ops per field type (below)
+type Action = { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "ai_triage" | "set_field"; value: string; field?: string /* set_field: the ticket field key */ };
 type Mailbox = {
   id: string; name: string; email: string; display_name: string;
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft"; outbound_kind: "smtp" | "google" | "microsoft" | "system";
@@ -179,11 +211,11 @@ Core notes:
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `assignee` (`me`/`none`/uuid), `team_id`, `mailbox_id`, `tag`, `channel`, `contact_id`, `view_id`, `q`, `spam`, `sort` (`last_message_at`/`created_at`/`priority`/`due`), `order` |
+| GET | `/v1/tickets` | filters: `status` (csv), `priority` (csv), `assignee` (`me`/`none`/uuid), `team_id`, `mailbox_id`, `tag`, `channel`, `contact_id`, `view_id`, `q`, `spam`, `field.<key>` / `field.<key>[<op>]` (custom fields, below), `sort` (`last_message_at`/`created_at`/`priority`/`due`/`field.<key>`), `order` |
 | GET | `/v1/tickets/counts` | → `{ unassigned, mine, open, pending, on_hold, solved, spam, views: {<view_id>: n} }` |
-| POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, body_html, kind?: "reply"\|"note", priority?, assignee_id?, team_id?, tags?: string[], status?}`; an email ticket with a reply is sent to the contact |
+| POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, body_html, kind?: "reply"\|"note", priority?, assignee_id?, team_id?, tags?: string[], fields?: FieldValues, status?}`; an email ticket with a reply is sent to the contact |
 | GET | `/v1/tickets/{id}` | id is uuid, or `#<number>` / numeric number |
-| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, assignee_id?, team_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?}`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze |
+| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, assignee_id?, team_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?, fields?: Record<string, FieldValue \| null> /* merged; null clears */}`. A status of `solved` or `closed` with an empty `required_on_solve` field is `422 field_required`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze |
 | DELETE | `/v1/tickets/{id}` | soft delete |
 | POST | `/v1/tickets/bulk` | `{ids, patch: {...PATCH body}}` or `{ids, delete: true}` |
 | POST | `/v1/tickets/{id}/merge` | `{into_id}` |
@@ -191,10 +223,24 @@ Core notes:
 | POST | `/v1/tickets/{id}/messages` | `{kind: "reply"\|"note", body_html, cc?, bcc?, attachment_ids?, status?: TicketStatus}` → `Message` |
 | GET | `/v1/tickets/{id}/activities` | ascending |
 | GET | `/v1/messages/{id}/original` | → `{full_html}` quoted history / raw view |
-| CRUD | `/v1/contacts`, `/v1/contacts/{id}` | list supports `q`, `company_id` |
+| CRUD | `/v1/contacts`, `/v1/contacts/{id}` | list supports `q`, `company_id`, `tag`, `field.<key>`. Write bodies also take `tags?: string[]` (replaces), `add_tags?`, `remove_tags?` (names, as for tickets) and `fields?` (merged; null clears) |
 | GET | `/v1/contacts/{id}/tickets` | list |
-| CRUD | `/v1/companies`, `/v1/companies/{id}` | |
-| CRUD | `/v1/tags`, `/v1/tags/{id}` | |
+| CRUD | `/v1/companies`, `/v1/companies/{id}` | list supports `q`, `tag`, `field.<key>`; write bodies take `tags?`, `add_tags?`, `remove_tags?`, `fields?` as contacts |
+| GET | `/v1/tags` | `?q=&group_id=<uuid\|none>&archived=true\|false\|any` (default `any`) `&applies_to=tickets\|contacts\|companies` → `{data: Tag[], next_cursor: null}` (all of them, ordered by group position, then position, then name) |
+| POST | `/v1/tags` | admin. `{name, color?, description?, group_id?, applies_to?, position?}` → 201 `Tag`. `color` defaults to a palette colour picked from the name, `applies_to` to all three, `position` to the end. `409 conflict` on a name taken (case-insensitive) |
+| GET | `/v1/tags/{id}` | → `Tag` |
+| PATCH | `/v1/tags/{id}` | admin. `{name?, color?, description?, group_id? /* null ungroups */, position?, archived?, applies_to?}` → `Tag`. A rename also rewrites automations and views that name the label |
+| DELETE | `/v1/tags/{id}` | admin → 204; removes the label from every ticket, contact and company |
+| POST | `/v1/tags/{id}/merge` | admin. `{into: string /* tag id */}` → the `into` `Tag`. Moves every use onto `into` (respecting `into`'s exclusive group), rewrites automations and views, deletes this label |
+| POST | `/v1/tags/reorder` | admin. `{ids: string[]}` → `{data: Tag[]}`; sets `position` to each id's index (max 1000 ids, all in the workspace) |
+| CRUD | `/v1/tag-groups`, `/v1/tag-groups/{id}` | admin writes. `{name, color?: LabelColor \| null, exclusive?: boolean, position?}` → `TagGroup`; list is ordered by position. Delete ungroups its labels. At most 50 groups |
+| POST | `/v1/tag-groups/reorder` | admin. `{ids: string[]}` → `{data: TagGroup[]}` |
+| GET | `/v1/custom-fields` | `?entity=ticket\|contact\|company&archived=true\|false\|any` (default `any`) → `{data: CustomField[], next_cursor: null}` ordered by entity, position |
+| POST | `/v1/custom-fields` | admin. `{entity, key?, name, type, options?, required_on_solve?, description?, position?}` → 201 `CustomField`. `key` defaults to a slug of `name`; `409 conflict` if the key is taken for that entity |
+| GET | `/v1/custom-fields/{id}` | → `CustomField` |
+| PATCH | `/v1/custom-fields/{id}` | admin. `{name?, options?, required_on_solve?, description?, position?, archived?}` → `CustomField`. `entity`, `key` and `type` never change (`422`). Removing an option clears it from stored values |
+| DELETE | `/v1/custom-fields/{id}` | admin → 204; removes the field's values from every record |
+| POST | `/v1/custom-fields/reorder` | admin. `{entity, ids: string[]}` → `{data: CustomField[]}` (that entity's fields) |
 | CRUD | `/v1/saved-replies` | |
 | CRUD | `/v1/views` | `{name, filters, shared}` |
 | CRUD | `/v1/sla-policies` | |
@@ -204,6 +250,52 @@ Core notes:
 | GET | `/v1/reports/overview?from=&to=` | → `{created, solved, open_now, first_response_p50_minutes, resolution_p50_minutes, csat_avg, csat_count, sla_breached, by_day: [{date, created, solved}], by_channel: {...}, by_agent: [{user, solved, first_response_p50_minutes}]}` |
 | POST | `/v1/attachments` | multipart `file` → `Attachment` (unattached, linked when sent) |
 | GET | `/v1/attachments/{id}` | → 302 to signed URL or streamed (`?token=` for img tags) |
+
+#### Labels and custom fields
+
+Labels are the API's `tags` (routes, body members and event names keep that word).
+- Names: 1..50 characters, letters, digits, spaces and `- _ . / : & + #` (no `<`, `>`), unique per workspace ignoring case.
+  Descriptions 0..300 characters, no `<` `>` or control characters. Group names 1..50, same rules. At most 1000 labels.
+- Applying labels by name (`tags`, `add_tags`, `remove_tags`, the `add_tag` action, AI triage) creates missing labels unless
+  `settings.label_creation` is `"admins"`. A label whose `applies_to` lacks the record's kind is `422` (`tags`/`add_tags`); automations
+  and triage skip it. Archived labels are hidden from pickers (`?archived=false`) but stay on records and still apply by name.
+- **Exclusive groups**: a record holds at most one label of an exclusive group. Adding one removes the others of that group
+  (activity `untagged` for each); when one write names several labels of the same exclusive group, the last one named wins. This holds
+  for ticket, contact and company writes, bulk, automations and AI triage (enforced in `internal/domain`). Making a group exclusive does
+  not rewrite existing records; the rule applies on their next label change.
+- `usage` counts the records (not deleted tickets) carrying the label.
+- New workspaces get coloured labels plus an exclusive **Type** group: Question (blue), Problem (orange), Bug (red),
+  Feature request (violet), Billing (green), and ungrouped VIP (amber) and Feedback (teal).
+
+Custom fields (`/v1/custom-fields`):
+- `key`: `^[a-z][a-z0-9_]{0,39}$`, unique per entity, immutable (as are `entity` and `type`). `name` 1..60 and option labels 1..60
+  without `<` `>` or control characters; `description` 0..300. At most 100 fields per entity and 200 options per field. Option
+  `id` is `^[a-z0-9_-]{1,40}$`, defaulting to a slug of its label; `color` defaults to `gray`.
+- Values (`fields` on create and PATCH, merged; `null` clears; unknown keys are `422`): `text` string 0..1000 (single line),
+  `long_text` 0..10000, `number` finite JSON number, `select` an option id, `multi_select` option ids (unique), `date` `YYYY-MM-DD`,
+  `checkbox` boolean, `url` an http(s) URL up to 2000, `email` an address (lowercased), `user` a workspace member's user id.
+  An empty string or empty list clears too. Archived fields keep their values but refuse changes (`422`).
+- `required_on_solve` (tickets only): moving a ticket to `solved` or `closed` (PATCH, bulk, a reply with `status`) while the field
+  is empty (absent; for `checkbox`, not `true`) answers `422 field_required` with `detail` naming the field and
+  `errors: [{location: "body.fields.<key>", message}]` (one per missing field). Archived fields, automations, merges and the
+  auto-close job are not held back.
+- Filters: `field.<key>=<v>` uses the type's default op (`eq` for text-like, number, date, checkbox; `any` for select, multi_select
+  and user), or `field.<key>[<op>]=<v>`. Ops by type: text, long_text, url, email: `eq ne contains not_contains set not_set`
+  (case-insensitive); number, date: `eq ne gt gte lt lte set not_set`; checkbox: `eq ne set not_set` (`eq false` also matches unset);
+  select, user: `eq ne any none set not_set`; multi_select: `any all none eq ne set not_set` (`eq` = has that option). `any`, `all`
+  and `none` take a comma separated list; `user` accepts `me`. Views store the same as `filters.fields`. Unknown keys or ops are `422`.
+- Sort: `sort=field.<key>` for text, number, date, checkbox and select (option order) fields; records without a value sort lowest.
+- Search: `q` on tickets, contacts and `/v1/search` also matches text-like field values and select option ids.
+- Changes log a `field_changed` activity per key on tickets and add `"fields"` to `ticket.updated` `changes`; contact and company
+  events carry the new `fields`. Webhooks receive the same objects.
+- Roles: definitions (labels, groups, fields) are managed by admins (API keys `settings:write`); everyone reads them (viewers; keys with
+  `settings:read`, `tickets:read` or `contacts:read`). Agents apply labels and set values (`tickets:write` for tickets,
+  `contacts:write` for contacts and companies). Definition changes are audit-logged (`tag.*`, `tag_group.*`, `custom_field.*`).
+
+Automations: conditions take `field.<key>` (ticket field) and `contact.field.<key>` (the ticket contact's field) with the ops above
+(`equals`/`not_equals` are `eq`/`ne`); `set`/`not_set` ignore `value`. The `set_field` action sets ticket field `field` to `value`
+written as a string (`"12.5"`, `"true"`, `"2026-10-11"`, comma separated option ids; `""` clears); it is validated when the
+automation is saved and skipped at run time if the field was archived or deleted since.
 
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |

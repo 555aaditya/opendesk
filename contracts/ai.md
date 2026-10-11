@@ -104,7 +104,7 @@ unknown priority becomes `normal`, sentiment `neutral`, category `other`, langua
 never lowers a person's choice. Applying adds the tags, sets `custom.ai_sentiment`,
 `custom.language`, `custom.ai_category`, `custom.ai_triaged_at`, and logs activities with
 `actor_type = "ai"` (`tagged`, `priority_changed`, `ai_triaged`). Only the explicit API
-`apply` creates `suggested_tags` as tags; auto-triage and the automation action store them
+`apply` creates `suggested_tags` as tags (never when `settings.label_creation` is `"admins"`; labels whose `applies_to` lacks tickets are skipped, and an exclusive label group keeps one label, the last applied, contracts/api.md); auto-triage and the automation action store them
 in `custom.ai_suggested_tags` for an agent to accept.
 
 A summary also sets `custom.ai_sentiment`. `custom.ai_summary` is
