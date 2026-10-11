@@ -4,7 +4,8 @@ import type { Attachment, Channel, Priority, ReportsOverview, Ticket, TicketPatc
 import { contactRef, db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
-import { addActivity, addMessage, applyPatch, counts, findTicket, matches, newTicket, notify, publishTicketUpdated, sortTickets, type ListFilters } from "../tickets";
+import { canCreateLabels, checkRequiredOnSolve, mergeFields } from "../labels";
+import { addActivity, addMessage, applyPatch, counts, fieldFiltersFromQuery, findTicket, matches, newTicket, notify, publishTicketUpdated, sortTickets, type ListFilters } from "../tickets";
 import { DAY, isRecord, nowIso, uuid } from "../util";
 
 const STATUSES: TicketStatus[] = ["open", "pending", "on_hold", "solved", "closed"];
@@ -30,7 +31,13 @@ function filtersFrom(ctx: Ctx): ListFilters {
     view_id: q.get("view_id") ?? undefined,
     q: q.get("q") ?? undefined,
     spam: q.get("spam") === "true",
+    fieldFilters: fieldFiltersFromQuery(ctx.ws, "ticket", q),
   };
+}
+
+/** How a person's write treats labels and required fields. */
+function personOpts(ws: WsData) {
+  return { requireFields: true, createLabels: canCreateLabels(ws) };
 }
 
 function ticket(ctx: Ctx): Ticket {
@@ -64,7 +71,12 @@ function readPatch(body: Record<string, unknown>): TicketPatch {
   if (typeof body.spam === "boolean") p.spam = body.spam;
   const tags = strArr(body.tags);
   if (tags) p.tags = tags;
+  const add = strArr(body.add_tags);
+  if (add) p.add_tags = add;
+  const remove = strArr(body.remove_tags);
+  if (remove) p.remove_tags = remove;
   if (isRecord(body.custom)) p.custom = body.custom;
+  if (isRecord(body.fields)) p.fields = body.fields as TicketPatch["fields"];
   return p;
 }
 
@@ -88,7 +100,7 @@ export function registerTickets() {
   get("/v1/tickets", (ctx) => {
     const f = filtersFrom(ctx);
     const list = ctx.ws.tickets.filter((t) => matches(ctx.ws, t, f, db.meId));
-    return paginate(ctx, sortTickets(list, ctx.query.get("sort") ?? "last_message_at", ctx.query.get("order")));
+    return paginate(ctx, sortTickets(list, ctx.query.get("sort") ?? "last_message_at", ctx.query.get("order"), ctx.ws));
   });
   get("/v1/tickets/counts", (ctx) => counts(ctx.ws, db.meId));
 
@@ -103,12 +115,14 @@ export function registerTickets() {
       if (!email) throw invalid("Contact email is required");
       contact = ws.contacts.find((c) => c.email === email);
       if (!contact) {
-        contact = { id: uuid(), email, name: name || email.split("@")[0], phone: "", avatar_url: "", company: null, external_id: null, notes: "", custom: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
+        contact = { id: uuid(), email, name: name || email.split("@")[0], phone: "", avatar_url: "", company: null, external_id: null, notes: "", custom: {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
         ws.contacts.unshift(contact);
         publish(ws, "contact.created", { contact });
       }
     }
     const p = readPatch(ctx.body);
+    const fields = p.fields ? mergeFields(ws, "ticket", {}, p.fields).next : {};
+    if (p.status === "solved" || p.status === "closed") checkRequiredOnSolve(ws, fields);
     const t = newTicket(ws, {
       subject,
       contact: contact ? contactRef(contact) : null,
@@ -117,8 +131,9 @@ export function registerTickets() {
       mailbox_id: s(ctx, "mailbox_id") ?? ws.mailboxes[0]?.id ?? null,
       assignee: userRef(s(ctx, "assignee_id")),
       team_id: s(ctx, "team_id") ?? null,
+      fields,
     });
-    if (p.tags) applyPatch(ws, t, { tags: p.tags }, userRef(db.meId), false);
+    if (p.tags || p.add_tags) applyPatch(ws, t, { tags: p.tags, add_tags: p.add_tags }, userRef(db.meId), false, personOpts(ws));
     if (contact) contact.ticket_count++;
     publish(ws, "ticket.created", { ticket: t });
     const body = s(ctx, "body_html");
@@ -135,7 +150,7 @@ export function registerTickets() {
   get("/v1/tickets/:id", (ctx) => ticket(ctx));
   patch("/v1/tickets/:id", (ctx) => {
     const t = ticket(ctx);
-    applyPatch(ctx.ws, t, readPatch(ctx.body), userRef(db.meId));
+    applyPatch(ctx.ws, t, readPatch(ctx.body), userRef(db.meId), true, personOpts(ctx.ws));
     return t;
   });
   del("/v1/tickets/:id", (ctx) => {
@@ -158,15 +173,7 @@ export function registerTickets() {
         ctx.ws.deletedTickets.add(t.id);
         publish(ctx.ws, "ticket.deleted", { ticket_id: t.id });
       } else if (p) {
-        // add_tags/remove_tags edit the existing set; tags replaces it (as the API does).
-        const { add_tags, remove_tags, ...rest } = p;
-        const patchFor: TicketPatch = { ...rest };
-        if (add_tags?.length || remove_tags?.length) {
-          const base = rest.tags ?? t.tags.map((x) => x.name);
-          const drop = new Set((remove_tags ?? []).map((x) => x.toLowerCase()));
-          patchFor.tags = [...new Set([...base, ...(add_tags ?? [])])].filter((x) => !drop.has(x.toLowerCase()));
-        }
-        applyPatch(ctx.ws, t, patchFor, userRef(db.meId));
+        applyPatch(ctx.ws, t, p, userRef(db.meId), true, personOpts(ctx.ws));
       }
     }
     return respond(204);
@@ -202,6 +209,7 @@ export function registerTickets() {
     const html = required(ctx, "body_html");
     const status = s(ctx, "status") as TicketStatus | undefined;
     if (status && !STATUSES.includes(status)) throw invalid("Unknown status");
+    if ((status === "solved" || status === "closed") && t.status !== "solved" && t.status !== "closed") checkRequiredOnSolve(ctx.ws, t.fields);
     const myRef = userRef(db.meId);
     const msg = addMessage(
       ctx.ws,

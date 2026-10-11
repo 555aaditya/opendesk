@@ -14,13 +14,13 @@ import type {
   Priority,
   SavedReply,
   SlaPolicy,
-  Tag,
   TicketFilters,
   View,
 } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
-import { HttpError, del, get, invalid, notFound, paginate, patch, post, required, respond, s, type Ctx } from "../router";
+import { HttpError, del, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
+import { applyLabels, canCreateLabels, fieldFiltersFromQuery, fieldsText, matchFields, mergeFields } from "../labels";
 import { addActivity, publishTicketUpdated, sortTickets } from "../tickets";
 import { isRecord, nowIso, randomToken, slugify, uuid } from "../util";
 import { checkLimit } from "./billing";
@@ -45,6 +45,30 @@ function setCompany(ws: WsData, c: Contact, companyId: unknown) {
   }
 }
 
+/** tags (replace), add_tags and remove_tags on a contact or company write. */
+function writeLabels(ctx: Ctx, scope: "contacts" | "companies", row: Contact | Company): boolean {
+  const replace = strArr(ctx.body.tags);
+  const add = strArr(ctx.body.add_tags);
+  const remove = strArr(ctx.body.remove_tags);
+  if (!replace && !add?.length && !remove?.length) return false;
+  const r = applyLabels(ctx.ws, scope, row.tags, { replace, add, remove }, { create: canCreateLabels(ctx.ws) });
+  row.tags = r.next;
+  return r.added.length + r.removed.length > 0;
+}
+
+function writeFields(ctx: Ctx, entity: "contact" | "company", row: Contact | Company): boolean {
+  if (!isRecord(ctx.body.fields)) return false;
+  const r = mergeFields(ctx.ws, entity, row.fields, ctx.body.fields);
+  row.fields = r.next;
+  return r.changes.length > 0;
+}
+
+function recordFilter<R extends Contact | Company>(ctx: Ctx, entity: "contact" | "company", list: R[]): R[] {
+  const tag = ctx.query.get("tag")?.trim().toLowerCase();
+  const ff = fieldFiltersFromQuery(ctx.ws, entity, ctx.query);
+  return list.filter((r) => (!tag || r.tags.some((x) => x.name.toLowerCase() === tag)) && matchFields(ctx.ws, entity, r.fields, ff));
+}
+
 function syncContactRefs(ws: WsData, c: Contact) {
   for (const t of ws.tickets) if (t.contact?.id === c.id) t.contact = { id: c.id, email: c.email, name: c.name, avatar_url: c.avatar_url };
 }
@@ -56,7 +80,8 @@ export function registerResources() {
     const company = ctx.query.get("company_id");
     let list = ctx.ws.contacts;
     if (company) list = list.filter((c) => c.company?.id === company);
-    if (q) list = list.filter((c) => [c.name, c.email ?? "", c.company?.name ?? "", c.phone].join(" ").toLowerCase().includes(q));
+    list = recordFilter(ctx, "contact", list);
+    if (q) list = list.filter((c) => [c.name, c.email ?? "", c.company?.name ?? "", c.phone, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
     list = list.slice().sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
     const page = paginate(ctx, list);
     return { ...page, data: page.data.map((c) => contactOut(ctx.ws, c)) };
@@ -67,8 +92,10 @@ export function registerResources() {
     const name = s(ctx, "name")?.trim() || email?.split("@")[0] || "";
     if (!name) throw invalid("Name or email is required");
     if (email && ctx.ws.contacts.some((c) => c.email === email)) throw new HttpError(409, "conflict", "A contact with this email already exists");
-    const c: Contact = { id: uuid(), email, name: name.slice(0, 80), phone: s(ctx, "phone") ?? "", avatar_url: "", company: null, external_id: s(ctx, "external_id") ?? null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    const c: Contact = { id: uuid(), email, name: name.slice(0, 80), phone: s(ctx, "phone") ?? "", avatar_url: "", company: null, external_id: s(ctx, "external_id") ?? null, notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, blocked: false, ticket_count: 0, created_at: nowIso(), updated_at: nowIso() };
     setCompany(ctx.ws, c, ctx.body.company_id);
+    writeLabels(ctx, "contacts", c);
+    writeFields(ctx, "contact", c);
     ctx.ws.contacts.unshift(c);
     publish(ctx.ws, "contact.created", { contact: c });
     return respond(201, c);
@@ -81,6 +108,8 @@ export function registerResources() {
       if (ctx.ws.contacts.some((x) => x.email === email && x.id !== c.id)) throw new HttpError(409, "conflict", "Another contact already uses this email");
       c.email = email;
     }
+    writeLabels(ctx, "contacts", c);
+    writeFields(ctx, "contact", c);
     assign(c, ctx.body, ["name", "phone", "notes", "external_id", "blocked", "custom"]);
     if ("company_id" in ctx.body) setCompany(ctx.ws, c, ctx.body.company_id);
     c.updated_at = nowIso();
@@ -104,7 +133,8 @@ export function registerResources() {
   get("/v1/companies", (ctx) => {
     const q = (ctx.query.get("q") ?? "").toLowerCase().trim();
     let list = ctx.ws.companies;
-    if (q) list = list.filter((c) => (c.name + " " + c.domain).toLowerCase().includes(q));
+    list = recordFilter(ctx, "company", list);
+    if (q) list = list.filter((c) => [c.name, c.domain, fieldsText(c.fields)].join(" ").toLowerCase().includes(q));
     list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
     const page = paginate(ctx, list);
     return { ...page, data: page.data.map((c) => companyOut(ctx.ws, c)) };
@@ -112,7 +142,9 @@ export function registerResources() {
   get("/v1/companies/:id", (ctx) => companyOut(ctx.ws, findCompany(ctx)));
   post("/v1/companies", (ctx) => {
     const name = required(ctx, "name").slice(0, 80);
-    const c: Company = { id: uuid(), name, domain: (s(ctx, "domain") ?? "").toLowerCase(), notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    const c: Company = { id: uuid(), name, domain: (s(ctx, "domain") ?? "").toLowerCase(), notes: s(ctx, "notes") ?? "", custom: isRecord(ctx.body.custom) ? ctx.body.custom : {}, tags: [], fields: {}, contact_count: 0, created_at: nowIso(), updated_at: nowIso() };
+    writeLabels(ctx, "companies", c);
+    writeFields(ctx, "company", c);
     ctx.ws.companies.push(c);
     publish(ctx.ws, "company.created", { company: c });
     return respond(201, c);
@@ -120,6 +152,8 @@ export function registerResources() {
   patch("/v1/companies/:id", (ctx) => {
     const c = findCompany(ctx);
     if ("name" in ctx.body && !s(ctx, "name")?.trim()) throw invalid("Name can't be empty");
+    writeLabels(ctx, "companies", c);
+    writeFields(ctx, "company", c);
     assign(c, ctx.body, ["name", "domain", "notes", "custom"]);
     c.updated_at = nowIso();
     for (const ct of ctx.ws.contacts) if (ct.company?.id === c.id) ct.company = { id: c.id, name: c.name, domain: c.domain };
@@ -132,28 +166,6 @@ export function registerResources() {
     for (const ct of ctx.ws.contacts) if (ct.company?.id === c.id) ct.company = null;
     publish(ctx.ws, "company.deleted", { company_id: c.id });
     return respond(204);
-  });
-
-  // Tags.
-  crud<Tag>({
-    path: "/v1/tags",
-    resource: "tag",
-    list: (ws) => ws.tags,
-    sort: (a, b) => a.name.localeCompare(b.name),
-    create: (ctx, id) => {
-      const name = required(ctx, "name").toLowerCase().slice(0, 50);
-      if (ctx.ws.tags.some((t) => t.name === name)) throw new HttpError(409, "conflict", "A tag with this name already exists");
-      return { id, name };
-    },
-    update: (ctx, row) => {
-      const name = required(ctx, "name").toLowerCase().slice(0, 50);
-      if (ctx.ws.tags.some((t) => t.name === name && t.id !== row.id)) throw new HttpError(409, "conflict", "A tag with this name already exists");
-      row.name = name;
-      for (const t of ctx.ws.tickets) for (const tg of t.tags) if (tg.id === row.id) tg.name = name;
-    },
-    beforeDelete: (ctx, row) => {
-      for (const t of ctx.ws.tickets) t.tags = t.tags.filter((x) => x.id !== row.id);
-    },
   });
 
   crud<SavedReply>({

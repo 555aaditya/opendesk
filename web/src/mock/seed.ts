@@ -29,12 +29,13 @@ import {
   SAVED_REPLIES,
   SPAM,
   STORIES,
-  TAGS,
   TEAM,
   type TeamKey,
 } from "./content";
 import { contactRef, db, userRef, type WsData } from "./db";
 import { teammatePresence, type Meta } from "./gateway";
+import { seedDefaultLabels } from "./labels";
+import { labelName, seedFieldnoteFields, seedFieldnoteLabels, seedTicketTypes } from "./seedLabels";
 import { addActivity, addMessage, computeSla, ensureTags, newTicket } from "./tickets";
 import { DAY, HOUR, MIN, ago, chance, int, iso, NOW, pick, preview, reseed, shuffle, slugify, textToHtml, uuid } from "./util";
 
@@ -85,6 +86,8 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     originals: {},
     activities: [],
     tags: [],
+    tagGroups: [],
+    customFields: [],
     savedReplies: [],
     views: [],
     sla: [],
@@ -172,7 +175,7 @@ function seedFieldnote(): WsData {
   ];
 
   // Tags, SLA, mailboxes.
-  ensureTags(ws, [...TAGS], false);
+  seedFieldnoteLabels(ws);
   const sla: SlaPolicy[] = [
     { id: uuid(), name: "Urgent", priority: "urgent", first_response_minutes: 60, resolution_minutes: 8 * 60, enabled: true, position: 0 },
     { id: uuid(), name: "High priority", priority: "high", first_response_minutes: 2 * 60, resolution_minutes: 24 * 60, enabled: true, position: 1 },
@@ -239,6 +242,8 @@ function seedFieldnote(): WsData {
     domain: c.domain,
     notes: c.notes,
     custom: { plan: ["Enterprise", "Business", "Team", "Startup"][i % 4] },
+    tags: [],
+    fields: {},
     contact_count: 0,
     created_at: ago((200 - i * 9) * DAY),
     updated_at: ago(int(1, 30) * DAY),
@@ -276,6 +281,8 @@ function seedFieldnote(): WsData {
       external_id: chance(0.5) ? `usr_${int(10000, 99999)}` : null,
       notes: i === 0 ? "IT lead. Prefers email, very responsive. Escalate SSO issues to Jonas." : "",
       custom: chance(0.5) ? { plan: pick(["Team", "Business", "Enterprise"]), seats: int(3, 240) } : {},
+      tags: [],
+      fields: {},
       blocked: false,
       ticket_count: 0,
       created_at: ago(int(20, 300) * DAY),
@@ -297,11 +304,11 @@ function seedFieldnote(): WsData {
       mailbox_id: s.mailbox === "billing" ? billing.id : support.id,
       assignee: s.assignee ? userRef(uid(s.assignee)) : null,
       team_id: teamId(s.team),
-      tags: ensureTags(ws, s.tags, false),
+      tags: ensureTags(ws, s.tags.map(labelName), false),
       created_at: ago(first.min * MIN),
     });
     t.number = s.number;
-    seedActivities(ws, t, s.assignee ? uid(s.assignee) : null, s.tags);
+    seedActivities(ws, t, s.assignee ? uid(s.assignee) : null, t.tags.map((x) => x.name));
     for (const m of s.thread) {
       addMessage(
         ws,
@@ -348,10 +355,10 @@ function seedFieldnote(): WsData {
       mailbox_id: isBilling ? billing.id : support.id,
       assignee: assignee ? userRef(uid(assignee)) : null,
       team_id: isBilling ? teamId("Billing") : chance(0.7) ? teamId("Support") : null,
-      tags: ensureTags(ws, g.tags, false),
+      tags: ensureTags(ws, g.tags.map(labelName), false),
       created_at: ago(createdMin * MIN),
     });
-    seedActivities(ws, t, assignee ? uid(assignee) : null, g.tags);
+    seedActivities(ws, t, assignee ? uid(assignee) : null, t.tags.map((x) => x.name));
     const msgs: { dir: "inbound" | "outbound"; note?: boolean; html: string }[] = [{ dir: "inbound", html: textToHtml(`Hi,\n\n${g.body}\n\nThanks,\n${c.name.split(" ")[0]}`) }];
     const replier = assignee ?? "sam";
     const agentHtml = () => textToHtml(`Hi ${c.name.split(" ")[0]},\n\n${pick(AGENT_REPLIES)}\n\n${TEAM.find((x) => x.key === replier)!.name.split(" ")[0]}`);
@@ -436,7 +443,7 @@ function seedFieldnote(): WsData {
   ws.views = [
     { id: uuid(), name: "Urgent", shared: true, filters: { status: ["open", "pending"], priority: ["urgent", "high"] }, position: 0 },
     { id: uuid(), name: "Billing queue", shared: true, filters: { status: ["open", "pending", "on_hold"], team_id: teamId("Billing")! }, position: 1 },
-    { id: uuid(), name: "Waiting on engineering", shared: false, filters: { status: ["on_hold", "pending"], tag: "bug" }, position: 2 },
+    { id: uuid(), name: "Waiting on engineering", shared: false, filters: { status: ["on_hold", "pending"], tag: "Bug" }, position: 2 },
   ];
   const tagName = (n: string) => n;
   const autos: Automation[] = [
@@ -445,7 +452,7 @@ function seedFieldnote(): WsData {
       name: "Route billing mail to the Billing team",
       trigger: "ticket_created",
       conditions: [{ field: "mailbox_id", op: "equals", value: billing.id }],
-      actions: [{ type: "assign_team", value: teamId("Billing")! }, { type: "add_tag", value: tagName("billing") }],
+      actions: [{ type: "assign_team", value: teamId("Billing")! }, { type: "add_tag", value: tagName("Billing") }],
       enabled: true,
       position: 0,
       run_count: 412,
@@ -455,7 +462,7 @@ function seedFieldnote(): WsData {
       name: "Escalate SSO outages",
       trigger: "ticket_created",
       conditions: [{ field: "subject", op: "contains", value: "SSO" }, { field: "body", op: "contains", value: "can't sign in" }],
-      actions: [{ type: "set_priority", value: "urgent" }, { type: "add_tag", value: "sso" }, { type: "assign_user", value: uid("jonas") }],
+      actions: [{ type: "set_priority", value: "urgent" }, { type: "add_tag", value: "SSO" }, { type: "assign_user", value: uid("jonas") }],
       enabled: true,
       position: 1,
       run_count: 37,
@@ -602,6 +609,8 @@ function seedFieldnote(): WsData {
   place(unassigned[3], meta("sam", "viewing"));
   place(byNum(1068), meta("lea", "viewing"));
 
+  seedTicketTypes(ws);
+  seedFieldnoteFields(ws, { maya: uid("maya"), jonas: uid("jonas"), lea: uid("lea"), priya: uid("priya") });
   return ws;
 }
 
@@ -642,7 +651,7 @@ function seedLumen(): WsData {
     { user_id: db.users[3].id, role: "owner", created_at: ago(200 * DAY) },
   ];
   ws.sla = [{ id: uuid(), name: "Default", priority: null, first_response_minutes: 240, resolution_minutes: 2880, enabled: true, position: 0 }];
-  ensureTags(ws, ["question", "bug"], false);
+  seedDefaultLabels(ws);
   ws.mailboxes = [
     {
       id: uuid(),
@@ -675,6 +684,8 @@ function seedLumen(): WsData {
     external_id: null,
     notes: "",
     custom: {},
+    tags: [],
+    fields: {},
     blocked: false,
     ticket_count: 1,
     created_at: ago(30 * DAY),

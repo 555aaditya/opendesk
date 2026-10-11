@@ -17,9 +17,33 @@ export type TicketListQuery = ListQuery & {
   view_id?: string;
   q?: string;
   spam?: boolean | "any";
-  sort?: "last_message_at" | "created_at" | "priority" | "due";
+  /** `field.<key>` sorts by a text, number, date, checkbox or select custom field. */
+  sort?: "last_message_at" | "created_at" | "priority" | "due" | `field.${string}`;
   order?: "asc" | "desc";
+  /** Custom field filters, sent as `field.<key>[<op>]=<value>`. */
+  fields?: T.FieldFilter[];
 };
+
+/** Flattens custom field filters into `field.<key>[<op>]` query parameters. */
+export function fieldQuery(fields?: T.FieldFilter[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of fields ?? []) {
+    // set/not_set ignore the value, but an empty value would be dropped from the URL.
+    out[`field.${f.key}[${f.op}]`] = f.op === "set" || f.op === "not_set" ? "1" : f.value;
+  }
+  return out;
+}
+
+function listQuery<Q extends { fields?: T.FieldFilter[] }>(q: Q) {
+  const { fields, ...rest } = q;
+  return { ...(rest as Omit<Q, "fields">), ...fieldQuery(fields) } as Record<string, string | number | boolean | string[] | null | undefined>;
+}
+
+export type ContactListQuery = ListQuery & { q?: string; company_id?: string; tag?: string; fields?: T.FieldFilter[] };
+export type CompanyListQuery = ListQuery & { q?: string; tag?: string; fields?: T.FieldFilter[] };
+
+/** Labels and custom fields on contact and company writes. */
+type LabelWrites = { tags?: string[]; add_tags?: string[]; remove_tags?: string[]; fields?: T.FieldValuesPatch };
 
 export type CreateTicketBody = {
   subject: string;
@@ -33,6 +57,7 @@ export type CreateTicketBody = {
   assignee_id?: string;
   team_id?: string;
   tags?: string[];
+  fields?: T.FieldValues;
   status?: T.TicketStatus;
 };
 
@@ -134,7 +159,7 @@ export const api = {
   },
 
   tickets: {
-    list: (q: TicketListQuery) => http.get<T.Page<T.Ticket>>("/v1/tickets", { query: q }),
+    list: (q: TicketListQuery) => http.get<T.Page<T.Ticket>>("/v1/tickets", { query: listQuery(q) }),
     counts: () => http.get<T.TicketCounts>("/v1/tickets/counts"),
     create: (b: CreateTicketBody) => http.create<T.Ticket>("/v1/tickets", b),
     get: (id: string) => http.get<T.Ticket>(`/v1/tickets/${encodeURIComponent(id)}`),
@@ -151,15 +176,34 @@ export const api = {
     original: (id: string) => http.get<{ full_html: string }>(`/v1/messages/${id}/original`),
   },
   contacts: {
-    ...crud<T.Contact, Partial<Pick<T.Contact, "name" | "email" | "phone" | "notes" | "external_id" | "blocked" | "custom">> & { company_id?: string | null }>("/v1/contacts"),
-    search: (q: ListQuery & { q?: string; company_id?: string }) => http.get<T.Page<T.Contact>>("/v1/contacts", { query: q }),
+    ...crud<T.Contact, Partial<Pick<T.Contact, "name" | "email" | "phone" | "notes" | "external_id" | "blocked" | "custom">> & { company_id?: string | null } & LabelWrites>("/v1/contacts"),
+    search: (q: ContactListQuery) => http.get<T.Page<T.Contact>>("/v1/contacts", { query: listQuery(q) }),
     tickets: (id: string, q?: ListQuery) => http.get<T.Page<T.Ticket>>(`/v1/contacts/${id}/tickets`, { query: q }),
   },
   companies: {
-    ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "notes" | "custom">>>("/v1/companies"),
-    search: (q: ListQuery & { q?: string }) => http.get<T.Page<T.Company>>("/v1/companies", { query: q }),
+    ...crud<T.Company, Partial<Pick<T.Company, "name" | "domain" | "notes" | "custom">> & LabelWrites>("/v1/companies"),
+    search: (q: CompanyListQuery) => http.get<T.Page<T.Company>>("/v1/companies", { query: listQuery(q) }),
   },
-  tags: crud<T.Tag, { name: string }>("/v1/tags"),
+  /** Labels (contracts/api.md "Labels and custom fields"). Writes need admin. */
+  tags: {
+    ...crud<T.Tag, T.TagInput>("/v1/tags"),
+    list: (q?: { q?: string; group_id?: string | "none"; archived?: boolean | "any"; applies_to?: T.LabelScope }) =>
+      http.get<T.Page<T.Tag>>("/v1/tags", { query: q }),
+    merge: (id: string, into: string) => http.post<T.Tag>(`/v1/tags/${id}/merge`, { into }),
+    reorder: (ids: string[]) => http.post<T.Page<T.Tag>>("/v1/tags/reorder", { ids }),
+  },
+  tagGroups: {
+    ...crud<T.TagGroup, T.TagGroupInput>("/v1/tag-groups"),
+    reorder: (ids: string[]) => http.post<T.Page<T.TagGroup>>("/v1/tag-groups/reorder", { ids }),
+  },
+  customFields: {
+    list: (q?: { entity?: T.FieldEntity; archived?: boolean | "any" }) => http.get<T.Page<T.CustomField>>("/v1/custom-fields", { query: q }),
+    get: (id: string) => http.get<T.CustomField>(`/v1/custom-fields/${id}`),
+    create: (b: T.CustomFieldInput) => http.create<T.CustomField>("/v1/custom-fields", b),
+    update: (id: string, b: T.CustomFieldPatch) => http.patch<T.CustomField>(`/v1/custom-fields/${id}`, b),
+    remove: (id: string) => http.del(`/v1/custom-fields/${id}`),
+    reorder: (entity: T.FieldEntity, ids: string[]) => http.post<T.Page<T.CustomField>>("/v1/custom-fields/reorder", { entity, ids }),
+  },
   savedReplies: crud<T.SavedReply, { title: string; shortcut: string; body_html: string }>("/v1/saved-replies"),
   views: crud<T.View, { name: string; filters: T.TicketFilters; shared: boolean; position?: number }>("/v1/views"),
   slaPolicies: crud<T.SlaPolicy, Omit<T.SlaPolicy, "id">>("/v1/sla-policies"),

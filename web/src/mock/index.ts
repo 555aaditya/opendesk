@@ -10,6 +10,7 @@ import { registerAi } from "./handlers/ai";
 import { registerAiTicket } from "./handlers/aiTicket";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
+import { registerLabels } from "./handlers/labels";
 import { registerResources } from "./handlers/resources";
 import { registerTickets } from "./handlers/tickets";
 import { registerWorkspace } from "./handlers/workspace";
@@ -43,6 +44,7 @@ export function installMock(): void {
   registerAuth();
   registerWorkspace();
   registerTickets();
+  registerLabels();
   registerResources();
   registerBilling();
   registerAi();

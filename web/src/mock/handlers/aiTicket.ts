@@ -558,8 +558,7 @@ export function registerAiTicket() {
     const r = triage(ctx.ws, t);
     if (ctx.body.apply === true) {
       const before = ctx.ws.activities.length;
-      const tags = [...new Set([...t.tags.map((x) => x.name), ...r.tags])];
-      const { changes } = applyPatch(ctx.ws, t, { priority: r.priority, tags }, null, false);
+      const { changes } = applyPatch(ctx.ws, t, { priority: r.priority, add_tags: r.tags }, null, false, { lenient: true, createLabels: ctx.ws.workspace.settings.label_creation !== "admins" });
       for (const a of ctx.ws.activities.slice(before)) {
         a.actor = { type: "ai", user: null };
         a.data = { ...a.data, automation_name: "AI triage" };
@@ -623,6 +622,8 @@ function contact(ws: WsData, name: string, email: string, language: string, note
     company: null,
     external_id: null,
     notes,
+    tags: [],
+    fields: {},
     custom: { language },
     blocked: false,
     ticket_count: 1,

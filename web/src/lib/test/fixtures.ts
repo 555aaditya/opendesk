@@ -13,6 +13,7 @@ export function ticket(over: Partial<Ticket> = {}): Ticket {
     assignee: null,
     team_id: null,
     tags: [],
+    fields: {},
     sla: null,
     first_responded_at: null,
     solved_at: null,

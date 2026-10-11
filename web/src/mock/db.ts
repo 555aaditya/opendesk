@@ -10,6 +10,7 @@ import type {
   Automation,
   Company,
   Contact,
+  CustomField,
   Envelope,
   Invitation,
   KbArticle,
@@ -22,6 +23,7 @@ import type {
   Session,
   SlaPolicy,
   Tag,
+  TagGroup,
   Team,
   Ticket,
   User,
@@ -49,6 +51,8 @@ export type WsData = {
   originals: Record<string, string>;
   activities: Activity[];
   tags: Tag[];
+  tagGroups: TagGroup[];
+  customFields: CustomField[];
   savedReplies: SavedReply[];
   views: View[];
   sla: SlaPolicy[];

@@ -23,7 +23,13 @@ export type WorkspaceSettings = {
   /** Default language (BCP 47) for customer-facing pages when the visitor's browser has no match. */
   locale?: string;
   ai?: AISettings;
+  /** "admins": only admins may create labels by applying a new name. Default "anyone". */
+  label_creation?: "anyone" | "admins";
+  /** Display-only names and colours for the fixed statuses and priorities. */
+  status_labels?: Partial<Record<TicketStatus, DisplayOverride>>;
+  priority_labels?: Partial<Record<Priority, DisplayOverride>>;
 };
+export type DisplayOverride = { label?: string; color?: LabelColor };
 export type Workspace = {
   id: string;
   name: string;
@@ -55,6 +61,8 @@ export type Contact = {
   external_id: string | null;
   notes: string;
   custom: Record<string, unknown>;
+  tags: TagRef[];
+  fields: FieldValues;
   blocked: boolean;
   ticket_count: number;
   created_at: string;
@@ -67,6 +75,8 @@ export type Company = {
   domain: string;
   notes: string;
   custom: Record<string, unknown>;
+  tags: TagRef[];
+  fields: FieldValues;
   contact_count: number;
   created_at: string;
   updated_at: string;
@@ -75,7 +85,90 @@ export type Company = {
 export type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 export type Priority = "low" | "normal" | "high" | "urgent";
 export type Channel = "email" | "chat" | "api" | "portal";
-export type Tag = { id: string; name: string; color?: string | null };
+// Labels ("tags" in the API) and custom fields (contracts/api.md "Labels and custom fields").
+export type LabelColor =
+  | "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
+export const LABEL_COLORS: LabelColor[] = ["gray", "red", "orange", "amber", "yellow", "lime", "green", "teal", "cyan", "blue", "indigo", "violet", "purple", "pink", "rose"];
+export type LabelScope = "tickets" | "contacts" | "companies";
+export type TagUsage = { tickets: number; contacts: number; companies: number };
+export type Tag = {
+  id: string;
+  name: string;
+  color: LabelColor;
+  description: string;
+  group_id: string | null;
+  position: number;
+  archived: boolean;
+  applies_to: LabelScope[];
+  usage: TagUsage;
+  created_at: string;
+  updated_at: string;
+};
+/** A label as embedded in tickets, contacts and companies. */
+export type TagRef = { id: string; name: string; color: LabelColor; group_id: string | null };
+export type TagGroup = {
+  id: string;
+  name: string;
+  color: LabelColor | null;
+  /** At most one label of the group per record; adding one replaces the other. */
+  exclusive: boolean;
+  position: number;
+  tag_count: number;
+  created_at: string;
+  updated_at: string;
+};
+export type TagInput = {
+  name: string;
+  color?: LabelColor;
+  description?: string;
+  group_id?: string | null;
+  position?: number;
+  archived?: boolean;
+  applies_to?: LabelScope[];
+};
+export type TagGroupInput = { name: string; color?: LabelColor | null; exclusive?: boolean; position?: number };
+
+export type FieldEntity = "ticket" | "contact" | "company";
+export type FieldType = "text" | "long_text" | "number" | "select" | "multi_select" | "date" | "checkbox" | "url" | "email" | "user";
+export type FieldOption = { id: string; label: string; color: LabelColor };
+export type CustomField = {
+  id: string;
+  entity: FieldEntity;
+  /** Immutable slug; the key under `fields`. */
+  key: string;
+  name: string;
+  type: FieldType;
+  options: FieldOption[];
+  required_on_solve: boolean;
+  description: string;
+  position: number;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+};
+export type CustomFieldInput = {
+  entity: FieldEntity;
+  key?: string;
+  name: string;
+  type: FieldType;
+  /** `id` and `color` are optional on write (slug of label, gray). */
+  options?: { id?: string; label: string; color?: LabelColor }[];
+  required_on_solve?: boolean;
+  description?: string;
+  position?: number;
+};
+export type CustomFieldPatch = Partial<Pick<CustomFieldInput, "name" | "options" | "required_on_solve" | "description" | "position">> & {
+  archived?: boolean;
+};
+/** text, long_text, url, email, date (YYYY-MM-DD), select (option id), user (user id): string; number; checkbox; multi_select: option ids. */
+export type FieldValue = string | number | boolean | string[];
+/** Only keys with a value; a cleared field is absent. */
+export type FieldValues = Record<string, FieldValue>;
+/** A write: null clears a field. */
+export type FieldValuesPatch = Record<string, FieldValue | null>;
+export type FieldOp = "eq" | "ne" | "contains" | "not_contains" | "gt" | "gte" | "lt" | "lte" | "any" | "all" | "none" | "set" | "not_set";
+/** `any`, `all` and `none` take a comma separated list; `set`/`not_set` ignore value. */
+export type FieldFilter = { key: string; op: FieldOp; value: string };
 export type TicketSla = {
   policy_id: string;
   first_response_due_at: string | null;
@@ -93,7 +186,8 @@ export type Ticket = {
   contact: ContactRef | null;
   assignee: UserRef | null;
   team_id: string | null;
-  tags: Tag[];
+  tags: TagRef[];
+  fields: FieldValues;
   sla: TicketSla | null;
   first_responded_at: string | null;
   solved_at: string | null;
@@ -150,6 +244,8 @@ export type ActivityType =
   | "sla_breached"
   | "merged"
   | "csat_received"
+  /** data: {key, name, from, to} with FieldValue | null values. */
+  | "field_changed"
   | (string & {});
 export type Activity = {
   id: string;
@@ -177,6 +273,8 @@ export type TicketFilters = {
   tag?: string;
   channel?: Channel;
   q?: string;
+  /** Custom field filters, ANDed (max 20). */
+  fields?: FieldFilter[];
 };
 export type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number };
 export type SlaPolicy = {
@@ -190,10 +288,16 @@ export type SlaPolicy = {
 };
 
 export type AutomationTrigger = "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
-export type ConditionField = "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment";
+export type ConditionField =
+  | "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment"
+  /** A ticket custom field, or the ticket contact's. */
+  | `field.${string}` | `contact.field.${string}`;
 /** `eq` is the AI sentiment condition's operator (contracts/ai.md). */
 export type ConditionOp = "contains" | "not_contains" | "equals" | "not_equals" | "eq";
+/** Custom field conditions (`field.<key>`, `contact.field.<key>`) take the FieldOp set of their type; `ne` aliases `not_equals`. */
 export type Condition = { field: ConditionField; op: ConditionOp; value: string };
+/** A condition on a custom field, with the operators of its type. */
+export type FieldCondition = { field: `field.${string}` | `contact.field.${string}`; op: FieldOp; value: string };
 export type ActionType =
   | "set_status"
   | "set_priority"
@@ -204,8 +308,10 @@ export type ActionType =
   | "send_reply"
   | "add_note"
   | "mark_spam"
-  | "ai_triage";
-export type Action = { type: ActionType; value: string };
+  | "ai_triage"
+  | "set_field";
+/** set_field: `field` is the ticket field key, `value` its string form ("12.5", "true", "2026-10-11", "a,b"; "" clears). */
+export type Action = { type: ActionType; value: string; field?: string };
 export type Automation = {
   id: string;
   name: string;
@@ -422,6 +528,8 @@ export type TicketPatch = {
   add_tags?: string[];
   remove_tags?: string[];
   custom?: Record<string, unknown>;
+  /** Merged into fields; null clears. Solving with an empty required field is 422 field_required. */
+  fields?: FieldValuesPatch;
 };
 
 export type ReportsRange = { from: string; to: string };

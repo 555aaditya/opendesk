@@ -6,7 +6,7 @@ import { db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
 import { baseWorkspace } from "../seed";
-import { ensureTags } from "../tickets";
+import { seedDefaultLabels } from "../labels";
 import { isRecord, nowIso, randomToken, slugify, uuid, DAY } from "../util";
 import { checkLimit } from "./billing";
 import { crud, assign } from "./crud";
@@ -48,7 +48,7 @@ export function seedNewWorkspace(name: string): WsData {
   ws.workspace.created_at = nowIso();
   ws.workspace.settings = { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, help_center_enabled: false, csat_enabled: false, auto_assign: "none" };
   ws.members = [{ user_id: db.meId, role: "owner", created_at: nowIso() }];
-  ensureTags(ws, ["billing", "bug", "feature-request", "question"], false);
+  seedDefaultLabels(ws);
   ws.views = [{ id: uuid(), name: "Urgent", shared: true, filters: { status: ["open"], priority: ["urgent", "high"] }, position: 0 }];
   ws.sla = [{ id: uuid(), name: "Standard", priority: null, first_response_minutes: 480, resolution_minutes: 4320, enabled: true, position: 0 }];
   db.workspaces.push(ws);

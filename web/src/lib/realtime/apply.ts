@@ -28,6 +28,8 @@ export type ApplyContext = {
 // Settings-style resources: event prefix -> [list key, payload field].
 const simpleLists: Record<string, { key: readonly unknown[]; field: string }> = {
   tag: { key: qk.tags, field: "tag" },
+  tag_group: { key: qk.tagGroups, field: "tag_group" },
+  custom_field: { key: qk.customFields, field: "custom_field" },
   mailbox: { key: qk.mailboxes, field: "mailbox" },
   saved_reply: { key: qk.savedReplies, field: "saved_reply" },
   view: { key: qk.views, field: "view" },
@@ -136,6 +138,14 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       if (a && tid) appendUnique(qc, qk.activities(tid), a);
       return;
     }
+    case "tag.merged": {
+      removeFromList(qc, qk.tags, d.tag_id as string);
+      if (d.into) upsertInList(qc, qk.tags, d.into as { id: string });
+      void qc.invalidateQueries({ queryKey: qk.ticketLists });
+      void qc.invalidateQueries({ queryKey: qk.contactLists });
+      void qc.invalidateQueries({ queryKey: qk.companyLists });
+      return;
+    }
     case "billing.updated": {
       if (d && typeof d === "object" && "plan" in d) qc.setQueryData(qk.billing, d);
       else void qc.invalidateQueries({ queryKey: qk.billing });
@@ -210,7 +220,13 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       if (row) upsertInList(qc, simple.key, row);
     }
     if (resource === "view") refreshCounts(qc);
-    if (resource === "tag" && verb !== "created") void qc.invalidateQueries({ queryKey: qk.ticketLists });
+    // Records embed label names and colours, and field changes can clear stored values.
+    if ((resource === "tag" || resource === "tag_group") && verb !== "created") void qc.invalidateQueries({ queryKey: qk.ticketLists });
+    if (resource === "tag_group") void qc.invalidateQueries({ queryKey: qk.tags });
+    if (resource === "custom_field" && verb !== "created") {
+      void qc.invalidateQueries({ queryKey: qk.ticketLists });
+      void qc.invalidateQueries({ queryKey: ["tickets", "detail"] });
+    }
     return;
   }
 }

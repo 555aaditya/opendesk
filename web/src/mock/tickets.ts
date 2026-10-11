@@ -7,7 +7,7 @@ import type {
   Channel,
   Message,
   Priority,
-  Tag,
+  TagRef,
   Ticket,
   TicketCounts,
   TicketFilters,
@@ -17,6 +17,7 @@ import type {
 } from "@/lib/api/types";
 import { db, userRef, type WsData } from "./db";
 import { publish } from "./gateway";
+import { applyLabels, checkRequiredOnSolve, fieldDefs, fieldFiltersFromQuery, fieldsText, fieldSortValue, matchFields, mergeFields, type FieldFilterIn } from "./labels";
 import { MIN, nowIso, preview, stripHtml, uuid } from "./util";
 
 export const OPENISH: TicketStatus[] = ["open", "pending", "on_hold"];
@@ -45,12 +46,12 @@ export function computeSla(ws: WsData, t: Ticket, keepPolicy = true): Ticket["sl
   };
 }
 
-export type ListFilters = TicketFilters & { contact_id?: string; spam?: boolean; view_id?: string };
+export type ListFilters = TicketFilters & { contact_id?: string; spam?: boolean; view_id?: string; fieldFilters?: FieldFilterIn[] };
 
 export function resolveFilters(ws: WsData, f: ListFilters): ListFilters {
   if (!f.view_id) return f;
   const v = ws.views.find((x) => x.id === f.view_id);
-  return v ? { ...v.filters, ...f, view_id: undefined } : f;
+  return v ? { ...v.filters, ...f, fields: [...(v.filters.fields ?? []), ...(f.fields ?? [])], view_id: undefined } : f;
 }
 
 export function matches(ws: WsData, t: Ticket, raw: ListFilters, meId: string): boolean {
@@ -67,9 +68,10 @@ export function matches(ws: WsData, t: Ticket, raw: ListFilters, meId: string): 
   if (f.channel && t.channel !== f.channel) return false;
   if (f.contact_id && t.contact?.id !== f.contact_id) return false;
   if (f.tag && !t.tags.some((x) => x.name.toLowerCase() === f.tag!.toLowerCase())) return false;
+  if (!matchFields(ws, "ticket", t.fields, [...(f.fields ?? []), ...(f.fieldFilters ?? [])])) return false;
   if (f.q) {
     const q = f.q.toLowerCase().trim().replace(/^#/, "");
-    const hay = [t.subject, t.last_message_preview, t.contact?.name ?? "", t.contact?.email ?? "", String(t.number)].join(" ").toLowerCase();
+    const hay = [t.subject, t.last_message_preview, t.contact?.name ?? "", t.contact?.email ?? "", String(t.number), fieldsText(t.fields)].join(" ").toLowerCase();
     if (!hay.includes(q)) return false;
   }
   return true;
@@ -99,11 +101,20 @@ function dueOf(t: Ticket): number {
   return d ? Date.parse(d) : Number.POSITIVE_INFINITY;
 }
 
-export function sortTickets(list: Ticket[], sort: string, order: string | null): Ticket[] {
+export { fieldFiltersFromQuery };
+
+export function sortTickets(list: Ticket[], sort: string, order: string | null, ws?: WsData): Ticket[] {
   const dir = (order ?? (sort === "due" ? "asc" : "desc")) === "asc" ? 1 : -1;
+  const field = sort.startsWith("field.") && ws ? fieldDefs(ws, "ticket").find((f) => `field.${f.key}` === sort) : undefined;
   return list.slice().sort((a, b) => {
     let d: number;
-    if (sort === "priority") d = priorityRank[a.priority] - priorityRank[b.priority];
+    if (field) {
+      const x = fieldSortValue(field, a.fields[field.key]);
+      const y = fieldSortValue(field, b.fields[field.key]);
+      // Records without a value sort lowest.
+      if (x === null || y === null) d = x === y ? 0 : x === null ? -1 : 1;
+      else d = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
+    } else if (sort === "priority") d = priorityRank[a.priority] - priorityRank[b.priority];
     else if (sort === "due") d = dueOf(a) - dueOf(b);
     else if (sort === "created_at") d = Date.parse(a.created_at) - Date.parse(b.created_at);
     else d = Date.parse(a.last_message_at) - Date.parse(b.last_message_at);
@@ -118,20 +129,9 @@ export function findTicket(ws: WsData, idOrNumber: string): Ticket | undefined {
   return t && !ws.deletedTickets.has(t.id) ? t : undefined;
 }
 
-export function ensureTags(ws: WsData, names: string[], publishEvents = true): Tag[] {
-  const out: Tag[] = [];
-  for (const raw of names) {
-    const name = raw.trim().toLowerCase().slice(0, 50);
-    if (!name) continue;
-    let tag = ws.tags.find((x) => x.name.toLowerCase() === name);
-    if (!tag) {
-      tag = { id: uuid(), name };
-      ws.tags.push(tag);
-      if (publishEvents) publish(ws, "tag.created", { tag });
-    }
-    if (!out.some((x) => x.id === tag!.id)) out.push(tag);
-  }
-  return out;
+/** Labels by name, created when missing (seed and lenient writes). */
+export function ensureTags(ws: WsData, names: string[], publishEvents = true): TagRef[] {
+  return applyLabels(ws, "tickets", [], { replace: names }, { create: true, lenient: true, publishEvents }).next;
 }
 
 export function addActivity(
@@ -161,9 +161,26 @@ export function publishTicketUpdated(ws: WsData, t: Ticket, changes: string[]) {
 
 export type PatchResult = { changes: string[] };
 
-export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: UserRef | null, publishEvents = true): PatchResult {
+export type PatchOpts = {
+  /** People and API keys: solving with an empty required field is refused. */
+  requireFields?: boolean;
+  /** May name labels that don't exist yet (they're created). */
+  createLabels?: boolean;
+  /** Automations and AI: skip unknown labels and bad values instead of failing. */
+  lenient?: boolean;
+};
+
+export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: UserRef | null, publishEvents = true, opts: PatchOpts = {}): PatchResult {
   const changes: string[] = [];
   const act = (type: string, data: Record<string, unknown>) => addActivity(ws, t, type, data, actor, nowIso(), publishEvents);
+  // Validate before writing anything, so a refused patch changes nothing.
+  const merged = patch.fields ? mergeFields(ws, "ticket", t.fields, patch.fields) : null;
+  const labels =
+    patch.tags || patch.add_tags?.length || patch.remove_tags?.length
+      ? applyLabels(ws, "tickets", t.tags, { replace: patch.tags, add: patch.add_tags, remove: patch.remove_tags }, { create: opts.createLabels ?? true, lenient: opts.lenient, publishEvents })
+      : null;
+  const closing = (patch.status === "solved" || patch.status === "closed") && t.status !== "solved" && t.status !== "closed";
+  if (closing && opts.requireFields) checkRequiredOnSolve(ws, merged?.next ?? t.fields);
 
   if (patch.subject !== undefined && patch.subject !== t.subject) {
     t.subject = patch.subject;
@@ -213,16 +230,16 @@ export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: Use
     t.spam = patch.spam;
     changes.push("spam");
   }
-  if (patch.tags) {
-    const next = ensureTags(ws, patch.tags, publishEvents);
-    const added = next.filter((x) => !t.tags.some((y) => y.id === x.id));
-    const removed = t.tags.filter((x) => !next.some((y) => y.id === x.id));
-    if (added.length || removed.length) {
-      t.tags = next;
-      changes.push("tags");
-      for (const a of added) act("tagged", { tag: a.name });
-      for (const r of removed) act("untagged", { tag: r.name });
-    }
+  if (labels && (labels.added.length || labels.removed.length)) {
+    t.tags = labels.next;
+    changes.push("tags");
+    for (const a of labels.added) act("tagged", { tag: a });
+    for (const r of labels.removed) act("untagged", { tag: r });
+  }
+  if (merged?.changes.length) {
+    t.fields = merged.next;
+    changes.push("fields");
+    for (const c of merged.changes) act("field_changed", { key: c.key, name: c.name, from: c.from, to: c.to });
   }
   if (patch.custom) {
     t.custom = { ...t.custom, ...patch.custom };
@@ -353,7 +370,8 @@ export function newTicket(
     mailbox_id?: string | null;
     assignee?: UserRef | null;
     team_id?: string | null;
-    tags?: Tag[];
+    tags?: TagRef[];
+    fields?: Ticket["fields"];
     created_at?: string;
   },
 ): Ticket {
@@ -382,6 +400,7 @@ export function newTicket(
     spam: false,
     csat: null,
     custom: {},
+    fields: init.fields ?? {},
     created_at: at,
     updated_at: at,
   };
