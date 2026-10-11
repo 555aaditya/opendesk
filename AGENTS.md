@@ -37,7 +37,10 @@ Self-hosted = `opendesk` + `realtime` + `postgres` behind Caddy on one domain: `
 - Areas own packages: `internal/core` (auth, accounts, workspaces, members, API keys,
   webhooks, audit, notifications, events API, realtime tokens), `internal/email`
   (mailboxes, inbound, outbound), `internal/helpdesk` (tickets, contacts, KB, widget,
-  SLA, automations, reports). Each exposes `Register`, `RegisterWorkers`, `Periodic`,
+  SLA, automations, reports), `internal/billing` (Stripe, plans; Cloud only) and
+  `internal/ai` (AI features, providers, embeddings). Plan limits and AI credits go
+  through `d.Plan` (`internal/plan`, `contracts/billing.md`); AI through `internal/ai`
+  (`contracts/ai.md`). Each exposes `Register`, `RegisterWorkers`, `Periodic`,
   `Background` (see `internal/app`). Shared ticket writes live in `internal/domain`:
   **always** create tickets and messages through `domain.CreateTicket` / `domain.AddMessage`.
 - HTTP is huma v2 on chi. Handlers look like:
@@ -59,8 +62,16 @@ Self-hosted = `opendesk` + `realtime` + `postgres` behind Caddy on one domain: `
   work is enqueued with `d.Jobs.InsertTx` in that same transaction. Job args live in
   `internal/jobs/args.go`.
 - Migrations: next six-digit number, `.up.sql` and `.down.sql`. Ranges while areas are
-  built in parallel: core `0001xx`, email `0002xx`, helpdesk `0003xx`.
+  built in parallel: core `0001xx`, email `0002xx`, helpdesk `0003xx`, billing `0004xx`,
+  ai `0005xx`.
 - Run `gofmt -w` on touched files, then `go build ./... && go vet ./...`.
+
+## Cloud and self-hosted
+
+The cloud is the self-host plus configuration. Billing is on only when `STRIPE_SECRET_KEY`
+is set; without it every workspace is `self_hosted` with no limits. AI is on when a provider
+key is set (`ANTHROPIC_API_KEY`, or any OpenAI-compatible endpoint, including local models).
+Never gate a feature on plan: plans differ only in limits (`contracts/billing.md`).
 
 ## Security and compliance invariants (CASA Tier 1 / OWASP ASVS L1)
 

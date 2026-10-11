@@ -1,0 +1,63 @@
+{
+  "help": {
+    "default_title": "Helpcentrum",
+    "hero_title": "Hoe kunnen we je helpen?",
+    "hero_subtitle": "Doorzoek de artikelen of blader per onderwerp.",
+    "search_placeholder": "Artikelen zoeken",
+    "topics": "Onderwerpen",
+    "popular": "Populaire artikelen",
+    "articles_one": "{{count}} artikel",
+    "articles_other": "{{count}} artikelen",
+    "empty_title": "Hier staat nog niets",
+    "empty_body": "Artikelen verschijnen hier zodra ze gepubliceerd zijn.",
+    "not_found_title": "Helpcentrum niet gevonden",
+    "not_found_body": "Dit helpcentrum bestaat niet of is nog niet openbaar.",
+    "topic_not_found_title": "Onderwerp niet gevonden",
+    "topic_not_found_body": "Het is misschien hernoemd of verwijderd.",
+    "topic_empty": "Nog geen artikelen",
+    "article_not_found_title": "Artikel niet gevonden",
+    "article_not_found_body": "Het is misschien verplaatst of niet meer gepubliceerd.",
+    "updated": "Bijgewerkt op {{date}}",
+    "breadcrumb": "Kruimelpad",
+    "search": "Zoeken",
+    "search_min": "Typ minstens twee tekens",
+    "no_results_title": "Geen resultaten voor ‘{{term}}’",
+    "no_results_body": "Probeer minder of andere woorden.",
+    "results_one": "{{count}} resultaat",
+    "results_other": "{{count}} resultaten",
+    "theme_light": "Naar licht thema",
+    "theme_dark": "Naar donker thema"
+  },
+  "csat": {
+    "page_title": "Beoordeel je gesprek",
+    "invalid_title": "Deze link is niet geldig",
+    "invalid_body": "Hij is misschien verlopen. Bedankt dat je feedback wilt geven.",
+    "already_title": "Je hebt dit gesprek al beoordeeld",
+    "already_body": "Bedankt, je feedback is bij het team aangekomen.",
+    "thanks_title": "Bedankt voor je feedback",
+    "thanks_body": "Zo kan {{name}} beter worden.",
+    "thanks_body_generic": "Zo kan het team beter worden.",
+    "question": "Hoe was je gesprek?",
+    "rating": "Beoordeling",
+    "score_label": "{{score}}, {{label}}",
+    "scores": {
+      "1": "Heel slecht",
+      "2": "Slecht",
+      "3": "Oké",
+      "4": "Goed",
+      "5": "Uitstekend"
+    },
+    "comment_label": "Wil je nog iets toevoegen?",
+    "optional": "Optioneel",
+    "comment_placeholder": "Wat ging goed, of wat kan beter",
+    "saved": "Je beoordeling is opgeslagen. Voeg eventueel een opmerking toe.",
+    "send_comment": "Opmerking versturen",
+    "send_feedback": "Feedback versturen",
+    "error": "Er ging iets mis. Probeer het opnieuw.",
+    "offline": "De server is niet bereikbaar. Controleer je verbinding."
+  },
+  "footer": {
+    "powered_by": "Mogelijk gemaakt door",
+    "language": "Taal"
+  }
+}

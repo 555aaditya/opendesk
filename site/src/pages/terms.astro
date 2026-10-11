@@ -1,0 +1,113 @@
+---
+/*
+ * DRAFT FOR LEGAL REVIEW. These terms have not been reviewed by a lawyer.
+ * Placeholders to confirm before launch:
+ *   - COMPANY.legalName, COMPANY.address, COMPANY.jurisdiction (src/lib/site.ts)
+ *   - the 30 day export window after termination
+ *   - the liability cap (fees paid in the 12 months before the claim)
+ *   - pricing comes from src/lib/pricing.ts; the credit pack price is not decided yet
+ */
+import Legal from '../layouts/Legal.astro';
+import { COMPANY, EMAILS, LINKS } from '../lib/site';
+
+const toc = [
+  { id: 'agreement', label: 'The agreement' },
+  { id: 'open-source', label: 'Open source and these terms' },
+  { id: 'accounts', label: 'Accounts' },
+  { id: 'your-data', label: 'Your data' },
+  { id: 'acceptable-use', label: 'Acceptable use' },
+  { id: 'third-party', label: 'Third-party services' },
+  { id: 'fees', label: 'Plans, fees and billing' },
+  { id: 'availability', label: 'Availability and changes' },
+  { id: 'confidentiality', label: 'Confidentiality' },
+  { id: 'termination', label: 'Suspension and termination' },
+  { id: 'warranties', label: 'Warranties' },
+  { id: 'liability', label: 'Limitation of liability' },
+  { id: 'indemnity', label: 'Indemnity' },
+  { id: 'general', label: 'General' },
+  { id: 'contact', label: 'Contact' },
+];
+---
+<Legal title="Terms of service" description="The terms that govern your use of opendesk Cloud, the hosted opendesk helpdesk service." updated="October 11, 2026" toc={toc}>
+  <p>These terms govern your use of opendesk Cloud. Please read them. If you are using opendesk for an organization, you accept them on its behalf and confirm you are allowed to.</p>
+
+  <h2 id="agreement">The agreement</h2>
+  <p>These terms are an agreement between you, or the organization you represent ("Customer", "you"), and {COMPANY.legalName}, {COMPANY.address} ("opendesk", "we", "us"). They cover the hosted service at app.opendesk.sh, api.opendesk.sh and related hosts, including help centers and the chat widget we host (the "Service"). Our <a href="/privacy/">privacy policy</a> explains how we handle personal data and is part of these terms. If you and we sign a separate agreement, it takes precedence where it conflicts with these terms.</p>
+
+  <h2 id="open-source">Open source and these terms</h2>
+  <p>The opendesk software is open source, licensed under the <a href={LINKS.license}>Apache License 2.0</a>. That license, not these terms, governs your use of the source code, including when you run opendesk on your own servers. These terms apply only to the Service we operate for you. Nothing here limits your rights under the Apache License. The opendesk name and logo are not licensed for use beyond accurately referring to the project.</p>
+
+  <h2 id="accounts">Accounts</h2>
+  <ul>
+    <li>You must give accurate information and keep it up to date, and you must be at least 16 years old.</li>
+    <li>You are responsible for activity in your workspace and for keeping credentials, including API keys, safe. Turn on two-factor authentication; we strongly recommend it for every member.</li>
+    <li>Workspace owners control who has access and with which role. Tell us promptly at <a href={`mailto:${EMAILS.security}`}>{EMAILS.security}</a> if you suspect unauthorized access.</li>
+  </ul>
+
+  <h2 id="your-data">Your data</h2>
+  <p>You own the data you and your end customers put into the Service: tickets, messages, contacts, attachments, articles and settings ("Customer Data"). You give us permission to host, copy, process, transmit and display Customer Data only as needed to provide, secure and support the Service, and as you instruct through your use of it, for example by configuring automations, webhooks or integrations.</p>
+  <p>You are responsible for having the right to send us Customer Data and for giving your end customers any notices the law requires. We process personal data in Customer Data as your processor. A data processing agreement is available on request at <a href={`mailto:${EMAILS.legal}`}>{EMAILS.legal}</a>.</p>
+  <p>We do not sell Customer Data, use it for advertising, or use it to train generalized AI or machine learning models.</p>
+
+  <h2 id="acceptable-use">Acceptable use</h2>
+  <p>Do not use the Service to:</p>
+  <ul>
+    <li>send spam or unsolicited bulk email, or email people who have not asked to hear from you;</li>
+    <li>break the law, infringe others' rights, or send content that is fraudulent, harassing or harmful;</li>
+    <li>send malware, or try to get into accounts, systems or data that are not yours;</li>
+    <li>probe, scan or test the Service's security except under our <a href="/security/#disclosure">responsible disclosure</a> rules;</li>
+    <li>overload the Service, get around rate limits or other technical limits, or resell it without our written agreement.</li>
+  </ul>
+  <p>We may remove content or suspend access that breaks these rules, as described below.</p>
+
+  <h2 id="third-party">Third-party services</h2>
+  <p>The Service connects to services you choose, such as Google Workspace, Gmail, Microsoft 365, IMAP and SMTP providers, identity providers and webhook endpoints. Your use of those services is governed by their terms. You authorize us to access them on your behalf only to provide the features you turned on. We are not responsible for third-party services, and features may stop working if a provider changes or withdraws access.</p>
+
+  <h2 id="fees">Plans, fees and billing</h2>
+  <ul>
+    <li><strong>Free plan.</strong> Every workspace can use the Free plan at no charge, within its limits on mailboxes, members and AI credits shown on our <a href="/pricing/">pricing page</a>.</li>
+    <li><strong>Fees.</strong> The Pro plan is billed per user (owners, admins and agents; viewers are free), in advance, at the prices on our pricing page or in your order. Payments are processed by Stripe. Fees exclude taxes, which you pay where they apply.</li>
+    <li><strong>Changes in users.</strong> Adding or removing users during a billing period is prorated.</li>
+    <li><strong>AI credits.</strong> Plans include a monthly allowance of AI credits that does not carry over. Credit packs are a one-time purchase, do not expire and are not refundable once used.</li>
+    <li><strong>Downgrades.</strong> If a subscription ends, the workspace moves to the Free plan. Nothing is deleted, but you cannot add mailboxes or members beyond the Free limits.</li>
+    <li><strong>Renewal.</strong> Plans renew automatically until cancelled. You can cancel at any time, effective at the end of the current period. Fees already paid are not refunded, except where the law requires.</li>
+    <li><strong>Price changes.</strong> We will give at least 30 days' notice of a price change, which applies from your next renewal.</li>
+    <li><strong>Late payment.</strong> If payment fails and is not fixed after notice, we may suspend the Service until it is.</li>
+  </ul>
+
+  <h2 id="availability">Availability and changes</h2>
+  <p>We work to keep the Service available and fast, but we do not promise it will be uninterrupted or error free unless we agree a service level in writing. We may change the Service, for example by adding or removing features. If we remove a material feature you use, we will tell you in advance where we reasonably can.</p>
+
+  <h2 id="confidentiality">Confidentiality</h2>
+  <p>Each of us will protect the other's non-public information shared in connection with the Service with at least reasonable care, use it only for this agreement, and share it only with people who need it and are bound to keep it confidential. This does not cover information that is public, already known, independently developed or lawfully received from someone else.</p>
+
+  <h2 id="termination">Suspension and termination</h2>
+  <ul>
+    <li>You can stop using the Service and delete your workspace at any time.</li>
+    <li>We may suspend access immediately if needed to prevent harm to the Service, other customers or third parties, or if required by law. We will tell you and restore access once the issue is fixed.</li>
+    <li>Either of us may end this agreement if the other materially breaches it and does not fix the breach within 30 days of notice.</li>
+    <li>After termination you have 30 days to export your data, through the API or by asking us. After that we delete Customer Data, and it disappears from backups when they expire.</li>
+    <li>Sections that by their nature should survive termination, including Your data, Confidentiality, Warranties, Limitation of liability and General, do so.</li>
+  </ul>
+
+  <h2 id="warranties">Warranties</h2>
+  <p>We will provide the Service with reasonable skill and care. Apart from that, and to the fullest extent the law allows, the Service is provided "as is" and "as available", and we disclaim all other warranties, express or implied, including merchantability, fitness for a particular purpose and non-infringement.</p>
+
+  <h2 id="liability">Limitation of liability</h2>
+  <p>To the fullest extent the law allows, neither of us is liable for indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue or data, even if told they were possible. Each party's total liability arising from this agreement is limited to the fees you paid us for the Service in the 12 months before the event that caused the claim. These limits do not apply to your payment obligations, a party's indemnity obligations, or liability that cannot be limited by law.</p>
+
+  <h2 id="indemnity">Indemnity</h2>
+  <p>You will defend and indemnify us against third-party claims arising from Customer Data or your use of the Service in breach of these terms. We will defend and indemnify you against third-party claims that the Service, as we provide it, infringes their intellectual property rights. The party seeking indemnity must tell the other promptly, let it control the defense, and cooperate reasonably.</p>
+
+  <h2 id="general">General</h2>
+  <ul>
+    <li><strong>Changes to these terms.</strong> We may update these terms. We will post the new version here and, for material changes, tell account owners by email at least 30 days before they apply. Continuing to use the Service after that means you accept them.</li>
+    <li><strong>Governing law.</strong> These terms are governed by the laws of {COMPANY.jurisdiction}, and its courts have exclusive jurisdiction, except where the law of your country says otherwise.</li>
+    <li><strong>Assignment.</strong> Neither of us may transfer this agreement without the other's consent, except to a successor in a merger or acquisition with notice.</li>
+    <li><strong>Force majeure.</strong> Neither of us is liable for delays caused by events beyond reasonable control.</li>
+    <li><strong>Entire agreement.</strong> These terms, the privacy policy and any order or signed agreement are the whole agreement between us. If a provision is unenforceable, the rest still applies. Not enforcing a right is not a waiver of it.</li>
+  </ul>
+
+  <h2 id="contact">Contact</h2>
+  <p>{COMPANY.legalName}<br />{COMPANY.address}<br />Email: <a href={`mailto:${EMAILS.legal}`}>{EMAILS.legal}</a></p>
+</Legal>

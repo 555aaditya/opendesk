@@ -1,5 +1,10 @@
 // Package helpdesk is the helpdesk area. Register wires its HTTP routes, RegisterWorkers its
 // River workers, Periodic its scheduled jobs and Background its long-running loops.
+//
+// The work is split by resource: tickets (tickets, messages, triggers, SLA, automations
+// engine, CSAT, search, reports), contacts (contacts, companies), resources (tags, saved
+// replies, views, SLA policies, automations), kb (knowledge base and help center) and
+// widget (chat widget API and attachments). Shared helpers live in hd.
 package helpdesk
 
 import (
@@ -10,17 +15,29 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/opendesk/opendesk/internal/helpdesk/contacts"
+	"github.com/opendesk/opendesk/internal/helpdesk/kb"
+	"github.com/opendesk/opendesk/internal/helpdesk/resources"
+	"github.com/opendesk/opendesk/internal/helpdesk/tickets"
+	"github.com/opendesk/opendesk/internal/helpdesk/widget"
 )
 
 // Register adds this area's routes. Prefer huma operations; use r only for raw HTTP
 // (redirects, raw bodies, streaming).
-func Register(d *deps.Deps, api huma.API, r chi.Router) {}
+func Register(d *deps.Deps, api huma.API, r chi.Router) {
+	tickets.Register(d, api, r)
+	contacts.Register(d, api, r)
+	resources.Register(d, api, r)
+	kb.Register(d, api, r)
+	widget.Register(d, api, r)
+}
 
 // RegisterWorkers adds this area's River workers.
-func RegisterWorkers(d *deps.Deps, w *river.Workers) {}
+func RegisterWorkers(d *deps.Deps, w *river.Workers) { tickets.RegisterWorkers(d, w) }
 
 // Periodic returns this area's scheduled jobs.
-func Periodic(d *deps.Deps) []*river.PeriodicJob { return nil }
+func Periodic(d *deps.Deps) []*river.PeriodicJob { return tickets.Periodic(d) }
 
-// Background runs until ctx is done, in the worker role only.
+// Background runs until ctx is done, in the worker role only. The helpdesk has no
+// long-running loops; its scheduled work runs as River periodic jobs.
 func Background(ctx context.Context, d *deps.Deps) {}

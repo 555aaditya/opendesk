@@ -1,0 +1,35 @@
+---
+title: Quickstart (Cloud)
+description: Create an opendesk workspace, connect a mailbox, invite your team and answer your first ticket.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+The hosted service runs at [app.opendesk.sh](https://app.opendesk.sh). It is the same code as the self-hosted install, operated for you.
+
+<Steps>
+
+1. **Create an account.** Sign up with your email and a password, or with Google or Microsoft. Passwords must be 12 to 128 characters and are checked against a list of known breached passwords.
+
+2. **Create a workspace.** A workspace holds your tickets, contacts, mailboxes and settings. You become its owner. New workspaces start with default views, tags and an SLA policy.
+
+3. **Connect a mailbox.** Open **Settings → Mailboxes** and choose how mail comes in:
+   - [Forwarding](/guides/mailboxes/forwarding/): forward your support address to the unique address opendesk gives you.
+   - [Connect Google](/guides/mailboxes/google/) or [Connect Microsoft](/guides/mailboxes/microsoft/): sign in once and opendesk reads and sends through that mailbox.
+   - [IMAP and SMTP](/guides/mailboxes/imap-smtp/): any other provider.
+
+4. **Invite your team.** Open **Settings → Members** and invite people by email as an admin, agent or viewer. See [Teams and roles](/guides/teams-and-roles/).
+
+5. **Answer your first ticket.** Send an email to your support address. It appears in the inbox within moments. Reply, and the customer receives it from your address.
+
+</Steps>
+
+<Aside type="tip">
+Add live chat next: copy the snippet from **Settings → Chat widget** into your site. See [Live chat widget](/guides/live-chat/).
+</Aside>
+
+## Next steps
+
+- Turn on [two-factor authentication](/guides/teams-and-roles/#two-factor-authentication) for your account.
+- Set [SLA policies](/guides/sla-policies/) and [automations](/guides/automations/).
+- Publish a [help center](/guides/knowledge-base/).

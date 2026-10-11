@@ -1,0 +1,671 @@
+package email
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"net/mail"
+	"strings"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+
+	"github.com/opendesk/opendesk/internal/audit"
+	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/displayname"
+	"github.com/opendesk/opendesk/internal/events"
+	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/opendesk/opendesk/internal/jobs"
+)
+
+const maxSettingsHTML = 64 << 10
+
+type mailboxBody struct {
+	Body Mailbox
+}
+
+type createMailboxInput struct {
+	Body struct {
+		Name             string        `json:"name" minLength:"1" maxLength:"64"`
+		Email            string        `json:"email" maxLength:"254"`
+		DisplayName      string        `json:"display_name,omitempty" maxLength:"64"`
+		InboundKind      string        `json:"inbound_kind" enum:"forwarding,imap,google,microsoft"`
+		OutboundKind     string        `json:"outbound_kind" enum:"smtp,google,microsoft,system"`
+		Config           MailboxConfig `json:"config,omitempty"`
+		Password         string        `json:"password,omitempty" maxLength:"1024" doc:"IMAP password (write-only)"`
+		SMTPPassword     string        `json:"smtp_password,omitempty" maxLength:"1024" doc:"SMTP password when it differs from the IMAP one (write-only)"`
+		TeamID           *uuid.UUID    `json:"team_id,omitempty"`
+		SignatureHTML    string        `json:"signature_html,omitempty"`
+		AutoReplyEnabled bool          `json:"auto_reply_enabled,omitempty"`
+		AutoReplySubject string        `json:"auto_reply_subject,omitempty" maxLength:"200"`
+		AutoReplyHTML    string        `json:"auto_reply_html,omitempty"`
+	}
+}
+
+type mailboxConfigPatch struct {
+	IMAPHost     *string `json:"imap_host,omitempty"`
+	IMAPPort     *int    `json:"imap_port,omitempty" minimum:"1" maximum:"65535"`
+	IMAPUsername *string `json:"imap_username,omitempty"`
+	IMAPTLS      *string `json:"imap_tls,omitempty" enum:"tls,starttls,none"`
+	SMTPHost     *string `json:"smtp_host,omitempty"`
+	SMTPPort     *int    `json:"smtp_port,omitempty" minimum:"1" maximum:"65535"`
+	SMTPUsername *string `json:"smtp_username,omitempty"`
+	SMTPTLS      *string `json:"smtp_tls,omitempty" enum:"tls,starttls,none"`
+}
+
+type updateMailboxInput struct {
+	ID   string `path:"id"`
+	Body struct {
+		Name             *string             `json:"name,omitempty" minLength:"1" maxLength:"64"`
+		Email            *string             `json:"email,omitempty" maxLength:"254"`
+		DisplayName      *string             `json:"display_name,omitempty" maxLength:"64"`
+		OutboundKind     *string             `json:"outbound_kind,omitempty" enum:"smtp,google,microsoft,system"`
+		Config           *mailboxConfigPatch `json:"config,omitempty"`
+		Password         *string             `json:"password,omitempty" maxLength:"1024" doc:"IMAP password (write-only)"`
+		SMTPPassword     *string             `json:"smtp_password,omitempty" maxLength:"1024" doc:"SMTP password (write-only)"`
+		TeamID           *string             `json:"team_id,omitempty" doc:"Team id, or an empty string to clear"`
+		SignatureHTML    *string             `json:"signature_html,omitempty"`
+		AutoReplyEnabled *bool               `json:"auto_reply_enabled,omitempty"`
+		AutoReplySubject *string             `json:"auto_reply_subject,omitempty" maxLength:"200"`
+		AutoReplyHTML    *string             `json:"auto_reply_html,omitempty"`
+		Status           *string             `json:"status,omitempty" enum:"active,disabled"`
+	}
+}
+
+type idInput struct {
+	ID string `path:"id"`
+}
+
+type mailboxTestResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error"`
+}
+
+type mailboxTestOutput struct {
+	Body struct {
+		Inbound  mailboxTestResult `json:"inbound"`
+		Outbound mailboxTestResult `json:"outbound"`
+	}
+}
+
+func parseID(s string) (uuid.UUID, error) {
+	id, ok := ids.Parse(s)
+	if !ok {
+		return uuid.Nil, httpx.NotFound("Mailbox")
+	}
+	return id, nil
+}
+
+func (s *service) registerMailboxRoutes(api huma.API) {
+	tags := []string{"Mailboxes"}
+
+	huma.Register(api, huma.Operation{OperationID: "list-mailboxes", Method: http.MethodGet, Path: "/v1/mailboxes",
+		Summary: "List mailboxes", Tags: tags},
+		func(ctx context.Context, in *struct{ httpx.ListParams }) (*struct{ Body httpx.Page[Mailbox] }, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeSettingsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			var cur struct {
+				C time.Time `json:"c"`
+				I uuid.UUID `json:"i"`
+			}
+			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
+				return nil, err
+			}
+			limit := in.Limit
+			if limit <= 0 {
+				limit = 50
+			}
+			rows, err := s.d.DB.Pool.Query(ctx, `SELECT `+mailboxColumns+` FROM mailboxes WHERE workspace_id = $1
+				AND ($2::uuid IS NULL OR (created_at, id) > ($3, $2)) ORDER BY created_at, id LIMIT $4`,
+				p.WorkspaceID, nullUUID(cur.I), cur.C, limit+1)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (*mailboxRow, error) { return scanMailbox(r) })
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			admin := canSeeConfig(p)
+			out := make([]Mailbox, 0, len(list))
+			for _, m := range list {
+				out = append(out, s.api(m, admin))
+			}
+			page := httpx.NewPage(out, limit, func(m Mailbox) any {
+				return map[string]any{"c": m.CreatedAt, "i": m.ID}
+			})
+			return &struct{ Body httpx.Page[Mailbox] }{page}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "get-mailbox", Method: http.MethodGet, Path: "/v1/mailboxes/{id}",
+		Summary: "Get a mailbox", Tags: tags},
+		func(ctx context.Context, in *idInput) (*mailboxBody, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeSettingsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := parseID(in.ID)
+			if err != nil {
+				return nil, err
+			}
+			m, err := loadMailbox(ctx, s.d.DB.Pool, p.WorkspaceID, id)
+			if err != nil {
+				return nil, wrapMailboxErr(err)
+			}
+			return &mailboxBody{s.api(m, canSeeConfig(p))}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "create-mailbox", Method: http.MethodPost, Path: "/v1/mailboxes",
+		Summary: "Create a mailbox", Description: "Forwarding and IMAP mailboxes. Google and Microsoft mailboxes are connected with the OAuth start route.",
+		Tags: tags, DefaultStatus: http.StatusCreated},
+		func(ctx context.Context, in *createMailboxInput) (*mailboxBody, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			b := in.Body
+			if b.InboundKind == KindGoogle || b.InboundKind == KindMicrosoft {
+				return nil, httpx.Validation("Connect " + providerLabel(b.InboundKind) + " mailboxes with POST /v1/mailboxes/oauth/" + b.InboundKind + "/start.")
+			}
+			m := &mailboxRow{WorkspaceID: p.WorkspaceID}
+			m.ID = ids.New()
+			m.Name, m.Email, m.DisplayName = b.Name, b.Email, b.DisplayName
+			m.InboundKind, m.OutboundKind, m.Config, m.TeamID = b.InboundKind, b.OutboundKind, b.Config, b.TeamID
+			m.SignatureHTML, m.AutoReplyEnabled, m.AutoReplySubject, m.AutoReplyHTML = b.SignatureHTML, b.AutoReplyEnabled, b.AutoReplySubject, b.AutoReplyHTML
+			m.Status = "active"
+			creds := credentials{Password: b.Password, SMTPPassword: b.SMTPPassword}
+			if err := s.validateMailbox(m, creds); err != nil {
+				return nil, err
+			}
+			sealed, err := s.sealCreds(creds)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				if err := checkTeam(ctx, tx, p.WorkspaceID, m.TeamID); err != nil {
+					return err
+				}
+				if err := s.d.Plan.CheckMailbox(ctx, tx, p.WorkspaceID); err != nil {
+					return err
+				}
+				var slug string
+				if err := tx.QueryRow(ctx, `SELECT slug FROM workspaces WHERE id = $1`, p.WorkspaceID).Scan(&slug); err != nil {
+					return err
+				}
+				if err := s.insertMailbox(ctx, tx, m, slug, sealed); err != nil {
+					return err
+				}
+				if err := s.publishMailbox(ctx, tx, p.WorkspaceID, m.ID, "mailbox.created"); err != nil {
+					return err
+				}
+				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "mailbox.connected", "mailbox", &m.ID, map[string]any{
+					"name": m.Name, "email": m.Email, "inbound_kind": m.InboundKind, "outbound_kind": m.OutboundKind}); err != nil {
+					return err
+				}
+				return s.enqueueSync(ctx, tx, m)
+			})
+			if err != nil {
+				return nil, wrapMailboxErr(err)
+			}
+			out, err := loadMailbox(ctx, s.d.DB.Pool, p.WorkspaceID, m.ID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &mailboxBody{s.api(out, true)}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "update-mailbox", Method: http.MethodPatch, Path: "/v1/mailboxes/{id}",
+		Summary: "Update a mailbox", Tags: tags},
+		func(ctx context.Context, in *updateMailboxInput) (*mailboxBody, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := parseID(in.ID)
+			if err != nil {
+				return nil, err
+			}
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				m, err := scanMailbox(tx.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailboxes WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id))
+				if err != nil {
+					return err
+				}
+				creds, err := s.openCreds(m)
+				if err != nil {
+					return err
+				}
+				changes, resetSync := applyPatch(m, &creds, in)
+				if len(changes) == 0 {
+					return nil
+				}
+				if err := s.validateMailbox(m, creds); err != nil {
+					return err
+				}
+				if err := checkTeam(ctx, tx, p.WorkspaceID, m.TeamID); err != nil {
+					return err
+				}
+				sealed, err := s.sealCreds(creds)
+				if err != nil {
+					return err
+				}
+				reactivate := in.Body.Status != nil && *in.Body.Status == "active"
+				_, err = tx.Exec(ctx, `UPDATE mailboxes SET name = $3, email = $4, display_name = $5, outbound_kind = $6, config = $7,
+					credentials_enc = $8, team_id = $9, signature_html = $10, auto_reply_enabled = $11, auto_reply_subject = $12,
+					auto_reply_html = $13, status = $14,
+					last_error = CASE WHEN $15 THEN '' ELSE last_error END,
+					sync_failures = CASE WHEN $15 THEN 0 ELSE sync_failures END,
+					next_sync_at = CASE WHEN $15 THEN NULL ELSE next_sync_at END,
+					imap_uid_validity = CASE WHEN $16 THEN 0 ELSE imap_uid_validity END,
+					imap_last_uid = CASE WHEN $16 THEN 0 ELSE imap_last_uid END,
+					updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, id, m.Name, m.Email, m.DisplayName, m.OutboundKind, m.Config, sealed, m.TeamID,
+					m.SignatureHTML, m.AutoReplyEnabled, m.AutoReplySubject, m.AutoReplyHTML, m.Status,
+					reactivate || resetSync || contains(changes, "credentials"), resetSync)
+				if err != nil {
+					return err
+				}
+				if err := s.publishMailbox(ctx, tx, p.WorkspaceID, id, "mailbox.updated"); err != nil {
+					return err
+				}
+				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "mailbox.updated", "mailbox", &id, map[string]any{"changes": changes}); err != nil {
+					return err
+				}
+				if m.Status == "active" {
+					return s.enqueueSync(ctx, tx, m)
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, wrapMailboxErr(err)
+			}
+			out, err := loadMailbox(ctx, s.d.DB.Pool, p.WorkspaceID, id)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &mailboxBody{s.api(out, true)}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "delete-mailbox", Method: http.MethodDelete, Path: "/v1/mailboxes/{id}",
+		Summary: "Delete a mailbox", Description: "Removes the mailbox, its credentials and its stored raw mail. Its tickets stay.",
+		Tags: tags, DefaultStatus: http.StatusNoContent},
+		func(ctx context.Context, in *idInput) (*struct{}, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := parseID(in.ID)
+			if err != nil {
+				return nil, err
+			}
+			var keys []string
+			err = s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				var name, addr string
+				if err := tx.QueryRow(ctx, `SELECT name, email FROM mailboxes WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
+					p.WorkspaceID, id).Scan(&name, &addr); err != nil {
+					return err
+				}
+				rows, err := tx.Query(ctx, `SELECT raw_storage_key FROM inbound_emails WHERE workspace_id = $1 AND mailbox_id = $2`, p.WorkspaceID, id)
+				if err != nil {
+					return err
+				}
+				if keys, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, `DELETE FROM mailboxes WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id); err != nil {
+					return err
+				}
+				if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "mailbox.deleted",
+					Data: map[string]any{"mailbox_id": id}}); err != nil {
+					return err
+				}
+				return audit.Log(ctx, tx, p, p.WorkspaceID, "mailbox.deleted", "mailbox", &id, map[string]any{"name": name, "email": addr})
+			})
+			if err != nil {
+				return nil, wrapMailboxErr(err)
+			}
+			go s.deleteObjects(keys)
+			return nil, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "test-mailbox", Method: http.MethodPost, Path: "/v1/mailboxes/{id}/test",
+		Summary: "Test a mailbox connection", Description: "Checks the IMAP login and the SMTP login or provider token. Nothing is sent.",
+		Tags: tags},
+		func(ctx context.Context, in *idInput) (*mailboxTestOutput, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := parseID(in.ID)
+			if err != nil {
+				return nil, err
+			}
+			m, err := loadMailbox(ctx, s.d.DB.Pool, p.WorkspaceID, id)
+			if err != nil {
+				return nil, wrapMailboxErr(err)
+			}
+			out := &mailboxTestOutput{}
+			out.Body.Inbound = result(s.testInbound(ctx, m))
+			out.Body.Outbound = result(s.testOutbound(ctx, m))
+			return out, nil
+		})
+}
+
+func result(err error) mailboxTestResult {
+	if err == nil {
+		return mailboxTestResult{OK: true}
+	}
+	return mailboxTestResult{Error: safeError(err)}
+}
+
+func canSeeConfig(p *auth.Principal) bool {
+	if p.Kind == auth.KindAPIKey {
+		return true // settings:read
+	}
+	return p.Role.AtLeast(auth.RoleAdmin)
+}
+
+func nullUUID(id uuid.UUID) *uuid.UUID {
+	if id == uuid.Nil {
+		return nil
+	}
+	return &id
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+func wrapMailboxErr(err error) error {
+	switch {
+	case db.IsUniqueViolation(err, "mailboxes_workspace_id_email_key"):
+		return httpx.Conflict("A mailbox with that address already exists in this workspace.")
+	case db.IsNotFound(err):
+		return httpx.NotFound("Mailbox")
+	}
+	return httpx.Wrap(err)
+}
+
+func checkTeam(ctx context.Context, q db.Querier, wid uuid.UUID, team *uuid.UUID) error {
+	if team == nil {
+		return nil
+	}
+	var ok bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM teams WHERE workspace_id = $1 AND id = $2)`, wid, *team).Scan(&ok); err != nil {
+		return err
+	}
+	if !ok {
+		return httpx.Validation("team_id does not exist in this workspace")
+	}
+	return nil
+}
+
+// insertMailbox inserts with a fresh forwarding token, retrying on the rare collision.
+func (s *service) insertMailbox(ctx context.Context, tx pgx.Tx, m *mailboxRow, slug string, sealed []byte) error {
+	for attempt := 0; ; attempt++ {
+		m.ForwardingToken = newForwardingToken(slug)
+		_, err := tx.Exec(ctx, `SAVEPOINT mbx_insert`)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO mailboxes (id, workspace_id, name, email, display_name, inbound_kind, forwarding_token,
+			outbound_kind, config, credentials_enc, team_id, signature_html, auto_reply_enabled, auto_reply_subject, auto_reply_html, status)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+			m.ID, m.WorkspaceID, m.Name, m.Email, m.DisplayName, m.InboundKind, m.ForwardingToken, m.OutboundKind, m.Config,
+			sealed, m.TeamID, m.SignatureHTML, m.AutoReplyEnabled, m.AutoReplySubject, m.AutoReplyHTML, m.Status)
+		if err == nil {
+			_, err = tx.Exec(ctx, `RELEASE SAVEPOINT mbx_insert`)
+			return err
+		}
+		if !db.IsUniqueViolation(err, "mailboxes_forwarding_token_key") || attempt >= 4 {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT mbx_insert`); err != nil {
+			return err
+		}
+	}
+}
+
+// enqueueSync queues an immediate sync for IMAP and OAuth mailboxes.
+func (s *service) enqueueSync(ctx context.Context, tx pgx.Tx, m *mailboxRow) error {
+	if m.InboundKind == InboundForwarding || m.Status == "disabled" || s.d.Jobs == nil {
+		return nil
+	}
+	_, err := s.d.Jobs.InsertTx(ctx, tx, jobs.SyncMailboxArgs{MailboxID: m.ID}, syncInsertOpts())
+	return err
+}
+
+func syncInsertOpts() *river.InsertOpts {
+	return &river.InsertOpts{Queue: jobs.QueueEmail, MaxAttempts: 1, UniqueOpts: river.UniqueOpts{ByArgs: true}}
+}
+
+// applyPatch merges a PATCH into m and creds and returns the changed field names and
+// whether the IMAP cursor must restart (a different server or account).
+func applyPatch(m *mailboxRow, creds *credentials, in *updateMailboxInput) (changes []string, resetSync bool) {
+	b := in.Body
+	set := func(name string, dst *string, v *string) {
+		if v != nil && *v != *dst {
+			*dst = *v
+			changes = append(changes, name)
+		}
+	}
+	set("name", &m.Name, b.Name)
+	if b.Email != nil && !strings.EqualFold(*b.Email, m.Email) {
+		m.Email = *b.Email
+		changes = append(changes, "email")
+	}
+	set("display_name", &m.DisplayName, b.DisplayName)
+	set("outbound_kind", &m.OutboundKind, b.OutboundKind)
+	set("signature_html", &m.SignatureHTML, b.SignatureHTML)
+	set("auto_reply_subject", &m.AutoReplySubject, b.AutoReplySubject)
+	set("auto_reply_html", &m.AutoReplyHTML, b.AutoReplyHTML)
+	set("status", &m.Status, b.Status)
+	if b.AutoReplyEnabled != nil && *b.AutoReplyEnabled != m.AutoReplyEnabled {
+		m.AutoReplyEnabled = *b.AutoReplyEnabled
+		changes = append(changes, "auto_reply_enabled")
+	}
+	if b.TeamID != nil {
+		var next *uuid.UUID
+		if *b.TeamID != "" {
+			if id, ok := ids.Parse(*b.TeamID); ok {
+				next = &id
+			} else {
+				next = &uuid.Nil // refused by checkTeam
+			}
+		}
+		if (next == nil) != (m.TeamID == nil) || next != nil && m.TeamID != nil && *next != *m.TeamID {
+			m.TeamID = next
+			changes = append(changes, "team_id")
+		}
+	}
+	if c := b.Config; c != nil {
+		before := m.Config
+		cfg := &m.Config
+		setS := func(dst *string, v *string) {
+			if v != nil {
+				*dst = strings.TrimSpace(*v)
+			}
+		}
+		setI := func(dst *int, v *int) {
+			if v != nil {
+				*dst = *v
+			}
+		}
+		setS(&cfg.IMAPHost, c.IMAPHost)
+		setI(&cfg.IMAPPort, c.IMAPPort)
+		setS(&cfg.IMAPUsername, c.IMAPUsername)
+		setS(&cfg.IMAPTLS, c.IMAPTLS)
+		setS(&cfg.SMTPHost, c.SMTPHost)
+		setI(&cfg.SMTPPort, c.SMTPPort)
+		setS(&cfg.SMTPUsername, c.SMTPUsername)
+		setS(&cfg.SMTPTLS, c.SMTPTLS)
+		if *cfg != before {
+			changes = append(changes, "config")
+			if !strings.EqualFold(cfg.IMAPHost, before.IMAPHost) || !strings.EqualFold(cfg.IMAPUsername, before.IMAPUsername) {
+				resetSync = true
+			}
+		}
+	}
+	credsChanged := false
+	if b.Password != nil && *b.Password != creds.Password {
+		creds.Password = *b.Password
+		credsChanged = true
+	}
+	if b.SMTPPassword != nil && *b.SMTPPassword != creds.SMTPPassword {
+		creds.SMTPPassword = *b.SMTPPassword
+		credsChanged = true
+	}
+	if credsChanged {
+		changes = append(changes, "credentials")
+	}
+	if b.Status != nil && *b.Status == "active" && !contains(changes, "status") {
+		// Re-enabling an errored mailbox clears its error and retries now.
+		changes = append(changes, "status")
+	}
+	return changes, resetSync
+}
+
+// validateMailbox normalizes and checks a mailbox before it is stored.
+func (s *service) validateMailbox(m *mailboxRow, creds credentials) error {
+	name, err := displayname.Validate("Name", m.Name, displayname.Workspace, false)
+	if err != nil {
+		return httpx.Wrap(err)
+	}
+	m.Name = name
+	if m.DisplayName, err = displayname.Validate("Display name", m.DisplayName, displayname.Workspace, true); err != nil {
+		return httpx.Wrap(err)
+	}
+	m.Email = strings.ToLower(strings.TrimSpace(m.Email))
+	if !validAddress(m.Email) {
+		return httpx.Validation("Enter a valid email address.")
+	}
+	if strings.EqualFold(emailDomain(m.Email), s.inboundDomain()) {
+		return httpx.Validation("The mailbox address cannot be on the inbound forwarding domain.")
+	}
+	m.SignatureHTML = sanitizeSettingsHTML(m.SignatureHTML)
+	m.AutoReplyHTML = sanitizeSettingsHTML(m.AutoReplyHTML)
+	if len(m.SignatureHTML) > maxSettingsHTML || len(m.AutoReplyHTML) > maxSettingsHTML {
+		return httpx.Validation("Signature and auto-reply are limited to 64 KB.")
+	}
+	m.AutoReplySubject = strings.TrimSpace(strings.Map(dropControl, m.AutoReplySubject))
+	cfg := &m.Config
+
+	switch m.InboundKind {
+	case InboundForwarding:
+		cfg.IMAPHost, cfg.IMAPPort, cfg.IMAPUsername, cfg.IMAPTLS = "", 0, "", ""
+	case InboundIMAP:
+		if err := s.normalizeEndpoint(&cfg.IMAPHost, &cfg.IMAPPort, &cfg.IMAPTLS, "IMAP", 993, 143); err != nil {
+			return err
+		}
+		if cfg.IMAPUsername = strings.TrimSpace(cfg.IMAPUsername); cfg.IMAPUsername == "" {
+			cfg.IMAPUsername = m.Email
+		}
+		if creds.Password == "" {
+			return httpx.Validation("Enter the IMAP password.")
+		}
+	case KindGoogle, KindMicrosoft:
+		// OAuth tokens only ever go to the provider's own server.
+		cfg.IMAPHost, cfg.IMAPPort, cfg.IMAPTLS = s.providers[m.InboundKind].imapHost, 993, TLSImplicit
+		if cfg.IMAPUsername == "" {
+			cfg.IMAPUsername = cfg.OAuthEmail
+		}
+	}
+	switch m.OutboundKind {
+	case OutboundSMTP:
+		if err := s.normalizeEndpoint(&cfg.SMTPHost, &cfg.SMTPPort, &cfg.SMTPTLS, "SMTP", 465, 587); err != nil {
+			return err
+		}
+		if cfg.SMTPUsername = strings.TrimSpace(cfg.SMTPUsername); cfg.SMTPUsername == "" {
+			cfg.SMTPUsername = m.Email
+		}
+		if creds.smtpPassword() == "" {
+			return httpx.Validation("Enter the SMTP password.")
+		}
+	case KindGoogle, KindMicrosoft:
+		if m.InboundKind != m.OutboundKind {
+			return httpx.Validation("Sending through " + providerLabel(m.OutboundKind) + " needs a mailbox connected with " + providerLabel(m.OutboundKind) + ".")
+		}
+		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPTLS = "", 0, "", ""
+	case OutboundSystem:
+		cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPTLS = "", 0, "", ""
+	default:
+		return httpx.Validation("Unknown outbound kind.")
+	}
+	return nil
+}
+
+// normalizeEndpoint defaults the port and TLS mode and checks the host.
+func (s *service) normalizeEndpoint(host *string, port *int, mode *string, label string, tlsPort, startPort int) error {
+	*host = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(*host), "."))
+	if *host == "" {
+		return httpx.Validation("Enter the " + label + " server host.")
+	}
+	if err := s.guard.validHost(*host); err != nil {
+		if errors.Is(err, errBlockedAddress) {
+			return httpx.Validation("The " + label + " server must be a public address.")
+		}
+		return httpx.Validation(label + " host: " + err.Error())
+	}
+	switch *mode {
+	case "":
+		switch *port {
+		case 0, tlsPort:
+			*mode = TLSImplicit
+		default:
+			*mode = TLSStart
+		}
+	case TLSImplicit, TLSStart:
+	case TLSNone:
+		if !s.guard.allowPrivate {
+			return httpx.Validation("The " + label + " connection must use TLS.")
+		}
+	default:
+		return httpx.Validation("Unknown " + label + " TLS mode.")
+	}
+	if *port == 0 {
+		if *mode == TLSImplicit {
+			*port = tlsPort
+		} else {
+			*port = startPort
+		}
+	}
+	if *port < 1 || *port > 65535 {
+		return httpx.Validation("The " + label + " port must be between 1 and 65535.")
+	}
+	return nil
+}
+
+func validAddress(s string) bool {
+	if s == "" || len(s) > 254 || strings.ContainsAny(s, " \t\r\n<>\"") {
+		return false
+	}
+	a, err := mail.ParseAddress(s)
+	return err == nil && strings.EqualFold(a.Address, s) && strings.Contains(emailDomain(s), ".")
+}
+
+func dropControl(r rune) rune {
+	if r < 0x20 || r == 0x7f {
+		return -1
+	}
+	return r
+}
+
+func (s *service) deleteObjects(keys []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	for _, k := range keys {
+		if err := s.d.Storage.Delete(ctx, k); err != nil {
+			s.log.Warn("delete stored raw mail", "err", err)
+		}
+	}
+}

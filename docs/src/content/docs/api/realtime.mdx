@@ -1,0 +1,199 @@
+---
+title: Realtime
+description: Connect to the opendesk realtime gateway with Phoenix Channels for live events, presence and typing.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The realtime gateway pushes every change in your workspace to connected clients as it happens. It speaks **Phoenix Channels** over WebSocket (JSON serializer v2), so the easiest client is the [`phoenix`](https://www.npmjs.com/package/phoenix) npm package.
+
+The gateway is push only. Clients make changes through the [REST API](/api/), never through the socket.
+
+## Endpoints
+
+There are two socket endpoints, one for agents and one for the chat widget:
+
+| | agents (`ws` tokens) | chat widget (`widget_ws` tokens) |
+| --- | --- | --- |
+| Cloud | `wss://gateway.opendesk.sh/socket/websocket` | `wss://gateway.opendesk.sh/socket/widget/websocket` |
+| Self-hosted | `wss://<your-domain>/socket/websocket` | `wss://<your-domain>/socket/widget/websocket` |
+
+The agent endpoint (`GATEWAY_URL`) checks the browser `Origin` against `CHECK_ORIGINS`. The widget endpoint (`GATEWAY_URL/widget`) accepts **only** widget tokens, and accepts any origin, because the widget runs on your customers' sites. The `phoenix` client appends `/websocket` itself, so pass it `.../socket` or `.../socket/widget`.
+
+## Get a token
+
+Request a short-lived token, then connect with it:
+
+```sh
+curl -X POST https://api.opendesk.sh/v1/realtime/token \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "OD-Workspace: $WORKSPACE_ID"
+```
+
+```json
+{ "token": "eyJhbGciOiJIUzI1NiIs...", "url": "wss://gateway.opendesk.sh/socket", "expires_at": "2026-10-11T09:05:00Z" }
+```
+
+Users and API keys with the `realtime` scope can request tokens. Tokens live **5 minutes** and only need to be valid when the socket connects. On every reconnect, fetch a fresh one.
+
+## Connect
+
+```js
+import { Socket, Presence } from 'phoenix';
+
+const API = 'https://api.opendesk.sh/v1';
+const headers = { Authorization: `Bearer ${accessToken}`, 'OD-Workspace': workspaceId };
+
+async function realtimeToken() {
+  const res = await fetch(`${API}/realtime/token`, { method: 'POST', headers });
+  if (!res.ok) throw new Error(`realtime token: ${res.status}`);
+  return res.json(); // { token, url, expires_at }
+}
+
+let { url, token } = await realtimeToken();
+
+const socket = new Socket(url, {
+  // Called on every (re)connect, so each attempt uses a fresh token.
+  params: () => ({ token }),
+});
+socket.onError(async () => {
+  ({ token } = await realtimeToken());
+});
+socket.connect();
+```
+
+The gateway checks the token's signature, `purpose`, expiry and, on the agent endpoint, the browser's `Origin`. Non-browser clients send no `Origin` and are accepted on the token alone.
+
+## Topics
+
+| topic | who may join | you receive |
+| --- | --- | --- |
+| `workspace:<wid>` | a `ws` token for that workspace | `"event"` for every event in the workspace |
+| `user:<uid>` | a user's own token | `"event"` for events addressed to that user, such as notifications |
+| `ticket:<wid>:<ticket_id>` | users in the workspace | Presence, `"typing"` and `"customer_typing"` |
+| `contact:<wid>:<contact_id>` | the chat widget for that contact | public `"event"`s and agent `"typing"` |
+
+A successful join replies `{ "server_time": "..." }`. A join you are not allowed replies with `{ "reason": "forbidden" }`.
+
+### Workspace events
+
+```js
+let lastSeq = null;
+
+const workspace = socket.channel(`workspace:${workspaceId}`);
+
+workspace.on('event', async (envelope) => {
+  if (lastSeq !== null && envelope.seq !== lastSeq + 1) {
+    await catchUp(); // a gap: fetch what we missed first
+  }
+  apply(envelope);
+  lastSeq = Math.max(lastSeq ?? 0, envelope.seq);
+});
+
+workspace
+  .join()
+  .receive('ok', () => catchUp())
+  .receive('error', ({ reason }) => console.error('join failed', reason));
+```
+
+Every `"event"` payload is an [envelope](/api/events/#envelope): `id`, `seq`, `type`, `visibility`, `data` and `occurred_at`.
+
+### Your notifications
+
+```js
+const me = socket.channel(`user:${userId}`);
+me.on('event', (envelope) => {
+  if (envelope.type === 'notification.created') showNotification(envelope.data.notification);
+});
+me.join();
+```
+
+### Presence and typing on a ticket
+
+```js
+const ticket = socket.channel(`ticket:${workspaceId}:${ticketId}`);
+const presence = new Presence(ticket);
+
+presence.onSync(() => {
+  const here = presence.list((_id, { metas }) => metas[0]);
+  // [{ user_id, name, avatar, state: "viewing" | "replying" | "idle", online_at }]
+  renderAvatars(here);
+});
+
+ticket.on('typing', ({ user_id, name }) => showAgentTyping(user_id, name));
+ticket.on('customer_typing', ({ ticket_id, contact_id }) => showCustomerTyping(contact_id));
+
+ticket.join().receive('ok', () => ticket.push('presence', { state: 'viewing' }));
+
+// When the agent starts writing:
+ticket.push('presence', { state: 'replying' });
+// While typing (throttle this). Include contact_id on chat tickets so the customer sees it:
+ticket.push('typing', { contact_id: contactId });
+```
+
+Presence updates are rate limited, so send them when the state changes, not on every keystroke. Leave the channel (`ticket.leave()`) when the agent closes the ticket.
+
+## Missed events
+
+Events carry `seq`, which is **contiguous per workspace**. If you see a jump, or after any reconnect, fetch what you missed:
+
+```sh
+curl "https://api.opendesk.sh/v1/events?since=1041&limit=100" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "OD-Workspace: $WORKSPACE_ID"
+```
+
+```json
+{ "data": [ { "seq": 1042, "type": "ticket.updated", "...": "..." } ], "latest_seq": 1042, "resync": false }
+```
+
+```js
+async function catchUp() {
+  if (lastSeq === null) {
+    // First connect: start from the latest seq without replaying history.
+    const res = await fetch(`${API}/events?since=0&limit=1`, { headers });
+    lastSeq = (await res.json()).latest_seq;
+    return;
+  }
+  for (;;) {
+    const res = await fetch(`${API}/events?since=${lastSeq}&limit=100`, { headers });
+    const page = await res.json();
+    if (page.resync) {
+      // The gap is older than retention: refetch everything instead.
+      lastSeq = page.latest_seq;
+      return refetchAll();
+    }
+    for (const envelope of page.data) {
+      apply(envelope);
+      lastSeq = envelope.seq;
+    }
+    if (page.data.length === 0 || lastSeq >= page.latest_seq) return;
+  }
+}
+```
+
+Events are kept for **7 days**. When the gap is older, the response has `"resync": true`, and you should reload your data from the REST API. Results are filtered by what the caller may see.
+
+<Aside type="tip">
+Make `apply` idempotent (for example, keyed by `envelope.id` or by resource `updated_at`) so an event delivered both live and by replay is harmless.
+</Aside>
+
+## Being disconnected
+
+The gateway closes a user's sockets when they log out, change their password, have a session revoked or are removed from the workspace. Fetching a new token then fails, and the client should sign in again.
+
+## The chat widget
+
+The widget gets a `widget_ws` token from [`POST /v1/widget/session`](/api/resources/widget/#session), connects to the widget endpoint (`<GATEWAY_URL>/widget`, such as `wss://gateway.opendesk.sh/socket/widget`), and joins `contact:<wid>:<contact_id>`.
+
+```js
+import { Socket } from 'phoenix';
+
+const socket = new Socket('wss://gateway.opendesk.sh/socket/widget', { params: () => ({ token: wsToken }) });
+socket.connect();
+const conversation = socket.channel(`contact:${workspaceId}:${contactId}`);
+conversation.on('event', (envelope) => showMessage(envelope));
+conversation.on('typing', ({ ticket_id, user }) => showAgentTyping(user.name));
+conversation.join();
+```
+ It receives `"event"` for public events about its conversations (agent replies on chat tickets) and `"typing"` from agents. It can push `"typing"` with `{ ticket_id }`, which agents see as `"customer_typing"`. Internal notes and every other event are never sent to it.

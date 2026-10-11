@@ -1,0 +1,16 @@
+{
+  "actions": {
+    "cancel": "Anuluj",
+    "save": "Zapisz",
+    "close": "Zamknij",
+    "retry": "Spróbuj ponownie",
+    "apply": "Zastosuj",
+    "copy": "Kopiuj",
+    "back": "Wstecz",
+    "continue": "Dalej"
+  },
+  "credits_one": "{{count}} kredyt",
+  "credits_few": "{{count}} kredyty",
+  "credits_many": "{{count}} kredytów",
+  "credits_other": "{{count}} kredytu"
+}

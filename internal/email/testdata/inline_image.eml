@@ -1,0 +1,30 @@
+From: Ian Inline <{{FROM}}>
+To: {{TO}}
+Subject: Screenshot of the error
+Date: Sat, 10 Oct 2026 13:00:00 +0000
+Message-ID: <inline{{ID}}@customer.test>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+See the screenshot.
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<p>See the screenshot:</p><p><img src="cid:shot1@customer.test" alt="error" width="200" onerror="alert(1)"></p><p><a href="https://example.com/help">help</a> <a href="javascript:alert(1)">bad</a></p>
+--alt--
+
+--rel
+Content-Type: image/png; name="shot.png"
+Content-Transfer-Encoding: base64
+Content-ID: <shot1@customer.test>
+Content-Disposition: inline; filename="shot.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+--rel--

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>opendesk widget demo</title>
+    <style>
+      body { margin: 0; font: 15px/1.6 system-ui, sans-serif; color: #0a0a0a; background: #fafafa; }
+      @media (prefers-color-scheme: dark) { body { color: #e4e4e4; background: #0a0a0a; } .card { background: #141414 !important; border-color: #262626 !important; } }
+      main { max-width: 680px; margin: 0 auto; padding: 72px 24px; }
+      h1 { font-size: 30px; letter-spacing: -0.03em; margin: 0 0 8px; }
+      p { color: #737373; margin: 0 0 24px; }
+      .card { background: #fff; border: 1px solid #e4e4e4; border-radius: 12px; padding: 20px; margin-bottom: 14px; }
+      .bar { height: 10px; border-radius: 5px; background: rgba(128,128,128,.15); margin: 10px 0; }
+      code { font: 13px ui-monospace, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Fieldnote</h1>
+      <p>A host page for testing the opendesk chat widget. Add <code>?od_open=1</code> to open it, <code>?key=wk_brand</code> for a brand colour, <code>?key=wk_email</code> for email capture, <code>?od_lang=ar</code> for a language, <code>?od_demo=send</code> or <code>?od_demo=handoff</code> for the AI answer bot.</p>
+      <div class="card"><div class="bar" style="width:60%"></div><div class="bar" style="width:85%"></div><div class="bar" style="width:40%"></div></div>
+      <div class="card"><div class="bar" style="width:70%"></div><div class="bar" style="width:55%"></div></div>
+    </main>
+    <script>
+      window.opendesk = window.opendesk || function () { (window.opendesk.q = window.opendesk.q || []).push(arguments); };
+      var params = new URLSearchParams(location.search);
+      if (params.has("od_open")) opendesk("open");
+      opendesk("on", "message", function (m) { console.log("[opendesk] message", m); });
+      var s = document.createElement("script");
+      s.type = "module";
+      s.src = "/widget/src/main.tsx";
+      s.dataset.key = params.get("key") || "wk_demo";
+      s.dataset.mock = "1";
+      if (params.get("od_lang")) s.dataset.lang = params.get("od_lang");
+      document.body.appendChild(s);
+      // Screenshot helpers: ?od_demo=thread opens the past conversation, ?od_demo=send sends a message,
+      // ?od_demo=handoff sends one and then asks for a person.
+      var texts = {
+        en: "Hi! Our team can't log in with SSO since this morning. Is something down?",
+        ja: "こんにちは。今朝からチーム全員がSSOでログインできません。障害でしょうか？",
+        ar: "مرحبًا! لا يستطيع فريقنا تسجيل الدخول عبر SSO منذ الصباح. هل هناك عطل؟"
+      };
+      var demo = params.get("od_demo");
+      if (demo) {
+        var tries = 0;
+        var t = setInterval(function () {
+          var host = document.querySelector("[data-opendesk-widget]");
+          var root = host && host.shadowRoot;
+          if (!root || ++tries > 50) return;
+          if (demo === "thread") {
+            var c = root.querySelector(".conv");
+            if (c) { c.click(); clearInterval(t); }
+          } else if (demo === "send" || demo === "handoff") {
+            var p = root.querySelector(".primary");
+            if (!p) return;
+            p.click();
+            clearInterval(t);
+            setTimeout(function () {
+              var ta = root.querySelector("textarea");
+              ta.value = texts[params.get("od_lang")] || texts.en;
+              ta.dispatchEvent(new Event("input", { bubbles: true }));
+              setTimeout(function () { root.querySelector(".send").click(); }, 100);
+              if (demo === "handoff") {
+                var w = setInterval(function () {
+                  var b = root.querySelector(".handoff");
+                  if (b) { b.click(); clearInterval(w); }
+                }, 100);
+              }
+            }, 300);
+          }
+        }, 100);
+      }
+    </script>
+  </body>
+</html>

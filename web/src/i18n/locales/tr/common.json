@@ -1,0 +1,14 @@
+{
+  "actions": {
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "close": "Kapat",
+    "retry": "Yeniden dene",
+    "apply": "Uygula",
+    "copy": "Kopyala",
+    "back": "Geri",
+    "continue": "Devam"
+  },
+  "credits_one": "{{count}} kredi",
+  "credits_other": "{{count}} kredi"
+}

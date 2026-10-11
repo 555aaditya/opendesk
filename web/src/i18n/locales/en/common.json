@@ -1,0 +1,14 @@
+{
+  "actions": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "retry": "Retry",
+    "apply": "Apply",
+    "copy": "Copy",
+    "back": "Back",
+    "continue": "Continue"
+  },
+  "credits_one": "{{count}} credit",
+  "credits_other": "{{count}} credits"
+}

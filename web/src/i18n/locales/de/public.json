@@ -1,0 +1,63 @@
+{
+  "help": {
+    "default_title": "Hilfe-Center",
+    "hero_title": "Wie können wir Ihnen helfen?",
+    "hero_subtitle": "Durchsuchen Sie die Artikel oder stöbern Sie nach Themen.",
+    "search_placeholder": "Artikel durchsuchen",
+    "topics": "Themen",
+    "popular": "Beliebte Artikel",
+    "articles_one": "{{count}} Artikel",
+    "articles_other": "{{count}} Artikel",
+    "empty_title": "Hier ist noch nichts",
+    "empty_body": "Artikel erscheinen hier, sobald sie veröffentlicht sind.",
+    "not_found_title": "Hilfe-Center nicht gefunden",
+    "not_found_body": "Dieses Hilfe-Center existiert nicht oder ist noch nicht öffentlich.",
+    "topic_not_found_title": "Thema nicht gefunden",
+    "topic_not_found_body": "Es wurde möglicherweise umbenannt oder entfernt.",
+    "topic_empty": "Noch keine Artikel",
+    "article_not_found_title": "Artikel nicht gefunden",
+    "article_not_found_body": "Er wurde möglicherweise verschoben oder nicht mehr veröffentlicht.",
+    "updated": "Aktualisiert am {{date}}",
+    "breadcrumb": "Brotkrümelnavigation",
+    "search": "Suche",
+    "search_min": "Geben Sie mindestens zwei Zeichen ein",
+    "no_results_title": "Keine Ergebnisse für „{{term}}“",
+    "no_results_body": "Versuchen Sie es mit weniger oder anderen Wörtern.",
+    "results_one": "{{count}} Ergebnis",
+    "results_other": "{{count}} Ergebnisse",
+    "theme_light": "Zum hellen Design wechseln",
+    "theme_dark": "Zum dunklen Design wechseln"
+  },
+  "csat": {
+    "page_title": "Bewerten Sie Ihr Gespräch",
+    "invalid_title": "Dieser Link ist ungültig",
+    "invalid_body": "Er ist möglicherweise abgelaufen. Danke, dass Sie uns Feedback geben möchten.",
+    "already_title": "Sie haben dieses Gespräch bereits bewertet",
+    "already_body": "Danke, Ihr Feedback ist beim Team angekommen.",
+    "thanks_title": "Danke für Ihr Feedback",
+    "thanks_body": "Es hilft {{name}}, besser zu werden.",
+    "thanks_body_generic": "Es hilft dem Team, besser zu werden.",
+    "question": "Wie war Ihr Gespräch?",
+    "rating": "Bewertung",
+    "score_label": "{{score}}, {{label}}",
+    "scores": {
+      "1": "Sehr schlecht",
+      "2": "Schlecht",
+      "3": "Okay",
+      "4": "Gut",
+      "5": "Sehr gut"
+    },
+    "comment_label": "Möchten Sie noch etwas hinzufügen?",
+    "optional": "Optional",
+    "comment_placeholder": "Was gut lief oder was besser sein könnte",
+    "saved": "Ihre Bewertung wurde gespeichert. Gern können Sie noch einen Kommentar hinzufügen.",
+    "send_comment": "Kommentar senden",
+    "send_feedback": "Feedback senden",
+    "error": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut.",
+    "offline": "Der Server ist nicht erreichbar. Bitte prüfen Sie Ihre Verbindung."
+  },
+  "footer": {
+    "powered_by": "Bereitgestellt von",
+    "language": "Sprache"
+  }
+}

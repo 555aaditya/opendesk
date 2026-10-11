@@ -34,3 +34,40 @@ test:
 lint:
 	test -z "$$(gofmt -l .)"
 	go vet ./...
+
+# ── deploy ──────────────────────────────────────────────────────────────────
+.PHONY: selfhost-smoke selfhost-env selfhost-up selfhost-down images installer-check installer-sha check-migrations tf-check email-worker-test
+
+selfhost-env: ## write .env for the root docker-compose.yml with fresh secrets (never overwrites)
+	sh deploy/self-host/gen-env.sh .env $${DOMAIN:-localhost}
+
+selfhost-up: selfhost-env ## build this checkout and run the self-host stack on https://localhost
+	docker compose up -d --build --wait
+
+selfhost-down:
+	docker compose down
+
+images: ## build both release images locally
+	docker build -f deploy/docker/opendesk.Dockerfile -t ghcr.io/opendesk/opendesk:dev .
+	docker build -f deploy/docker/realtime.Dockerfile -t ghcr.io/opendesk/realtime:dev .
+
+installer-sha: ## regenerate deploy/install/install.sh.sha256 after editing install.sh
+	sh deploy/install/gen-sha256.sh
+
+installer-check: ## POSIX parse, shellcheck, idempotency and checksum checks for the installer
+	./scripts/check-installer.sh
+
+check-migrations:
+	./scripts/check-migrations.sh
+
+tf-check: ## terraform fmt + validate for every root and module
+	terraform -chdir=deploy/terraform fmt -check -recursive
+	for d in deploy/terraform/environments/* deploy/terraform/modules/*; do \
+		terraform -chdir=$$d init -backend=false -input=false >/dev/null && terraform -chdir=$$d validate || exit 1; \
+	done
+
+email-worker-test:
+	cd deploy/cloudflare/email-worker && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test
+
+selfhost-smoke: ## build and run the root compose under a throwaway project and check it through Caddy
+	./scripts/selfhost-smoke.sh

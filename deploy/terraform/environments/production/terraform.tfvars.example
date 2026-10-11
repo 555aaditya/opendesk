@@ -1,0 +1,34 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+cloudflare_account_id = "0123456789abcdef0123456789abcdef"
+# cloudflare_zone_id  = "..."            # optional; looked up from cloudflare_zone_name otherwise
+# neon_org_id         = "org-..."         # required for Neon accounts with organizations
+
+aws_region  = "us-east-1"
+neon_region = "aws-us-east-1"
+
+github_repo = "opendesk/opendesk"
+# create_github_oidc_provider       = false   # if the account already has it
+# existing_github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+
+google_client_id    = ""
+microsoft_client_id = ""
+github_client_id    = ""
+turnstile_site_key  = ""
+
+# After `aws secretsmanager put-secret-value` for each:
+# optional_secrets = [
+#   "GOOGLE_CLIENT_SECRET", "MICROSOFT_CLIENT_SECRET", "TURNSTILE_SECRET", "POSTHOG_KEY",
+#   # Billing (opendesk Cloud only): turns plans and limits on.
+#   "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO", "STRIPE_PRICE_PRO_YEARLY", "STRIPE_PRICE_CREDITS",
+#   # AI: ANTHROPIC_API_KEY sets AI_PROVIDER=anthropic, VOYAGE_API_KEY sets EMBEDDINGS_DRIVER=voyage.
+#   "ANTHROPIC_API_KEY", "VOYAGE_API_KEY",
+# ]
+# ai_model      = "claude-sonnet-5-5"
+# ai_fast_model = "claude-haiku-4-5-20251001"
+# stripe_tax    = true
+
+# nats_mode         = "external"           # Synadia Cloud or another managed NATS
+# external_nats_url = "tls://connect.ngs.global"
+
+# dmarc_rua = "dmarc@opendesk.sh"

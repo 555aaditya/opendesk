@@ -1,0 +1,92 @@
+{
+  "undo": "Undo",
+  "composer": {
+    "menuLabel": "Write with AI",
+    "menuShort": "AI",
+    "draft": "Draft a reply",
+    "draftWithGuide": "Draft with instructions",
+    "guideTitle": "What should the reply say?",
+    "guidePlaceholder": "Keep it brief and mention the refund",
+    "rewriteLabel": "Rewrite",
+    "translateTo": "Translate to {{language}}",
+    "drafting": "Drafting a reply",
+    "rewriting": "Rewriting your draft",
+    "rewritingSelection": "Rewriting the selection",
+    "translating": "Translating",
+    "stop": "Stop",
+    "basedOn": "Based on",
+    "hideSources": "Hide sources",
+    "replaceTitle": "Replace your draft?",
+    "replaceBody": "The AI draft replaces what you have written. You can undo it afterwards.",
+    "replaceConfirm": "Replace draft",
+    "draftReplaced": "Draft replaced",
+    "draftFailed": "Couldn't draft a reply",
+    "rewrote": "Made it {{mode}}",
+    "rewroteSelection": "Rewrote the selection",
+    "rewriteFailed": "Couldn't rewrite the draft",
+    "translated": "Translated to {{language}}",
+    "translateFailed": "Couldn't translate the draft",
+    "command": "Draft a reply with AI"
+  },
+  "rewrite": {
+    "friendlier": "Friendlier",
+    "more_formal": "More formal",
+    "shorter": "Shorter",
+    "longer": "Longer",
+    "fix_grammar": "Fix spelling and grammar",
+    "simplify": "Simpler"
+  },
+  "summary": {
+    "title": "Summary",
+    "empty": "Get the gist of this conversation in a few lines.",
+    "generate": "Summarize",
+    "refresh": "Refresh summary",
+    "updated": "Updated {{when}}",
+    "failed": "Couldn't summarize this ticket",
+    "working": "Reading the conversation"
+  },
+  "sentiment": {
+    "label": "Sentiment",
+    "positive": "Positive",
+    "neutral": "Neutral",
+    "negative": "Negative",
+    "frustrated": "Frustrated"
+  },
+  "triage": {
+    "title": "Triage",
+    "suggest": "Suggest triage",
+    "working": "Looking at the ticket",
+    "priority": "Priority",
+    "tags": "Tags",
+    "sentiment": "Sentiment",
+    "language": "Language",
+    "category": "Category",
+    "apply": "Apply",
+    "applied": "Applied",
+    "applyAll": "Apply all",
+    "dismiss": "Dismiss",
+    "nothing": "Everything already matches the suggestion.",
+    "appliedToast": "Applied the triage suggestion",
+    "failed": "Couldn't triage this ticket"
+  },
+  "ask": {
+    "title": "Ask about this ticket",
+    "placeholder": "What has the customer already tried?",
+    "send": "Ask",
+    "thinking": "Thinking",
+    "sources": "Sources",
+    "failed": "Couldn't answer that",
+    "clear": "Clear"
+  },
+  "message": {
+    "translate": "Translate",
+    "translateHint": "Translate from {{language}}",
+    "translating": "Translating",
+    "translatedFrom": "Translated from {{language}}",
+    "showOriginal": "Show original",
+    "showTranslation": "Show translation",
+    "failed": "Couldn't translate this message",
+    "aiLabel": "AI",
+    "aiHint": "Answered by the AI assistant from your knowledge base"
+  }
+}

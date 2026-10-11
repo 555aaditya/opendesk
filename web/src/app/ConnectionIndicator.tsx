@@ -1,0 +1,30 @@
+import { useRealtime } from "@/lib/realtime/store";
+import { Tooltip } from "@/components/ui/tooltip";
+import { cn } from "@/lib/cn";
+
+const copy = {
+  idle: { label: "Not connected", tone: "bg-fg-4", pulse: false },
+  connecting: { label: "Connecting", tone: "bg-fg-4", pulse: true },
+  live: { label: "Live: updates appear as they happen", tone: "bg-ok", pulse: false },
+  reconnecting: { label: "Reconnecting. Changes will sync when the connection is back.", tone: "bg-warn", pulse: true },
+  offline: { label: "Offline. Retrying.", tone: "bg-danger", pulse: true },
+} as const;
+
+export function ConnectionIndicator({ className }: { className?: string }) {
+  const status = useRealtime((s) => s.status);
+  const c = copy[status];
+  return (
+    <Tooltip content={c.label} side="top">
+      <span
+        role="status"
+        aria-label={c.label}
+        className={cn("inline-flex size-6 items-center justify-center rounded-md hover:bg-hover", className)}
+      >
+        <span className="relative flex size-1.5">
+          {c.pulse && <span className={cn("absolute inset-0 animate-ping rounded-full opacity-60", c.tone)} />}
+          <span className={cn("relative size-1.5 rounded-full", c.tone)} />
+        </span>
+      </span>
+    </Tooltip>
+  );
+}

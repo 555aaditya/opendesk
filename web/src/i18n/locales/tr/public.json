@@ -1,0 +1,63 @@
+{
+  "help": {
+    "default_title": "Yardım merkezi",
+    "hero_title": "Size nasıl yardımcı olabiliriz?",
+    "hero_subtitle": "Makalelerde arama yapın veya konulara göz atın.",
+    "search_placeholder": "Makalelerde ara",
+    "topics": "Konular",
+    "popular": "Popüler makaleler",
+    "articles_one": "{{count}} makale",
+    "articles_other": "{{count}} makale",
+    "empty_title": "Henüz burada bir şey yok",
+    "empty_body": "Makaleler yayımlandığında burada görünecek.",
+    "not_found_title": "Yardım merkezi bulunamadı",
+    "not_found_body": "Bu yardım merkezi mevcut değil veya henüz herkese açık değil.",
+    "topic_not_found_title": "Konu bulunamadı",
+    "topic_not_found_body": "Yeniden adlandırılmış veya kaldırılmış olabilir.",
+    "topic_empty": "Henüz makale yok",
+    "article_not_found_title": "Makale bulunamadı",
+    "article_not_found_body": "Taşınmış veya yayından kaldırılmış olabilir.",
+    "updated": "{{date}} tarihinde güncellendi",
+    "breadcrumb": "İçerik haritası",
+    "search": "Arama",
+    "search_min": "En az iki karakter yazın",
+    "no_results_title": "“{{term}}” için sonuç yok",
+    "no_results_body": "Daha az veya farklı kelimeler deneyin.",
+    "results_one": "{{count}} sonuç",
+    "results_other": "{{count}} sonuç",
+    "theme_light": "Açık temaya geç",
+    "theme_dark": "Koyu temaya geç"
+  },
+  "csat": {
+    "page_title": "Görüşmenizi değerlendirin",
+    "invalid_title": "Bu bağlantı geçerli değil",
+    "invalid_body": "Süresi dolmuş olabilir. Geri bildirim paylaşmak istediğiniz için teşekkür ederiz.",
+    "already_title": "Bu görüşmeyi zaten değerlendirdiniz",
+    "already_body": "Teşekkürler, geri bildiriminiz ekibe ulaştı.",
+    "thanks_title": "Geri bildiriminiz için teşekkürler",
+    "thanks_body": "{{name}} ekibinin daha iyi olmasına yardımcı oluyor.",
+    "thanks_body_generic": "Ekibin daha iyi olmasına yardımcı oluyor.",
+    "question": "Görüşmeniz nasıldı?",
+    "rating": "Puan",
+    "score_label": "{{score}}, {{label}}",
+    "scores": {
+      "1": "Çok kötü",
+      "2": "Kötü",
+      "3": "İdare eder",
+      "4": "İyi",
+      "5": "Harika"
+    },
+    "comment_label": "Eklemek istediğiniz bir şey var mı?",
+    "optional": "İsteğe bağlı",
+    "comment_placeholder": "Neler iyi gitti, neler daha iyi olabilir",
+    "saved": "Puanınız kaydedildi. İsterseniz bir yorum ekleyin.",
+    "send_comment": "Yorumu gönder",
+    "send_feedback": "Geri bildirimi gönder",
+    "error": "Bir sorun oluştu. Lütfen tekrar deneyin.",
+    "offline": "Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin."
+  },
+  "footer": {
+    "powered_by": "Altyapı:",
+    "language": "Dil"
+  }
+}

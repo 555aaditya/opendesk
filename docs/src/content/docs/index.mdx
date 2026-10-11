@@ -1,0 +1,50 @@
+---
+title: opendesk documentation
+description: Set up opendesk, connect your mailboxes, embed live chat, build on the API and run it yourself.
+template: splash
+hero:
+  title: The open-source helpdesk, documented.
+  image:
+    light: ../../assets/mark.svg
+    dark: ../../assets/mark-white.svg
+    alt: The opendesk Module mark
+  tagline: Shared inboxes, live chat, a knowledge base and a public API, with everything updating live across your team. Run it on opendesk.sh or on your own server.
+  actions:
+    - text: Get started
+      link: /getting-started/introduction/
+      icon: right-arrow
+    - text: Self-host in one command
+      link: /self-hosting/
+      variant: secondary
+    - text: API reference
+      link: /api/
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Start here
+
+<CardGrid>
+  <LinkCard title="What is opendesk" href="/getting-started/introduction/" description="The product, the architecture and how the pieces fit." />
+  <LinkCard title="Quickstart (Cloud)" href="/getting-started/quickstart-cloud/" description="Create a workspace, connect a mailbox and answer your first ticket." />
+  <LinkCard title="Quickstart (self-host)" href="/getting-started/quickstart-self-host/" description="One command installs opendesk, Postgres and HTTPS on your server." />
+  <LinkCard title="Connect a mailbox" href="/guides/mailboxes/" description="Forwarding, IMAP and SMTP, or a one-click Google or Microsoft connection." />
+</CardGrid>
+
+## Build on opendesk
+
+<CardGrid>
+  <Card title="REST API" icon="seti:json">
+    The web app uses exactly the public API. Everything you can click, you can automate. [Read the overview](/api/).
+  </Card>
+  <Card title="Webhooks" icon="random">
+    Signed deliveries for every event, with retries and a delivery log. [Verify signatures](/api/webhooks/).
+  </Card>
+  <Card title="Realtime" icon="rocket">
+    Phoenix Channels for events, presence and typing, with gap-free replay. [Connect a socket](/api/realtime/).
+  </Card>
+  <Card title="Live chat widget" icon="comment">
+    One script tag, with optional HMAC identity verification. [Embed the widget](/guides/live-chat/).
+  </Card>
+</CardGrid>

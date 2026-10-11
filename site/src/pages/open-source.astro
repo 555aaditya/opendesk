@@ -1,0 +1,103 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PageHero from '../components/PageHero.astro';
+import Icon from '../components/Icon.astro';
+import CTA from '../components/CTA.astro';
+import { LINKS } from '../lib/site';
+import { getRepoStars } from '../lib/github';
+
+const stars = await getRepoStars();
+
+const reasons = [
+  ['eye', 'You can read what touches your customers', 'A helpdesk holds every conversation you have with your customers. With opendesk, you can read the code that stores, sends and shows them.'],
+  ['server', 'You can leave', 'If the cloud stops suiting you, run the same code on your own servers. Your data is in Postgres, in a schema you can read.'],
+  ['gitBranch', 'You can change it', 'Fix a bug for your team today instead of waiting on a roadmap. Send it upstream if others would want it.'],
+  ['scale', 'One product, not two', 'There is no community edition with the good parts removed. The cloud runs the code in the repository.'],
+] as const;
+
+const stack = [
+  ['Go', 'API and background workers, one binary'],
+  ['Elixir and Phoenix', 'Realtime gateway, channels and presence'],
+  ['React', 'Web app, help center and chat widget'],
+  ['Postgres', 'Data, job queue and event log'],
+  ['NATS', 'Event bus, embedded or clustered'],
+  ['Caddy', 'HTTPS for self-hosted installs'],
+];
+---
+<Layout title="Open source" description="opendesk is open source under the Apache-2.0 license. The hosted service and the self-hosted build are the same code, developed in public on GitHub.">
+  <PageHero eyebrow="Open source" title="Built in the open.<br/>Licensed Apache-2.0." lede="opendesk is developed in public. The code that runs opendesk Cloud is the code in the repository, and you can run, change and ship it under a permissive license.">
+    <div class="mt-10 flex flex-wrap gap-3">
+      <a href={LINKS.github} class="btn btn-primary btn-lg"><Icon name="github" size={17} />opendesk/opendesk{stars && <span class="ml-1 inline-flex items-center gap-1 rounded-full bg-bg/15 px-2 py-0.5 font-mono text-[12px]"><Icon name="star" size={11} />{stars}</span>}</a>
+      <a href={`${LINKS.docs}/contributing/`} class="btn btn-ghost btn-lg">How to contribute</a>
+    </div>
+  </PageHero>
+
+  <section class="container-page py-20 md:py-28">
+    <div class="grid gap-4 md:grid-cols-2">
+      {reasons.map(([icon, t, d], i) => (
+        <div class="reveal card p-7 md:p-8" style={`--d:${(i % 2) * 60}ms`}>
+          <span class="flex size-9 items-center justify-center rounded-lg bg-fg text-bg"><Icon name={icon} size={17} /></span>
+          <h2 class="mt-6 text-[20px] font-semibold tracking-[-0.02em] text-fg">{t}</h2>
+          <p class="mt-2.5 text-[15px] leading-relaxed text-muted">{d}</p>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="border-y border-line bg-surface-2">
+    <div class="container-page grid gap-12 py-20 md:py-28 lg:grid-cols-2 lg:items-start">
+      <div class="reveal">
+        <div class="eyebrow">License</div>
+        <h2 class="display mt-4 text-[34px] sm:text-[44px] text-fg">Apache-2.0, without asterisks.</h2>
+        <p class="lede mt-5 text-[17px] leading-[1.65]">Use opendesk commercially, modify it, run it for your clients, and keep your changes private if you want to. The license includes an explicit patent grant. Keep the notices, and say what you changed.</p>
+        <a href={LINKS.license} class="mt-7 inline-flex items-center gap-1.5 text-[14.5px] font-medium text-fg hover:underline underline-offset-4">Read the license<Icon name="arrowUpRight" size={14} /></a>
+      </div>
+      <div class="reveal grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2" style="--d:80ms">
+        {[
+          ['Commercial use', true], ['Modification', true], ['Distribution', true], ['Patent grant', true], ['Private use', true], ['Trademark use', false],
+        ].map(([k, ok]) => (
+          <div class="flex items-center gap-3 bg-bg px-5 py-4 text-[14.5px]">
+            <span class={`flex size-5 items-center justify-center rounded-full ${ok ? 'bg-fg text-bg' : 'ring-1 ring-line text-subtle'}`}><Icon name={ok ? 'check' : 'x'} size={12} stroke={2.25} /></span>
+            <span class={ok ? 'text-fg' : 'text-muted'}>{k}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="container-page py-20 md:py-28">
+    <div class="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
+      <div class="reveal">
+        <div class="eyebrow">Stack</div>
+        <h2 class="display mt-4 text-[34px] sm:text-[44px] text-fg">Boring parts, on purpose.</h2>
+        <p class="lede mt-5 text-[17px] leading-[1.65]">Proven tools, few moving parts. Contracts between the pieces live in the repository, so the API, events and realtime protocol are written down before they are built.</p>
+      </div>
+      <dl class="reveal divide-y divide-line border-y border-line" style="--d:80ms">
+        {stack.map(([k, v]) => (
+          <div class="flex items-baseline justify-between gap-6 py-4">
+            <dt class="text-[15.5px] font-medium text-fg">{k}</dt>
+            <dd class="text-right text-[14.5px] text-muted">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </section>
+
+  <section class="container-page">
+    <div class="reveal grid gap-4 md:grid-cols-3">
+      {[
+        ['bug', 'Report a bug', 'Open an issue with steps to reproduce and your version.', LINKS.githubIssues],
+        ['gitBranch', 'Send a change', 'Read the contributing guide, then open a pull request.', `${LINKS.docs}/contributing/`],
+        ['shield', 'Report a vulnerability', 'Privately, to security@opendesk.sh. Never in a public issue.', '/security/#disclosure'],
+      ].map(([icon, t, d, href]) => (
+        <a href={href} class="group card p-6 transition-colors hover:border-fg/25">
+          <Icon name={icon as 'bug'} size={18} class="text-fg" />
+          <div class="mt-4 flex items-center gap-1.5 text-[16px] font-medium text-fg">{t}<Icon name="arrowRight" size={14} class="transition-transform group-hover:translate-x-0.5" /></div>
+          <p class="mt-1.5 text-[14.5px] text-muted">{d}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <CTA />
+</Layout>

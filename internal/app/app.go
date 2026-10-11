@@ -18,8 +18,10 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
+	"github.com/opendesk/opendesk/internal/ai"
 	"github.com/opendesk/opendesk/internal/analytics"
 	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/opendesk/opendesk/internal/billing"
 	"github.com/opendesk/opendesk/internal/captcha"
 	"github.com/opendesk/opendesk/internal/config"
 	"github.com/opendesk/opendesk/internal/core"
@@ -34,6 +36,7 @@ import (
 	"github.com/opendesk/opendesk/internal/jobs"
 	"github.com/opendesk/opendesk/internal/mailer"
 	"github.com/opendesk/opendesk/internal/natsx"
+	"github.com/opendesk/opendesk/internal/plan"
 	"github.com/opendesk/opendesk/internal/storage"
 	"github.com/opendesk/opendesk/internal/version"
 	"github.com/opendesk/opendesk/internal/webui"
@@ -50,6 +53,8 @@ var areas = []area{
 	{core.Register, core.RegisterWorkers, core.Periodic, core.Background},
 	{email.Register, email.RegisterWorkers, email.Periodic, email.Background},
 	{helpdesk.Register, helpdesk.RegisterWorkers, helpdesk.Periodic, helpdesk.Background},
+	{billing.Register, billing.RegisterWorkers, billing.Periodic, billing.Background},
+	{ai.Register, ai.RegisterWorkers, ai.Periodic, ai.Background},
 }
 
 // NewLogger returns a JSON logger in production and a text logger in development.
@@ -89,7 +94,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger) (*deps.Dep
 	turnstile := captcha.NewTurnstileFromConfig(captcha.TurnstileConfig{Secret: cfg.TurnstileSecret, Disabled: cfg.TurnstileSecret == ""})
 	d := &deps.Deps{Cfg: cfg, Log: log, DB: database, NATS: nc, Storage: store, Mailer: m,
 		Analytics: analytics.New(cfg.PosthogKey, cfg.PosthogHost, log), Box: box, Tokens: auth.NewTokens(cfg.AuthSecret),
-		Captcha: turnstile, Limiter: httpx.NewLimiter()}
+		Captcha: turnstile, Limiter: httpx.NewLimiter(), Plan: plan.New(cfg.BillingEnabled())}
 	domain.Configure(cfg.APIURL, cfg.AuthSecret)
 
 	workers := river.NewWorkers()
@@ -135,16 +140,7 @@ func Router(d *deps.Deps) http.Handler {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"status":404,"title":"Not Found","code":"not_found","detail":"No route matches ` + r.Method + ` ` + strings.ReplaceAll(r.URL.Path, `"`, ``) + `"}`))
 	})
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-		defer cancel()
-		if err := d.DB.Pool.Ping(ctx); err != nil || !d.NATS.IsConnected() {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	})
+	mountHealth(r, d)
 
 	hc := huma.DefaultConfig("opendesk API", version.Version)
 	hc.Info.Description = "The opendesk public API. The opendesk web app uses exactly this API."
@@ -192,6 +188,12 @@ func Serve(ctx context.Context, d *deps.Deps) error {
 	cfg := d.Cfg
 	errc := make(chan error, 2)
 
+	// Build the router before starting workers, so a registration failure exits cleanly.
+	var handler http.Handler
+	if cfg.Role != "worker" {
+		handler = Router(d)
+	}
+
 	if cfg.Role != "api" {
 		if err := d.Jobs.Start(ctx); err != nil {
 			return fmt.Errorf("start river: %w", err)
@@ -204,17 +206,18 @@ func Serve(ctx context.Context, d *deps.Deps) error {
 		d.Log.Info("worker started")
 	}
 
-	var srv *http.Server
-	if cfg.Role != "worker" {
-		srv = &http.Server{Addr: cfg.HTTPAddr, Handler: Router(d), ReadHeaderTimeout: 10 * time.Second,
-			ReadTimeout: 60 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 120 * time.Second}
-		go func() {
-			d.Log.Info("http listening", "addr", cfg.HTTPAddr, "version", version.Version)
-			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				errc <- err
-			}
-		}()
+	if cfg.Role == "worker" {
+		// The worker serves only health checks, so orchestrators can probe it.
+		handler = healthRouter(d)
 	}
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout: 60 * time.Second, WriteTimeout: 120 * time.Second, IdleTimeout: 120 * time.Second}
+	go func() {
+		d.Log.Info("http listening", "addr", cfg.HTTPAddr, "version", version.Version)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errc <- err
+		}
+	}()
 
 	select {
 	case <-ctx.Done():
@@ -223,9 +226,7 @@ func Serve(ctx context.Context, d *deps.Deps) error {
 	}
 	shutdown, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	if srv != nil {
-		_ = srv.Shutdown(shutdown)
-	}
+	_ = srv.Shutdown(shutdown)
 	if cfg.Role != "api" {
 		_ = d.Jobs.Stop(shutdown)
 	}
@@ -246,3 +247,22 @@ func (h minLevel) WithAttrs(a []slog.Attr) slog.Handler {
 	return minLevel{h.Handler.WithAttrs(a), h.min}
 }
 func (h minLevel) WithGroup(n string) slog.Handler { return minLevel{h.Handler.WithGroup(n), h.min} }
+
+func mountHealth(r chi.Router, d *deps.Deps) {
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	r.Get("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := d.DB.Pool.Ping(ctx); err != nil || !d.NATS.IsConnected() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+}
+
+func healthRouter(d *deps.Deps) http.Handler {
+	r := chi.NewRouter()
+	mountHealth(r, d)
+	return r
+}

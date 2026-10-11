@@ -1,0 +1,67 @@
+# opendesk behind automatic HTTPS, on one domain.
+#
+#   /socket*      -> realtime:4000  (Phoenix Channels; WebSocket upgrades pass through)
+#   everything    -> opendesk:8080  (API, web app, widget, help center, /config.js)
+#
+# OPENDESK_DOMAIN is the site address. A public hostname gets a Let's Encrypt
+# (or ZeroSSL) certificate as soon as its DNS points here and ports 80 and 443
+# are open. "localhost" gets a certificate from Caddy's local CA. ":80" serves
+# plain HTTP, for when another proxy in front of this one terminates TLS.
+#
+# CADDY_GLOBAL_OPTIONS carries the global block, e.g. "email you@example.com",
+# so this file stays the same on every install.
+{
+	{$CADDY_GLOBAL_OPTIONS}
+	servers {
+		# Long-lived sockets must not be cut by a read timeout.
+		timeouts {
+			read_header 15s
+			idle 5m
+		}
+	}
+}
+
+{$OPENDESK_DOMAIN:localhost} {
+	# The app sets its own security headers (HSTS included when it is served
+	# over https); Caddy only stops advertising itself.
+	header -Server
+
+	# Caddy is the edge here, so a client-supplied CF-Connecting-IP is a lie;
+	# the app would otherwise take it as the client address for rate limits.
+	# X-Forwarded-For is already replaced with the real peer by reverse_proxy.
+	request_header -CF-Connecting-IP
+	request_header -True-Client-IP
+
+	@socket path /socket /socket/*
+	handle @socket {
+		reverse_proxy realtime:4000 {
+			# Close sockets promptly on reload so clients reconnect to the new config.
+			stream_close_delay 5s
+		}
+	}
+
+	handle {
+		encode zstd gzip
+		# One upstream: no active health check, which would answer 503 for a
+		# whole interval after one missed probe. A request that cannot connect
+		# (opendesk restarting) is retried for a few seconds instead.
+		reverse_proxy opendesk:8080 {
+			lb_try_duration 10s
+		}
+	}
+
+	log {
+		output stdout
+		# Never log query strings: realtime tokens travel in ?token=.
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete token
+				}
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+}

@@ -1,9 +1,14 @@
 // Package core is the core area. Register wires its HTTP routes, RegisterWorkers its
 // River workers, Periodic its scheduled jobs and Background its long-running loops.
+//
+// Core owns accounts and sign-in (password, OAuth/OIDC, TOTP), sessions, workspaces,
+// members, invitations, teams, API keys, webhooks, the audit log, notifications, the
+// events replay API and realtime tokens.
 package core
 
 import (
 	"context"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
@@ -14,13 +19,38 @@ import (
 
 // Register adds this area's routes. Prefer huma operations; use r only for raw HTTP
 // (redirects, raw bodies, streaming).
-func Register(d *deps.Deps, api huma.API, r chi.Router) {}
+func Register(d *deps.Deps, api huma.API, r chi.Router) {
+	s := newSvc(d)
+	s.registerAuth(api)
+	s.registerOAuth(api, r)
+	s.registerTOTP(api)
+	s.registerMe(api)
+	s.registerWorkspaces(api)
+	s.registerMembers(api)
+	s.registerInvitations(api)
+	s.registerTeams(api)
+	s.registerAPIKeys(api)
+	s.registerWebhooks(api)
+	s.registerPlatform(api)
+}
 
 // RegisterWorkers adds this area's River workers.
-func RegisterWorkers(d *deps.Deps, w *river.Workers) {}
+func RegisterWorkers(d *deps.Deps, w *river.Workers) {
+	s := newSvc(d)
+	river.AddWorker(w, &systemEmailWorker{s: s})
+	river.AddWorker(w, &forgotWorker{s: s})
+	river.AddWorker(w, &dispatchWorker{s: s})
+	river.AddWorker(w, &deliverWorker{s: s})
+	river.AddWorker(w, &cleanupWorker{s: s})
+}
 
 // Periodic returns this area's scheduled jobs.
-func Periodic(d *deps.Deps) []*river.PeriodicJob { return nil }
+func Periodic(d *deps.Deps) []*river.PeriodicJob {
+	return []*river.PeriodicJob{
+		river.NewPeriodicJob(river.PeriodicInterval(6*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) { return cleanupArgs{}, nil }, &river.PeriodicJobOpts{RunOnStart: true}),
+	}
+}
 
-// Background runs until ctx is done, in the worker role only.
+// Background runs until ctx is done, in the worker role only. Core has no loops.
 func Background(ctx context.Context, d *deps.Deps) {}

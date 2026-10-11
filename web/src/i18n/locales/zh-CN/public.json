@@ -1,0 +1,61 @@
+{
+  "help": {
+    "default_title": "帮助中心",
+    "hero_title": "有什么可以帮您？",
+    "hero_subtitle": "搜索文章，或按主题浏览。",
+    "search_placeholder": "搜索文章",
+    "topics": "主题",
+    "popular": "热门文章",
+    "articles_other": "{{count}} 篇文章",
+    "empty_title": "这里还没有内容",
+    "empty_body": "文章发布后会显示在这里。",
+    "not_found_title": "找不到帮助中心",
+    "not_found_body": "该帮助中心不存在或尚未公开。",
+    "topic_not_found_title": "找不到该主题",
+    "topic_not_found_body": "它可能已被重命名或删除。",
+    "topic_empty": "还没有文章",
+    "article_not_found_title": "找不到该文章",
+    "article_not_found_body": "它可能已被移动或取消发布。",
+    "updated": "更新于 {{date}}",
+    "breadcrumb": "导航路径",
+    "search": "搜索",
+    "search_min": "请至少输入两个字符",
+    "no_results_title": "没有找到与“{{term}}”相关的结果",
+    "no_results_body": "请尝试减少关键词或换用其他词语。",
+    "results_other": "{{count}} 条结果",
+    "theme_light": "切换到浅色主题",
+    "theme_dark": "切换到深色主题"
+  },
+  "csat": {
+    "page_title": "评价本次服务",
+    "invalid_title": "此链接无效",
+    "invalid_body": "链接可能已过期。感谢您愿意分享反馈。",
+    "already_title": "您已评价过本次服务",
+    "already_body": "谢谢，您的反馈已送达团队。",
+    "thanks_title": "感谢您的反馈",
+    "thanks_body": "这能帮助 {{name}} 做得更好。",
+    "thanks_body_generic": "这能帮助团队做得更好。",
+    "question": "您对本次服务满意吗？",
+    "rating": "评分",
+    "score_label": "{{score}}，{{label}}",
+    "scores": {
+      "1": "非常不满意",
+      "2": "不满意",
+      "3": "一般",
+      "4": "满意",
+      "5": "非常满意"
+    },
+    "comment_label": "还有什么想补充的吗？",
+    "optional": "选填",
+    "comment_placeholder": "哪些地方做得好，哪些地方可以改进",
+    "saved": "您的评分已保存。如有需要，可以补充评论。",
+    "send_comment": "发送评论",
+    "send_feedback": "提交反馈",
+    "error": "出了点问题，请重试。",
+    "offline": "无法连接服务器，请检查网络连接。"
+  },
+  "footer": {
+    "powered_by": "技术支持",
+    "language": "语言"
+  }
+}

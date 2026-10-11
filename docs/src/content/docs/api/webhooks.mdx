@@ -1,0 +1,206 @@
+---
+title: Webhooks
+description: Receive signed HTTP callbacks for opendesk events, verify them and handle retries.
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+A webhook sends an HTTP `POST` to your endpoint each time an event happens in your workspace. Use webhooks to sync tickets to a warehouse, notify a chat tool, or trigger your own workflows.
+
+## Create an endpoint
+
+In **Settings → Webhooks** (admin), or with the [API](/api/resources/api-keys-webhooks/#webhooks), add:
+
+- a **URL**. It must be HTTPS, and must not resolve to a private, loopback or link-local address.
+- the **events** to receive, or `*` for all of them
+- an optional description
+
+The signing **secret** is shown once, when the endpoint is created. It is encrypted at rest.
+
+Send a test event with **Send test** or `POST /v1/webhooks/{id}/test`. It delivers a `webhook.test` event.
+
+## Payload
+
+The body is the event [envelope](/api/events/#envelope), without `topics`:
+
+```json
+{
+  "id": "0192f0c4-8f3a-7c1e-9a4e-3c1d2e5f6a7b",
+  "seq": 1042,
+  "workspace_id": "0192f0aa-...",
+  "type": "ticket.created",
+  "visibility": "agents",
+  "data": { "ticket": { "id": "...", "number": 1042, "subject": "Can't sign in", "status": "open" } },
+  "occurred_at": "2026-10-11T09:00:00Z"
+}
+```
+
+`data` holds the same objects the REST API returns. See the [events catalog](/api/events/) for every type.
+
+## Headers
+
+| header | value |
+| --- | --- |
+| `OD-Signature` | `t=<unix seconds>,v1=<hex signature>` |
+| `OD-Event-Id` | The event id. Use it to deduplicate. |
+| `OD-Event-Type` | The event type, such as `ticket.created`. |
+| `Content-Type` | `application/json` |
+
+## Verify the signature
+
+The signature is HMAC-SHA256 of `<t>.<body>` with your endpoint secret, hex encoded:
+
+```
+v1 = hex( HMAC-SHA256( key = secret, message = t + "." + raw_body ) )
+```
+
+To verify:
+
+1. Read the **raw** request body, before any JSON parsing.
+2. Split `OD-Signature` on `,` and read `t` and `v1`.
+3. Compute the expected signature and compare it with `v1` in **constant time**.
+4. Reject the request if `t` is too far from your clock. We recommend a tolerance of 5 minutes.
+
+<Tabs syncKey="lang">
+<TabItem label="Node">
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import express from 'express';
+
+const app = express();
+const TOLERANCE_SECONDS = 300;
+
+export function verify(rawBody, header, secret) {
+  const parts = Object.fromEntries(header.split(',').map((p) => p.split('=', 2)));
+  const t = Number(parts.t);
+  if (!parts.v1 || !Number.isFinite(t)) return false;
+  if (Math.abs(Date.now() / 1000 - t) > TOLERANCE_SECONDS) return false;
+  const expected = createHmac('sha256', secret).update(`${parts.t}.${rawBody}`).digest('hex');
+  const a = Buffer.from(expected, 'hex');
+  const b = Buffer.from(parts.v1, 'hex');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+app.post('/hooks/opendesk', express.raw({ type: 'application/json' }), (req, res) => {
+  if (!verify(req.body.toString('utf8'), req.get('OD-Signature') ?? '', process.env.OPENDESK_WEBHOOK_SECRET)) {
+    return res.sendStatus(400);
+  }
+  const event = JSON.parse(req.body.toString('utf8'));
+  res.sendStatus(200); // acknowledge first, then do the work
+  handle(event);
+});
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import hashlib
+import hmac
+import os
+import time
+
+from flask import Flask, abort, request
+
+app = Flask(__name__)
+TOLERANCE_SECONDS = 300
+
+def verify(raw_body: bytes, header: str, secret: str) -> bool:
+    parts = dict(p.split("=", 1) for p in header.split(",") if "=" in p)
+    t, v1 = parts.get("t"), parts.get("v1")
+    if not t or not v1 or not t.isdigit():
+        return False
+    if abs(time.time() - int(t)) > TOLERANCE_SECONDS:
+        return False
+    expected = hmac.new(secret.encode(), t.encode() + b"." + raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, v1)
+
+@app.post("/hooks/opendesk")
+def opendesk_webhook():
+    if not verify(request.get_data(), request.headers.get("OD-Signature", ""), os.environ["OPENDESK_WEBHOOK_SECRET"]):
+        abort(400)
+    event = request.get_json()
+    # enqueue event for processing, then acknowledge
+    return "", 200
+```
+
+</TabItem>
+<TabItem label="Go">
+
+```go
+package hooks
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"math"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const tolerance = 5 * time.Minute
+
+func Verify(body []byte, header, secret string) bool {
+	var t, v1 string
+	for _, part := range strings.Split(header, ",") {
+		k, v, _ := strings.Cut(part, "=")
+		switch k {
+		case "t":
+			t = v
+		case "v1":
+			v1 = v
+		}
+	}
+	ts, err := strconv.ParseInt(t, 10, 64)
+	if err != nil || v1 == "" {
+		return false
+	}
+	if math.Abs(time.Since(time.Unix(ts, 0)).Seconds()) > tolerance.Seconds() {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(t + "."))
+	mac.Write(body)
+	got, err := hex.DecodeString(v1)
+	return err == nil && hmac.Equal(mac.Sum(nil), got)
+}
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 5<<20))
+	if err != nil || !Verify(body, r.Header.Get("OD-Signature"), os.Getenv("OPENDESK_WEBHOOK_SECRET")) {
+		http.Error(w, "bad signature", http.StatusBadRequest)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	// process body
+}
+```
+
+</TabItem>
+</Tabs>
+
+<Aside type="caution">
+Compute the signature over the exact bytes you received. Parsing and re-serializing the JSON changes them, and the signature will not match.
+</Aside>
+
+## Responding and retries
+
+- Respond with any `2xx` status to acknowledge a delivery. Respond quickly and do slow work in the background.
+- Any other status, a timeout or a connection error counts as a failure, and the delivery is **retried with exponential backoff**.
+- Each delivery records its status (`pending`, `succeeded`, `failed`), number of attempts, response code and duration. List them with `GET /v1/webhooks/{id}/deliveries` or in the webhook's settings page.
+
+## Ordering and duplicates
+
+- Deliveries can arrive more than once, for example after a retry. Deduplicate on `OD-Event-Id`.
+- Deliveries can arrive out of order. Every event carries `seq`, which is contiguous per workspace, so you can order them, and `occurred_at`.
+- If you need to recover events your endpoint missed, use [`GET /v1/events?since=<seq>`](/api/realtime/#missed-events), which keeps events for 7 days.
+
+## Disabling
+
+Set `enabled: false` to pause an endpoint without deleting it.

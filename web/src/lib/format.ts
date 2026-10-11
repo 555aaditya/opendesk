@@ -1,0 +1,164 @@
+// Display formatting. Dates and numbers go through Intl with the active locale
+// (`intlLocale()`: the page language on customer-facing pages, the browser's
+// locale in the agent app), so a German visitor reads "11. Okt." and 24-hour
+// times while an American agent reads "Oct 11" and "2:05 PM".
+
+import { intlLocale } from "@/i18n";
+
+const cache = new Map<string, Intl.DateTimeFormat | Intl.NumberFormat | Intl.RelativeTimeFormat>();
+function memo<T extends Intl.DateTimeFormat | Intl.NumberFormat | Intl.RelativeTimeFormat>(key: string, make: () => T): T {
+  let f = cache.get(key) as T | undefined;
+  if (!f) {
+    f = make();
+    cache.set(key, f);
+  }
+  return f;
+}
+
+function dtf(opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const loc = intlLocale();
+  return memo(`d|${loc}|${JSON.stringify(opts)}`, () => new Intl.DateTimeFormat(loc, opts));
+}
+function nf(opts: Intl.NumberFormatOptions = {}): Intl.NumberFormat {
+  const loc = intlLocale();
+  return memo(`n|${loc}|${JSON.stringify(opts)}`, () => new Intl.NumberFormat(loc, opts));
+}
+function rtf(opts: Intl.RelativeTimeFormatOptions): Intl.RelativeTimeFormat {
+  const loc = intlLocale();
+  return memo(`r|${loc}|${JSON.stringify(opts)}`, () => new Intl.RelativeTimeFormat(loc, opts));
+}
+
+const isEnglish = () => intlLocale().toLowerCase().startsWith("en");
+
+function sameYear(d: Date, now = new Date()) {
+  return d.getFullYear() === now.getFullYear();
+}
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+function capitalize(s: string) {
+  return s ? s.charAt(0).toLocaleUpperCase(intlLocale()) + s.slice(1) : s;
+}
+
+/** Compact age for dense lists: "now", "5m", "2h", "3d", then a short date. */
+export function relShort(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  const s = Math.round((now - t) / 1000);
+  const m = Math.round(s / 60);
+  const h = Math.round(m / 60);
+  const d = Math.round(h / 24);
+  if (d < 7) {
+    if (isEnglish()) {
+      if (s < 45) return "now";
+      if (m < 60) return `${m}m`;
+      if (h < 24) return `${h}h`;
+      return `${d}d`;
+    }
+    const f = rtf({ style: "narrow", numeric: "auto" });
+    if (s < 45) return f.format(0, "second");
+    if (m < 60) return f.format(-m, "minute");
+    if (h < 24) return f.format(-h, "hour");
+    return f.format(-d, "day");
+  }
+  return shortDate(iso);
+}
+
+/** "5 minutes ago", "2 days ago", in the active language. */
+export function relLong(iso: string | null | undefined, now = Date.now()): string {
+  if (!iso) return "";
+  const s = Math.round((now - Date.parse(iso)) / 1000);
+  if (s < 45) return isEnglish() ? "just now" : rtf({ numeric: "auto" }).format(0, "second");
+  const f = rtf({ numeric: "always" });
+  const m = Math.round(s / 60);
+  if (m < 60) return f.format(-Math.max(1, m), "minute");
+  const h = Math.round(m / 60);
+  if (h < 24) return f.format(-h, "hour");
+  const d = Math.round(h / 24);
+  if (d < 30) return f.format(-d, "day");
+  const mo = Math.round(d / 30);
+  if (mo < 12) return f.format(-mo, "month");
+  return f.format(-Math.round(d / 365), "year");
+}
+
+/** "Sat, Oct 11, 2026, 2:05 PM" (en-US) or "Sa., 11. Okt. 2026, 14:05" (de). */
+export function fullDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return dtf({ weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+}
+
+/** "October 11, 2026" / "11. Oktober 2026": a calm date for public pages. */
+export function longDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return dtf({ month: "long", day: "numeric", year: "numeric" }).format(new Date(iso));
+}
+
+/** "Today", "Yesterday", "Monday, Oct 6", or "Oct 6, 2024". */
+export function dayLabel(iso: string, now = Date.now()): string {
+  const d = new Date(iso);
+  const diff = Math.round((startOfDay(new Date(now)) - startOfDay(d)) / 86_400_000);
+  if (diff === 0 || diff === 1) return capitalize(rtf({ numeric: "auto" }).format(-diff, "day"));
+  return sameYear(d, new Date(now))
+    ? dtf({ weekday: "long", month: "short", day: "numeric" }).format(d)
+    : dtf({ month: "short", day: "numeric", year: "numeric" }).format(d);
+}
+
+/** Time of day, with the locale's 12 or 24 hour clock. */
+export function clock(iso: string): string {
+  return dtf({ hour: "numeric", minute: "2-digit" }).format(new Date(iso));
+}
+
+/** "Oct 6", or "Oct 6, 2024" outside the current year. */
+export function shortDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return sameYear(d) ? dtf({ month: "short", day: "numeric" }).format(d) : dtf({ month: "short", day: "numeric", year: "numeric" }).format(d);
+}
+
+/** 135 -> "2h 15m", 2880 -> "2d". */
+export function minutes(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "–";
+  const m = Math.round(Math.abs(n));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rm = m % 60;
+  if (h < 24) return rm ? `${h}h ${rm}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh ? `${d}d ${rh}h` : `${d}d`;
+}
+
+export function bytes(n: number): string {
+  if (n < 1024) return `${number(n)} B`;
+  if (n < 1024 * 1024) return `${number(n / 1024, { maximumFractionDigits: n < 10 * 1024 ? 1 : 0 })} KB`;
+  return `${number(n / 1024 / 1024, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} MB`;
+}
+
+/** English-only pluralizer for agent-app copy; customer pages use i18n plurals. */
+export function plural(n: number, one: string, many = `${one}s`) {
+  return `${number(n)} ${n === 1 ? one : many}`;
+}
+
+/** 1234 -> "1.2K" (en), "1234" -> "1234" in locales that don't abbreviate thousands. */
+export function compact(n: number): string {
+  return nf({ notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
+/** Grouped number in the active locale: 12345.6 -> "12,345.6" / "12.345,6". */
+export function number(n: number, opts?: Intl.NumberFormatOptions): string {
+  return nf(opts).format(n);
+}
+
+/** Money from minor units (Stripe amounts): currency(1900, "usd") -> "$19.00"; whole amounts drop the decimals. */
+export function currency(minorUnits: number, code: string, opts: { exact?: boolean } = {}): string {
+  const cur = code.toUpperCase();
+  const digits = memo(`c|${cur}`, () => new Intl.NumberFormat("en", { style: "currency", currency: cur })).resolvedOptions().maximumFractionDigits ?? 2;
+  const value = minorUnits / 10 ** digits;
+  const whole = Number.isInteger(value) && !opts.exact;
+  return nf({ style: "currency", currency: cur, ...(whole ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}) }).format(value);
+}
+
+/** 0.874 -> "87%" (or "87 %" in fr/de). */
+export function percent(ratio: number, digits = 0): string {
+  return nf({ style: "percent", maximumFractionDigits: digits }).format(ratio);
+}

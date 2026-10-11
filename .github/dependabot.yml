@@ -1,0 +1,33 @@
+# Weekly dependency updates, grouped per ecosystem so they arrive as a few PRs.
+# Actions are pinned by commit SHA; Dependabot keeps the SHA and its comment current.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: gomod
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      go: { patterns: ["*"], update-types: [minor, patch] }
+  - package-ecosystem: npm
+    directories: [/web, /site, /docs, /deploy/cloudflare/email-worker]
+    schedule: { interval: weekly }
+    groups:
+      npm: { patterns: ["*"], update-types: [minor, patch] }
+  - package-ecosystem: mix
+    directory: /realtime
+    schedule: { interval: weekly }
+    groups:
+      mix: { patterns: ["*"], update-types: [minor, patch] }
+  - package-ecosystem: docker
+    directory: /deploy/docker
+    schedule: { interval: weekly }
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: terraform
+    directory: /deploy/terraform/environments/production
+    schedule: { interval: weekly }

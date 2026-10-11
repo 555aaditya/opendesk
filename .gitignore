@@ -1,7 +1,12 @@
 .DS_Store
 node_modules/
 dist/
+!internal/webui/dist/
 .env
 .env.*
 !.env.example
 *.log
+
+# Review screenshots (regenerated locally)
+web/docs/screenshots/
+site/docs/screenshots/

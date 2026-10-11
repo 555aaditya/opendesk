@@ -1,0 +1,14 @@
+{
+  "actions": {
+    "cancel": "Annuleren",
+    "save": "Opslaan",
+    "close": "Sluiten",
+    "retry": "Opnieuw proberen",
+    "apply": "Toepassen",
+    "copy": "Kopiëren",
+    "back": "Terug",
+    "continue": "Doorgaan"
+  },
+  "credits_one": "{{count}} credit",
+  "credits_other": "{{count}} credits"
+}

@@ -1,0 +1,41 @@
+---
+title: Search and reports
+description: Search across tickets, contacts and articles, and read the reports overview.
+---
+
+| method | path | |
+| --- | --- | --- |
+| `GET` | `/v1/search?q=` | Top tickets, contacts and articles |
+| `GET` | `/v1/reports/overview?from=&to=` | Metrics for a date range |
+
+## Search
+
+```sh
+curl "https://api.opendesk.sh/v1/search?q=refund" -H "Authorization: Bearer od_live_..."
+```
+
+```json
+{ "tickets": [ ... ], "contacts": [ ... ], "articles": [ ... ] }
+```
+
+Up to five of each. For more tickets, use `GET /v1/tickets?q=`.
+
+## Reports overview
+
+```sh
+curl "https://api.opendesk.sh/v1/reports/overview?from=2026-09-01&to=2026-09-30" \
+  -H "Authorization: Bearer od_live_..."
+```
+
+```json
+{
+  "created": 412, "solved": 398, "open_now": 23,
+  "first_response_p50_minutes": 14, "resolution_p50_minutes": 185,
+  "csat_avg": 4.6, "csat_count": 121, "sla_breached": 6,
+  "by_day": [{ "date": "2026-09-01", "created": 15, "solved": 13 }],
+  "by_channel": { "email": 301, "chat": 98, "api": 13 },
+  "by_agent": [{ "user": { "id": "...", "name": "Sam", "email": "sam@example.com", "avatar_url": "" }, "solved": 120, "first_response_p50_minutes": 11 }]
+}
+```
+
+See [Reports](/guides/reports/) for what each metric means.

@@ -1,0 +1,13 @@
+{
+  "actions": {
+    "cancel": "취소",
+    "save": "저장",
+    "close": "닫기",
+    "retry": "다시 시도",
+    "apply": "적용",
+    "copy": "복사",
+    "back": "뒤로",
+    "continue": "계속"
+  },
+  "credits_other": "{{count}}크레딧"
+}

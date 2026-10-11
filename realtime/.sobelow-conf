@@ -1,0 +1,24 @@
+# Sobelow settings for the realtime gateway (run with `mix sobelow --config`).
+#
+# Ignored checks, and what enforces the invariant instead:
+#   Config.HTTPS - TLS terminates at the load balancer (ALB) or Caddy in front of
+#                  the gateway; the app listens on plain HTTP inside the network.
+#   Config.CSWH  - /socket (agents) checks Origin with an MFA (RealtimeWeb.Origin)
+#                  that Sobelow cannot evaluate statically; it enforces CHECK_ORIGINS,
+#                  required in prod. /socket/widget allows any Origin by design: the
+#                  chat widget runs on customer sites, it accepts only widget_ws tokens
+#                  and routes only the contact's own topic. Both are covered by
+#                  test/realtime_web/endpoint_test.exs and user_socket_test.exs.
+[
+  verbose: false,
+  private: true,
+  skip: false,
+  router: :none,
+  exit: "low",
+  format: "txt",
+  out: "",
+  threshold: "low",
+  ignore: ["Config.HTTPS", "Config.CSWH"],
+  ignore_files: [],
+  version: false
+]

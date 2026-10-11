@@ -1,0 +1,39 @@
+/* Customer-facing pages (help center, CSAT) in scripts Geist doesn't cover.
+   <html lang> is set by setLocale() on these pages only, so these rules don't
+   reach the agent app. */
+
+:root:lang(ja) body {
+  font-family: "Geist Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Meiryo", "Noto Sans JP", system-ui, sans-serif;
+}
+:root:lang(zh-CN) body {
+  font-family: "Geist Variable", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+}
+:root:lang(ko) body {
+  font-family: "Geist Variable", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+}
+:root:lang(ar) body {
+  font-family: "Geist Variable", "SF Arabic", "Geeza Pro", "Segoe UI", "Noto Sans Arabic", Tahoma, system-ui, sans-serif;
+}
+
+/* Negative tracking breaks Arabic joining and crowds CJK. */
+:root:is(:lang(ar), :lang(ja), :lang(zh-CN), :lang(ko)) [data-public-page] * {
+  letter-spacing: 0 !important;
+}
+/* Arabic and CJK read better a touch looser. */
+:root:is(:lang(ar), :lang(ja), :lang(zh-CN), :lang(ko)) [data-public-page] {
+  line-height: 1.6;
+}
+:root:lang(ar) [data-public-page] h1 {
+  line-height: 1.35;
+}
+
+/* The monospace eyebrow style has no CJK or Arabic glyphs; fixed-width
+   fallbacks space Arabic letters apart and look loose in CJK. */
+:root:is(:lang(ar), :lang(ja), :lang(zh-CN), :lang(ko)) [data-public-page] :is(.label-caps, .mono) {
+  font-family: inherit;
+  text-transform: none;
+}
+:root:is(:lang(ar), :lang(ja), :lang(zh-CN), :lang(ko)) [data-public-page] .label-caps {
+  font-size: 12px;
+  font-weight: 500;
+}

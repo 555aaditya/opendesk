@@ -1,0 +1,18 @@
+# Cloudflare Email Worker for forwarding addresses (<token>@in.opendesk.sh).
+# Email Routing's catch-all rule for in.opendesk.sh sends every message here;
+# the rule itself is managed by Terraform (deploy/terraform/modules/cloudflare).
+#
+# Secret, set once per environment (same value as the API's INBOUND_SECRET):
+#   wrangler secret put INBOUND_SECRET
+name = "opendesk-inbound-email"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[vars]
+INBOUND_URL = "https://api.opendesk.sh/v1/inbound/email"
+
+[observability]
+enabled = true
+head_sampling_rate = 1

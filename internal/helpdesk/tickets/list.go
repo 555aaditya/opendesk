@@ -1,0 +1,391 @@
+package tickets
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/domain"
+	"github.com/opendesk/opendesk/internal/helpdesk/hd"
+	"github.com/opendesk/opendesk/internal/httpx"
+)
+
+// listQuery is the parsed GET /v1/tickets query.
+type listQuery struct {
+	hd.TicketFilters
+	ContactID string
+	Spam      string // "", "true", "false", "any"
+}
+
+// sqlBuilder accumulates WHERE clauses and positional args.
+type sqlBuilder struct {
+	where []string
+	args  []any
+}
+
+func (b *sqlBuilder) arg(v any) string {
+	b.args = append(b.args, v)
+	return "$" + strconv.Itoa(len(b.args))
+}
+
+func (b *sqlBuilder) add(clause string) { b.where = append(b.where, clause) }
+
+func (b *sqlBuilder) sql() string {
+	if len(b.where) == 0 {
+		return ""
+	}
+	return " WHERE " + strings.Join(b.where, " AND ")
+}
+
+var numberRef = regexp.MustCompile(`^#?(\d{1,18})$`)
+
+// applyFilters adds the filter clauses for f. me is the caller's user id (nil for API keys).
+func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) error {
+	b.add("t.workspace_id = " + b.arg(wid))
+	b.add("t.deleted_at IS NULL")
+	switch f.Spam {
+	case "true":
+		b.add("t.spam")
+	case "any":
+	case "", "false":
+		b.add("NOT t.spam")
+	default:
+		return httpx.Validation("spam must be true, false or any")
+	}
+	if len(f.Status) > 0 {
+		b.add("t.status = ANY(" + b.arg(f.Status) + ")")
+	}
+	if len(f.Priority) > 0 {
+		b.add("t.priority = ANY(" + b.arg(f.Priority) + ")")
+	}
+	switch f.Assignee {
+	case "":
+	case "none":
+		b.add("t.assignee_id IS NULL")
+	case "me":
+		if me == nil {
+			b.add("false")
+		} else {
+			b.add("t.assignee_id = " + b.arg(*me))
+		}
+	default:
+		id, err := hd.ParseRef(f.Assignee, "assignee")
+		if err != nil {
+			return err
+		}
+		b.add("t.assignee_id = " + b.arg(id))
+	}
+	for _, ref := range []struct{ v, col string }{{f.TeamID, "t.team_id"}, {f.MailboxID, "t.mailbox_id"}, {f.ContactID, "t.contact_id"}} {
+		if ref.v == "" {
+			continue
+		}
+		id, err := hd.ParseRef(ref.v, strings.TrimPrefix(ref.col, "t."))
+		if err != nil {
+			return err
+		}
+		b.add(ref.col + " = " + b.arg(id))
+	}
+	if f.Tag != "" {
+		b.add(`EXISTS (SELECT 1 FROM ticket_tags ftt JOIN tags fg ON fg.id = ftt.tag_id
+			WHERE ftt.ticket_id = t.id AND fg.workspace_id = t.workspace_id AND lower(fg.name) = lower(` + b.arg(f.Tag) + `))`)
+	}
+	if f.Channel != "" {
+		b.add("t.channel = " + b.arg(f.Channel))
+	}
+	if q := strings.TrimSpace(f.Q); q != "" {
+		var parts []string
+		if m := numberRef.FindStringSubmatch(q); m != nil {
+			n, _ := strconv.ParseInt(m[1], 10, 64)
+			parts = append(parts, "t.number = "+b.arg(n))
+		}
+		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
+		parts = append(parts, "t.search @@ "+tsq,
+			`EXISTS (SELECT 1 FROM messages fm WHERE fm.workspace_id = t.workspace_id AND fm.ticket_id = t.id AND fm.search @@ `+tsq+`)`)
+		if pq := prefixQuery(q); pq != "" {
+			parts = append(parts, "t.search @@ to_tsquery('simple', "+b.arg(pq)+")")
+		}
+		b.add("(" + strings.Join(parts, " OR ") + ")")
+	}
+	return nil
+}
+
+var wordRe = regexp.MustCompile(`[\p{L}\p{N}]+`)
+
+// prefixQuery turns "refu ord" into "refu:* & ord:*" so partial words match subjects.
+func prefixQuery(q string) string {
+	words := wordRe.FindAllString(strings.ToLower(q), 8)
+	if len(words) == 0 {
+		return ""
+	}
+	for i, w := range words {
+		words[i] = w + ":*"
+	}
+	return strings.Join(words, " & ")
+}
+
+// Sort keys.
+const dueExpr = `COALESCE(CASE WHEN t.sla_policy_id IS NULL THEN NULL
+	WHEN t.first_responded_at IS NULL THEN LEAST(t.first_response_due_at, t.resolution_due_at)
+	ELSE t.resolution_due_at END, 'infinity'::timestamptz)`
+
+const priorityExpr = `(CASE t.priority WHEN 'urgent' THEN 4 WHEN 'high' THEN 3 WHEN 'normal' THEN 2 ELSE 1 END)`
+
+var priorityRank = map[string]int{"urgent": 4, "high": 3, "normal": 2, "low": 1}
+
+type sortSpec struct {
+	expr string
+	cast string
+	desc bool
+	key  func(domain.Ticket) any
+}
+
+func parseSort(sort, order string) (sortSpec, error) {
+	var s sortSpec
+	switch sort {
+	case "", "last_message_at":
+		s = sortSpec{expr: "t.last_message_at", cast: "timestamptz", desc: true,
+			key: func(t domain.Ticket) any { return t.LastMessageAt.UTC().Format(time.RFC3339Nano) }}
+	case "created_at":
+		s = sortSpec{expr: "t.created_at", cast: "timestamptz", desc: true,
+			key: func(t domain.Ticket) any { return t.CreatedAt.UTC().Format(time.RFC3339Nano) }}
+	case "priority":
+		s = sortSpec{expr: priorityExpr, cast: "int", desc: true, key: func(t domain.Ticket) any { return priorityRank[t.Priority] }}
+	case "due":
+		s = sortSpec{expr: dueExpr, cast: "timestamptz", desc: false, key: func(t domain.Ticket) any {
+			if d := ticketDue(t); d != nil {
+				return d.UTC().Format(time.RFC3339Nano)
+			}
+			return "infinity"
+		}}
+	default:
+		return s, httpx.Validation("sort must be last_message_at, created_at, priority or due")
+	}
+	switch order {
+	case "":
+	case "asc":
+		s.desc = false
+	case "desc":
+		s.desc = true
+	default:
+		return s, httpx.Validation("order must be asc or desc")
+	}
+	return s, nil
+}
+
+// ticketDue mirrors dueExpr: the next SLA deadline that still matters.
+func ticketDue(t domain.Ticket) *time.Time {
+	if t.SLA == nil {
+		return nil
+	}
+	if t.FirstRespondedAt == nil {
+		a, b := t.SLA.FirstResponseDueAt, t.SLA.ResolutionDueAt
+		switch {
+		case a == nil:
+			return b
+		case b == nil:
+			return a
+		case a.Before(*b):
+			return a
+		default:
+			return b
+		}
+	}
+	return t.SLA.ResolutionDueAt
+}
+
+type ticketCursor struct {
+	K  json.RawMessage `json:"k"`
+	ID uuid.UUID       `json:"id"`
+}
+
+// listTickets runs a filtered, sorted, keyset-paginated ticket query.
+func listTickets(ctx context.Context, q db.Querier, wid uuid.UUID, me *uuid.UUID, f listQuery, sort, order string, limit int, cursor string) (httpx.Page[domain.Ticket], error) {
+	var page httpx.Page[domain.Ticket]
+	s, err := parseSort(sort, order)
+	if err != nil {
+		return page, err
+	}
+	b := &sqlBuilder{}
+	if err := applyFilters(b, wid, me, f); err != nil {
+		return page, err
+	}
+	cmp, dir := "<", "DESC"
+	if !s.desc {
+		cmp, dir = ">", "ASC"
+	}
+	if cursor != "" {
+		var c ticketCursor
+		if err := httpx.DecodeCursor(cursor, &c); err != nil {
+			return page, err
+		}
+		var k any
+		if err := json.Unmarshal(c.K, &k); err != nil || k == nil {
+			return page, httpx.BadRequest("invalid cursor")
+		}
+		if s.cast == "int" {
+			if _, ok := k.(float64); !ok {
+				return page, httpx.BadRequest("invalid cursor")
+			}
+			k = int(k.(float64))
+		} else if str, ok := k.(string); !ok {
+			return page, httpx.BadRequest("invalid cursor")
+		} else if str != "infinity" {
+			if _, err := time.Parse(time.RFC3339Nano, str); err != nil {
+				return page, httpx.BadRequest("invalid cursor")
+			}
+		}
+		b.add(fmt.Sprintf("(%s, t.id) %s (%s::%s, %s::uuid)", s.expr, cmp, b.arg(k), s.cast, b.arg(c.ID)))
+	}
+	sql := domain.TicketSelect + b.sql() + fmt.Sprintf(" ORDER BY %s %s, t.id %s LIMIT %d", s.expr, dir, dir, limit+1)
+	rows, err := q.Query(ctx, sql, b.args...)
+	if err != nil {
+		return page, err
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Ticket, error) { return domain.ScanTicket(r) })
+	if err != nil {
+		return page, err
+	}
+	return httpx.NewPage(list, limit, func(t domain.Ticket) any {
+		raw, _ := json.Marshal(s.key(t))
+		return ticketCursor{K: raw, ID: t.ID}
+	}), nil
+}
+
+// loadView returns the filters of a view the caller can see.
+func loadView(ctx context.Context, q db.Querier, p *auth.Principal, id string) (hd.TicketFilters, error) {
+	var f hd.TicketFilters
+	vid, err := hd.ParseRef(id, "view_id")
+	if err != nil {
+		return f, err
+	}
+	var raw []byte
+	err = q.QueryRow(ctx, `SELECT filters FROM views WHERE workspace_id = $1 AND id = $2 AND (user_id IS NULL OR user_id = $3)`,
+		p.WorkspaceID, vid, p.ActorUserID()).Scan(&raw)
+	if db.IsNotFound(err) {
+		return f, httpx.Validation("view not found")
+	}
+	if err != nil {
+		return f, err
+	}
+	_ = json.Unmarshal(raw, &f)
+	return f, nil
+}
+
+// mergeFilters overlays explicitly requested filters on a view's filters.
+func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
+	out := view
+	if len(req.Status) > 0 {
+		out.Status = req.Status
+	}
+	if len(req.Priority) > 0 {
+		out.Priority = req.Priority
+	}
+	for _, f := range []struct{ dst, src *string }{{&out.Assignee, &req.Assignee}, {&out.TeamID, &req.TeamID},
+		{&out.MailboxID, &req.MailboxID}, {&out.Tag, &req.Tag}, {&out.Channel, &req.Channel}, {&out.Q, &req.Q}} {
+		if *f.src != "" {
+			*f.dst = *f.src
+		}
+	}
+	return out
+}
+
+// resolveTicket finds a ticket by uuid, "#123" or "123" in the workspace.
+func resolveTicket(ctx context.Context, q db.Querier, wid uuid.UUID, ref string) (uuid.UUID, error) {
+	ref = strings.TrimSpace(ref)
+	if id, err := uuid.Parse(ref); err == nil {
+		var exists bool
+		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL)`,
+			wid, id).Scan(&exists); err != nil {
+			return uuid.Nil, err
+		}
+		if !exists {
+			return uuid.Nil, httpx.NotFound("Ticket")
+		}
+		return id, nil
+	}
+	m := numberRef.FindStringSubmatch(ref)
+	if m == nil {
+		return uuid.Nil, httpx.NotFound("Ticket")
+	}
+	n, _ := strconv.ParseInt(m[1], 10, 64)
+	var id uuid.UUID
+	err := q.QueryRow(ctx, `SELECT id FROM tickets WHERE workspace_id = $1 AND number = $2 AND deleted_at IS NULL`, wid, n).Scan(&id)
+	if db.IsNotFound(err) {
+		return uuid.Nil, httpx.NotFound("Ticket")
+	}
+	return id, err
+}
+
+// Counts is the sidebar badge set.
+type TicketCounts struct {
+	Unassigned int            `json:"unassigned"`
+	Mine       int            `json:"mine"`
+	Open       int            `json:"open"`
+	Pending    int            `json:"pending"`
+	OnHold     int            `json:"on_hold"`
+	Solved     int            `json:"solved"`
+	Spam       int            `json:"spam"`
+	Views      map[string]int `json:"views"`
+}
+
+func ticketCounts(ctx context.Context, q db.Querier, p *auth.Principal) (TicketCounts, error) {
+	c := TicketCounts{Views: map[string]int{}}
+	err := q.QueryRow(ctx, `SELECT
+		count(*) FILTER (WHERE NOT spam AND status IN ('open','pending','on_hold') AND assignee_id IS NULL),
+		count(*) FILTER (WHERE NOT spam AND status IN ('open','pending','on_hold') AND assignee_id = $2),
+		count(*) FILTER (WHERE NOT spam AND status = 'open'),
+		count(*) FILTER (WHERE NOT spam AND status = 'pending'),
+		count(*) FILTER (WHERE NOT spam AND status = 'on_hold'),
+		count(*) FILTER (WHERE NOT spam AND status = 'solved'),
+		count(*) FILTER (WHERE spam AND status <> 'closed')
+		FROM tickets WHERE workspace_id = $1 AND deleted_at IS NULL`, p.WorkspaceID, p.ActorUserID()).
+		Scan(&c.Unassigned, &c.Mine, &c.Open, &c.Pending, &c.OnHold, &c.Solved, &c.Spam)
+	if err != nil {
+		return c, err
+	}
+	rows, err := q.Query(ctx, `SELECT id, filters FROM views WHERE workspace_id = $1 AND (user_id IS NULL OR user_id = $2)
+		ORDER BY position, name LIMIT 100`, p.WorkspaceID, p.ActorUserID())
+	if err != nil {
+		return c, err
+	}
+	type view struct {
+		id uuid.UUID
+		f  hd.TicketFilters
+	}
+	var views []view
+	for rows.Next() {
+		var v view
+		var raw []byte
+		if err := rows.Scan(&v.id, &raw); err != nil {
+			rows.Close()
+			return c, err
+		}
+		_ = json.Unmarshal(raw, &v.f)
+		views = append(views, v)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return c, err
+	}
+	for _, v := range views {
+		b := &sqlBuilder{}
+		if err := applyFilters(b, p.WorkspaceID, p.ActorUserID(), listQuery{TicketFilters: v.f}); err != nil {
+			continue // a view whose filters no longer parse counts as zero
+		}
+		var n int
+		if err := q.QueryRow(ctx, `SELECT count(*) FROM tickets t`+b.sql(), b.args...).Scan(&n); err != nil {
+			return c, err
+		}
+		c.Views[v.id.String()] = n
+	}
+	return c, nil
+}

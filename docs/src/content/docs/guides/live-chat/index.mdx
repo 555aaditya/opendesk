@@ -1,0 +1,54 @@
+---
+title: Live chat widget
+description: Embed the opendesk chat widget on your site and talk to customers in real time.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+The chat widget is a small script you add to your website. Visitors start a conversation, and it arrives in your inbox as a ticket on the `chat` channel. Replies are delivered live, with typing indicators on both sides.
+
+## Embed
+
+<Steps>
+
+1. Open **Settings → Chat widget** and turn the widget on.
+2. Copy the embed snippet. It loads the widget script from `https://app.opendesk.sh/widget/v1.js` (or `https://<your-domain>/widget/v1.js` when self-hosted) with your workspace's **widget key**.
+3. Paste the snippet before the closing `</body>` tag on every page where the widget should appear.
+4. Under **Allowed origins**, list the sites that may load the widget, such as `https://www.example.com`.
+
+</Steps>
+
+The widget key is public and safe to put in your page. It only identifies your workspace.
+
+<Aside type="note">
+Set allowed origins before going live. The widget's live connection uses its own gateway endpoint, which accepts only widget tokens scoped to one visitor.
+</Aside>
+
+## Settings
+
+| setting | effect |
+| --- | --- |
+| Enabled | Turns the widget on or off for your site. |
+| Greeting | The first message a visitor sees. |
+| Require email | Asks for an email address before a visitor can start a chat, so you can follow up by email. |
+| Allowed origins | Sites allowed to embed the widget. |
+| Brand color | Set in workspace settings; used for the launcher and visitor messages. |
+
+If your [help center](/guides/knowledge-base/) is enabled, the widget links to it so visitors can find answers on their own.
+
+## How a conversation works
+
+1. When the widget opens, it creates a **visitor session** and receives a visitor token, stored in the browser so returning visitors see their history.
+2. The visitor's first message creates a ticket and a [contact](/guides/inbox-and-tickets/#contacts-and-companies).
+3. Agent replies appear in the widget in real time. Internal notes are never sent to the widget.
+4. Agents see when the visitor is typing, and the visitor sees when an agent is typing.
+5. Visitors can attach files.
+
+## Identify logged-in users
+
+If your visitors are signed in to your product, pass their user id, email and name to the widget so conversations attach to the right contact. To stop anyone impersonating another user, sign the user id with your widget secret. See [Identity verification](/guides/live-chat/identity-verification/).
+
+## Related
+
+- [Widget API](/api/resources/widget/)
+- [Realtime](/api/realtime/)

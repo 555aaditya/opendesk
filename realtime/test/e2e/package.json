@@ -1,0 +1,8 @@
+{
+  "name": "opendesk-realtime-e2e",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end check of the realtime gateway with the phoenix JS client.",
+  "scripts": { "e2e": "node e2e.mjs" },
+  "dependencies": { "phoenix": "^1.8.0" }
+}

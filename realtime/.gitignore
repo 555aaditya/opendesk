@@ -1,0 +1,7 @@
+/_build/
+/deps/
+/cover/
+/doc/
+/test/e2e/node_modules/
+erl_crash.dump
+*.ez

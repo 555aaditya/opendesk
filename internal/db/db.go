@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
@@ -42,6 +44,7 @@ func Open(ctx context.Context, pooledURL, directURL string) (*DB, error) {
 		// Transaction-mode poolers cannot keep named prepared statements.
 		pooledCfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
 	}
+	pooledCfg.AfterConnect = scanUTC
 	pool, err := pgxpool.NewWithConfig(ctx, pooledCfg)
 	if err != nil {
 		return nil, err
@@ -53,6 +56,7 @@ func Open(ctx context.Context, pooledURL, directURL string) (*DB, error) {
 			return nil, fmt.Errorf("parse DATABASE_URL_DIRECT: %w", err)
 		}
 		directCfg.MaxConns = 10
+		directCfg.AfterConnect = scanUTC
 		if direct, err = pgxpool.NewWithConfig(ctx, directCfg); err != nil {
 			return nil, err
 		}
@@ -125,3 +129,10 @@ func IsUniqueViolation(err error, constraint string) bool {
 
 // IsNotFound reports pgx.ErrNoRows.
 func IsNotFound(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
+
+// scanUTC makes timestamptz values scan as UTC, whatever the server or session zone.
+func scanUTC(_ context.Context, c *pgx.Conn) error {
+	c.TypeMap().RegisterType(&pgtype.Type{Name: "timestamptz", OID: pgtype.TimestamptzOID,
+		Codec: &pgtype.TimestamptzCodec{ScanLocation: time.UTC}})
+	return nil
+}

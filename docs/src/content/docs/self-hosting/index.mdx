@@ -1,0 +1,62 @@
+---
+title: Self-hosting
+description: Run opendesk on your own server. Free forever, the same code as the hosted service.
+---
+
+import { LinkCard, CardGrid, Aside } from '@astrojs/starlight/components';
+
+Self-hosted opendesk is free forever and runs exactly the same code as [opendesk.sh](https://opendesk.sh). You own the server, the database and every email in it.
+
+```sh
+curl -fsSL https://opendesk.sh/install.sh | sh
+```
+
+## What runs
+
+A self-hosted install is four containers on one machine, behind one domain:
+
+| service | role |
+| --- | --- |
+| `caddy` | HTTPS with automatic certificates. Routes `/socket` to the realtime gateway and everything else to opendesk. |
+| `opendesk` | The Go API, background workers, the web app (`SERVE_WEB=true`), and NATS, embedded. |
+| `realtime` | The Elixir realtime gateway for live events, presence and typing. It holds no database connection. |
+| `postgres` | The only datastore. |
+
+```
+                 ┌──────────────────────── desk.example.com ───────────────────────┐
+ browser ──443──▶│ caddy ──/socket──▶ realtime ◀──NATS── opendesk ──▶ postgres     │
+                 │       └──── everything else ──────▶ opendesk                     │
+                 └──────────────────────────────────────────────────────────────────┘
+```
+
+There is no Redis and no message broker to run: background jobs live in Postgres, and NATS is built into the opendesk binary.
+
+## Day two
+
+The installer puts an `opendesk-ctl` helper next to your `docker-compose.yml` (default `/opt/opendesk`):
+
+```sh
+/opt/opendesk/opendesk-ctl status            # containers, health, version
+/opt/opendesk/opendesk-ctl logs opendesk     # follow logs: opendesk, realtime, postgres, caddy
+/opt/opendesk/opendesk-ctl backup            # database dump, data volume and .env
+/opt/opendesk/opendesk-ctl upgrade           # back up, then move to the newest release
+```
+
+<Aside type="caution" title="Back up your .env">
+`.env` holds the only copy of `CREDENTIALS_KEY`. A database backup without it cannot decrypt stored mailbox credentials.
+</Aside>
+
+## Guides
+
+<CardGrid>
+  <LinkCard title="Requirements" href="/self-hosting/requirements/" />
+  <LinkCard title="Install script" href="/self-hosting/install-script/" />
+  <LinkCard title="Docker Compose" href="/self-hosting/docker-compose/" />
+  <LinkCard title="Configuration reference" href="/self-hosting/configuration/" />
+  <LinkCard title="Email setup" href="/self-hosting/email/" />
+  <LinkCard title="Google and Microsoft OAuth" href="/self-hosting/oauth-apps/" />
+  <LinkCard title="Storage" href="/self-hosting/storage/" />
+  <LinkCard title="Scaling" href="/self-hosting/scaling/" />
+  <LinkCard title="Backups and upgrades" href="/self-hosting/backups-and-upgrades/" />
+  <LinkCard title="Security hardening" href="/self-hosting/hardening/" />
+</CardGrid>

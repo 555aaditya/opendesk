@@ -1,0 +1,323 @@
+name: Deploy
+
+# main -> production:
+#   1. build linux/arm64 images, push to ECR tagged with the commit SHA
+#   2. run the migrations as a one-off ECS task (opendesk-migrate, direct URL)
+#   3. roll api, worker and gateway onto the new images
+#   4. build and deploy the three Cloudflare Pages projects and the email worker
+#
+# AWS access is OIDC only: the role (deploy/terraform, module github-oidc)
+# trusts this repository's production environment and can do nothing else.
+#
+# Repository configuration (Settings > Environments > production):
+#   vars:    AWS_REGION, AWS_DEPLOY_ROLE_ARN, ECS_MIGRATE_NETWORK,
+#            CLOUDFLARE_ACCOUNT_ID, WEB_POSTHOG_KEY, WEB_POSTHOG_HOST, TURNSTILE_SITE_KEY
+#   secrets: CLOUDFLARE_API_TOKEN
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: What to deploy
+        type: choice
+        options: [all, backend, pages, site]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  CLUSTER: opendesk-production
+  NODE_VERSION: "24"
+  PNPM_VERSION: "12.10.1"
+  TARGET: ${{ inputs.target || 'all' }}
+
+jobs:
+  images:
+    name: Build and push images
+    if: (inputs.target || 'all') == 'all' || inputs.target == 'backend'
+    # Fargate runs ARM64 (Graviton); a native runner builds Erlang without QEMU.
+    runs-on: ubuntu-24.04-arm
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      opendesk: ${{ steps.refs.outputs.opendesk }}
+      realtime: ${{ steps.refs.outputs.realtime }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+      - id: refs
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "opendesk=$REGISTRY/opendesk/opendesk:$SHA" >> "$GITHUB_OUTPUT"
+          echo "realtime=$REGISTRY/opendesk/realtime:$SHA" >> "$GITHUB_OUTPUT"
+          # Tags are immutable; a re-run of the same commit reuses its images.
+          for repo in opendesk realtime; do
+            if aws ecr describe-images --repository-name "opendesk/$repo" --image-ids imageTag="$SHA" >/dev/null 2>&1; then
+              echo "have_$repo=true" >> "$GITHUB_OUTPUT"
+            fi
+          done
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: opendesk
+        if: steps.refs.outputs.have_opendesk != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/opendesk.Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.refs.outputs.opendesk }}
+          build-args: |
+            VERSION=${{ github.sha }}
+            COMMIT=${{ github.sha }}
+          provenance: false
+          cache-from: type=gha,scope=deploy-opendesk
+          cache-to: type=gha,mode=max,scope=deploy-opendesk
+      - name: realtime
+        if: steps.refs.outputs.have_realtime != 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/realtime.Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.refs.outputs.realtime }}
+          build-args: |
+            VERSION=${{ github.sha }}
+            COMMIT=${{ github.sha }}
+          provenance: false
+          cache-from: type=gha,scope=deploy-realtime
+          cache-to: type=gha,mode=max,scope=deploy-realtime
+
+  # Migrations run once, before any service moves, on the direct (unpooled)
+  # Neon connection. The services boot with AUTO_MIGRATE=false. Migrations
+  # must stay compatible with the code that is still running until step 3.
+  migrate:
+    name: Migrate
+    needs: images
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: net
+        env:
+          NETWORK: ${{ vars.ECS_MIGRATE_NETWORK }}
+        run: |
+          echo "subnets=$(jq -r '.awsvpcConfiguration.subnets | join(",")' <<< "$NETWORK")" >> "$GITHUB_OUTPUT"
+          echo "groups=$(jq -r '.awsvpcConfiguration.securityGroups | join(",")' <<< "$NETWORK")" >> "$GITHUB_OUTPUT"
+      - id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@8d79160660ad39c402a16e5fc7cd2a32e8f7d6b7 # v1.9.1
+        with:
+          task-definition-family: opendesk-migrate
+          container-name: migrate
+          image: ${{ needs.images.outputs.opendesk }}
+      - id: run
+        uses: aws-actions/amazon-ecs-deploy-task-definition@a00d4d57ac0de1a99b39fe469f3d898d38717c2b # v2.6.4
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ env.CLUSTER }}
+          run-task: true
+          run-task-launch-type: FARGATE
+          run-task-subnets: ${{ steps.net.outputs.subnets }}
+          run-task-security-groups: ${{ steps.net.outputs.groups }}
+          # Public subnets and no NAT Gateway: the task needs a public IP to
+          # reach ECR and Neon. Its security group admits nothing inbound.
+          run-task-assign-public-IP: ENABLED
+          run-task-started-by: github-${{ github.run_id }}
+          wait-for-task-stopped: true
+      - name: Migration log
+        if: always() && steps.run.outputs.run-task-arn != ''
+        env:
+          TASK_ARN: ${{ steps.run.outputs.run-task-arn }}
+        run: |
+          task_id=${TASK_ARN##*/}
+          aws logs get-log-events --log-group-name /ecs/opendesk-migrate \
+            --log-stream-name "migrate/migrate/$task_id" --limit 200 \
+            --query 'events[].message' --output text || echo "log stream not available yet"
+
+  services:
+    name: Roll ${{ matrix.service }}
+    needs: [images, migrate]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            image: opendesk
+          - service: worker
+            image: opendesk
+          - service: gateway
+            image: realtime
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      # A new revision built from the latest one with only the image changed,
+      # so environment and secrets stay whatever Terraform last registered.
+      - id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@8d79160660ad39c402a16e5fc7cd2a32e8f7d6b7 # v1.9.1
+        with:
+          task-definition-family: opendesk-${{ matrix.service }}
+          container-name: ${{ matrix.service }}
+          image: ${{ matrix.image == 'opendesk' && needs.images.outputs.opendesk || needs.images.outputs.realtime }}
+      - uses: aws-actions/amazon-ecs-deploy-task-definition@a00d4d57ac0de1a99b39fe469f3d898d38717c2b # v2.6.4
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ env.CLUSTER }}
+          service: opendesk-${{ matrix.service }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+
+  pages:
+    name: Pages ${{ matrix.project }}
+    if: (inputs.target || 'all') != 'backend'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [app, site, docs]
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Skip what was not asked for
+        id: want
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          if [ "$TARGET" = site ] && [ "$PROJECT" != site ]; then echo "run=false"; else echo "run=true"; fi >> "$GITHUB_OUTPUT"
+      - if: steps.want.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: steps.want.outputs.run == 'true'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - if: steps.want.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      # wrangler comes from the email worker's lockfile, so the version that
+      # deploys production is pinned and reviewed like any other dependency.
+      - name: wrangler
+        if: steps.want.outputs.run == 'true'
+        working-directory: deploy/cloudflare/email-worker
+        run: pnpm install --frozen-lockfile && echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Build app
+        if: steps.want.outputs.run == 'true' && matrix.project == 'app'
+        working-directory: web
+        env:
+          APP_API_URL: https://api.opendesk.sh
+          APP_GATEWAY_URL: wss://gateway.opendesk.sh/socket
+          WEB_POSTHOG_KEY: ${{ vars.WEB_POSTHOG_KEY }}
+          WEB_POSTHOG_HOST: ${{ vars.WEB_POSTHOG_HOST }}
+          TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          test -s dist/widget/v1.js
+          # The app's own _headers win if web/ ever ships one.
+          [ -f dist/_headers ] || cp ../deploy/cloudflare/pages/app/_headers dist/
+          [ -f dist/_redirects ] || cp ../deploy/cloudflare/pages/app/_redirects dist/
+          node ../deploy/cloudflare/pages/app/write-config.mjs dist
+          echo "DIST=web/dist" >> "$GITHUB_ENV"
+
+      # opendesk.sh/install.sh is the installer of the newest release, so its
+      # published checksum and the release's always agree. The site's prebuild
+      # publishes main's copy; it is replaced in dist/ once a release exists.
+      # The site ships its own _headers (CSP filled in by its postbuild).
+      - name: Build site
+        if: steps.want.outputs.run == 'true' && matrix.project == 'site'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd site
+          pnpm install --frozen-lockfile
+          pnpm build
+          if gh release download --repo "$GITHUB_REPOSITORY" --pattern 'install.sh' --pattern 'install.sh.sha256' --dir "$RUNNER_TEMP/installer" 2>/dev/null; then
+            cp "$RUNNER_TEMP/installer/install.sh" "$RUNNER_TEMP/installer/install.sh.sha256" dist/
+            echo "installer from the newest release"
+          else
+            echo "no release yet; installer from main"
+          fi
+          (cd dist && sha256sum -c install.sh.sha256)
+          echo "DIST=site/dist" >> "$GITHUB_ENV"
+
+      - name: Build docs
+        if: steps.want.outputs.run == 'true' && matrix.project == 'docs'
+        working-directory: docs
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          [ -f dist/_headers ] || cp ../deploy/cloudflare/pages/docs/_headers dist/
+          echo "DIST=docs/dist" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.want.outputs.run == 'true'
+        env:
+          PROJECT: opendesk-${{ matrix.project }}
+          SHA: ${{ github.sha }}
+        run: wrangler pages deploy "$DIST" --project-name "$PROJECT" --branch main --commit-hash "$SHA" --commit-dirty=true
+
+  email-worker:
+    name: Email worker
+    if: (inputs.target || 'all') == 'all'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: deploy/cloudflare/email-worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      # INBOUND_SECRET is set once with `wrangler secret put` (deploy/README.md);
+      # a deploy keeps it.
+      - run: pnpm exec wrangler deploy

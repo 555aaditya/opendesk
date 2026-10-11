@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -111,7 +112,7 @@ func LoadTicket(ctx context.Context, q db.Querier, wid, id uuid.UUID) (Ticket, e
 // MessageSelect is the column list scanMessage reads.
 const MessageSelect = `SELECT m.id, m.ticket_id, m.kind, m.direction, m.author_type, m.body_html, m.body_text,
 	m.full_html <> '', m.subject, m.from_email, m.from_name, m.to_emails, m.cc_emails, m.bcc_emails,
-	m.delivery_status, m.delivery_error, m.created_at,
+	m.delivery_status, m.delivery_error, m.ai, m.created_at,
 	u.id, u.name, u.email, u.avatar_url,
 	c.id, c.email, c.name, c.avatar_url,
 	COALESCE((SELECT json_agg(json_build_object('id', a.id, 'filename', a.filename, 'content_type', a.content_type,
@@ -128,7 +129,7 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	var atts []byte
 	err := row.Scan(&m.ID, &m.TicketID, &m.Kind, &m.Direction, &m.Author.Type, &m.BodyHTML, &m.BodyText,
 		&m.HasQuoted, &m.Subject, &m.FromEmail, &m.FromName, &m.To, &m.Cc, &m.Bcc,
-		&m.DeliveryStatus, &m.DeliveryError, &m.CreatedAt,
+		&m.DeliveryStatus, &m.DeliveryError, &m.AI, &m.CreatedAt,
 		&uID, &uName, &uEmail, &uAvatar, &cID, &cEmail, &cName, &cAvatar, &atts)
 	if err != nil {
 		return m, err
@@ -146,6 +147,7 @@ func ScanMessage(row pgx.Row) (Message, error) {
 	for i := range m.Attachments {
 		m.Attachments[i].URL = AttachmentURL(m.Attachments[i].ID)
 	}
+	m.BodyHTML = ResignAttachmentLinks(m.BodyHTML)
 	for _, s := range []*[]string{&m.To, &m.Cc, &m.Bcc} {
 		if *s == nil {
 			*s = []string{}
@@ -211,4 +213,42 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// PublicMessage is the view of a message a customer may see: no agent emails,
+// recipients or delivery internals.
+func PublicMessage(m Message) Message {
+	if m.Author.User != nil {
+		u := *m.Author.User
+		u.Email = ""
+		m.Author.User = &u
+	}
+	m.To, m.Cc, m.Bcc = []string{}, []string{}, []string{}
+	m.DeliveryError = ""
+	if m.Direction == "outbound" {
+		m.FromEmail = ""
+	}
+	return m
+}
+
+var attachmentLink = regexp.MustCompile(`/v1/attachments/([0-9a-f-]{36})\?exp=\d+(&amp;|&)sig=[0-9a-f]+`)
+
+// ResignAttachmentLinks refreshes the signed attachment links inside stored HTML
+// (inline images), so bodies keep rendering after the original links expire.
+func ResignAttachmentLinks(html string) string {
+	if !strings.Contains(html, "/v1/attachments/") {
+		return html
+	}
+	return attachmentLink.ReplaceAllStringFunc(html, func(m string) string {
+		sub := attachmentLink.FindStringSubmatch(m)
+		id, err := uuid.Parse(sub[1])
+		if err != nil {
+			return m
+		}
+		fresh := strings.TrimPrefix(AttachmentURL(id), apiURL)
+		if sub[2] == "&amp;" {
+			fresh = strings.Replace(fresh, "&", "&amp;", 1)
+		}
+		return fresh
+	})
 }

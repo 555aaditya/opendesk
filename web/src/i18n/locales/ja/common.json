@@ -1,0 +1,13 @@
+{
+  "actions": {
+    "cancel": "キャンセル",
+    "save": "保存",
+    "close": "閉じる",
+    "retry": "再試行",
+    "apply": "適用",
+    "copy": "コピー",
+    "back": "戻る",
+    "continue": "続ける"
+  },
+  "credits_other": "{{count}} クレジット"
+}

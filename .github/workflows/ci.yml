@@ -1,0 +1,505 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+# Read-only by default. Jobs that need more ask for it themselves.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Keep in step with deploy/docker/realtime.Dockerfile.
+  ELIXIR_VERSION: "1.20.4"
+  OTP_VERSION: "29.1.1"
+  NODE_VERSION: "24"
+  PNPM_VERSION: "12.10.1"
+  TERRAFORM_VERSION: "1.16.5"
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # dorny/paths-filter lists the PR's files through the API.
+      pull-requests: read
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      migrations: ${{ steps.filter.outputs.migrations }}
+      web: ${{ steps.filter.outputs.web }}
+      site: ${{ steps.filter.outputs.site }}
+      docs: ${{ steps.filter.outputs.docs }}
+      realtime: ${{ steps.filter.outputs.realtime }}
+      images: ${{ steps.filter.outputs.images }}
+      installer: ${{ steps.filter.outputs.installer }}
+      terraform: ${{ steps.filter.outputs.terraform }}
+      cloudflare: ${{ steps.filter.outputs.cloudflare }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            shared: &shared
+              - '.github/workflows/ci.yml'
+            go:
+              - *shared
+              - 'go.mod'
+              - 'go.sum'
+              - '**/*.go'
+              - 'migrations/**'
+              - 'internal/**'
+            migrations:
+              - *shared
+              - 'migrations/**'
+              - 'scripts/check-migrations.sh'
+            web:
+              - *shared
+              - 'web/**'
+              - 'brand/**'
+              - 'contracts/**'
+            site:
+              - *shared
+              - 'site/**'
+              - 'brand/**'
+            docs:
+              - *shared
+              - 'docs/**'
+              - 'brand/**'
+            realtime:
+              - *shared
+              - 'realtime/**'
+            images:
+              - *shared
+              - 'deploy/docker/**'
+              - 'deploy/caddy/**'
+              - 'docker-compose.yml'
+              - '.dockerignore'
+              - 'scripts/selfhost-smoke.sh'
+              - 'go.mod'
+              - 'go.sum'
+              - '**/*.go'
+              - 'migrations/**'
+              - 'web/**'
+              - 'realtime/**'
+            installer:
+              - *shared
+              - 'deploy/install/**'
+              - 'deploy/self-host/**'
+              - 'deploy/caddy/**'
+              - 'docker-compose.yml'
+              - 'scripts/check-installer.sh'
+            terraform:
+              - *shared
+              - 'deploy/terraform/**'
+            cloudflare:
+              - *shared
+              - 'deploy/cloudflare/**'
+
+  go:
+    name: Go
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: opendesk
+          POSTGRES_PASSWORD: opendesk
+          POSTGRES_DB: opendesk_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U opendesk -d opendesk_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://opendesk:opendesk@127.0.0.1:5432/opendesk_test?sslmode=disable
+      OPENDESK_TEST_DATABASE_URL: postgres://opendesk:opendesk@127.0.0.1:5432/opendesk_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      # internal/webui embeds dist/, which the image build fills with the web
+      # app. A placeholder is enough to compile and test the Go code.
+      - name: Placeholder web build for go:embed
+        run: |
+          mkdir -p internal/webui/dist
+          [ -f internal/webui/dist/index.html ] || echo '<!doctype html><title>opendesk</title>' > internal/webui/dist/index.html
+      - name: gofmt
+        run: |
+          unformatted=$(git ls-files -z '*.go' | xargs -0 gofmt -l)
+          if [ -n "$unformatted" ]; then echo "Run gofmt -w on:"; echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: go build
+        run: go build ./...
+      - name: go test
+        run: go test -race -count=1 ./...
+      - name: govulncheck
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: go.mod
+          go-package: ./...
+
+  migrations:
+    name: Migrations
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Runs on the PR's merge commit, so main's migrations are included. That
+      # only holds while the branch is current: require branches to be up to
+      # date before merging.
+      - name: No duplicate migration versions
+        run: ./scripts/check-migrations.sh
+
+  web:
+    name: Web
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - name: Widget bundle is in the build
+        run: test -s dist/widget/v1.js
+      - name: pnpm audit
+        run: pnpm audit --prod --audit-level high
+
+  site:
+    name: Site
+    needs: changes
+    if: needs.changes.outputs.site == 'true' || needs.changes.outputs.installer == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # The site's prebuild publishes deploy/install/install.sh at /install.sh.
+      - name: Installer and checksum are in the build
+        run: test -s dist/install.sh && (cd dist && sha256sum -c install.sh.sha256)
+      - run: pnpm audit --prod --audit-level high
+
+  docs:
+    name: Docs
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm audit --prod --audit-level high
+
+  realtime:
+    name: Realtime
+    needs: changes
+    if: needs.changes.outputs.realtime == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: realtime
+    env:
+      MIX_ENV: test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            realtime/deps
+            realtime/_build
+          key: mix-${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-${{ hashFiles('realtime/mix.lock') }}
+          restore-keys: mix-${{ runner.os }}-${{ env.ELIXIR_VERSION }}-${{ env.OTP_VERSION }}-
+      - run: mix deps.get
+      - name: mix format
+        run: mix format --check-formatted
+      - name: compile
+        run: mix compile --warnings-as-errors
+      - name: credo
+        run: mix credo --strict
+      - name: sobelow
+        run: mix sobelow --config
+      - name: deps.audit
+        run: mix deps.audit
+      - name: test
+        run: mix test
+
+  images:
+    name: Images, Trivy and self-host smoke test
+    needs: changes
+    if: needs.changes.outputs.images == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # SARIF upload of the Trivy results to code scanning.
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build opendesk
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/opendesk.Dockerfile
+          load: true
+          push: false
+          tags: ghcr.io/opendesk/opendesk:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=opendesk
+          cache-to: type=gha,mode=max,scope=opendesk
+      - name: Build realtime
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/realtime.Dockerfile
+          load: true
+          push: false
+          tags: ghcr.io/opendesk/realtime:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=realtime
+          cache-to: type=gha,mode=max,scope=realtime
+      - name: Trivy (opendesk)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/opendesk/opendesk:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Trivy (realtime)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/opendesk/realtime:ci
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          skip-setup-trivy: true
+      - name: Trivy SARIF
+        if: always() && github.event_name != 'merge_group'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ghcr.io/opendesk/opendesk:ci
+          severity: CRITICAL,HIGH,MEDIUM
+          format: sarif
+          output: trivy-opendesk.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+      - name: Upload Trivy SARIF
+        if: always() && github.event_name != 'merge_group' && hashFiles('trivy-opendesk.sarif') != ''
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy-opendesk.sarif
+          category: trivy-opendesk
+      # The root docker-compose.yml, up for real: Caddy, /healthz, the web
+      # index, and a token-authenticated WebSocket upgrade on /socket.
+      - name: Self-host smoke test
+        run: OPENDESK_VERSION=ci ./scripts/selfhost-smoke.sh --no-build
+
+  installer:
+    name: Installer
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # dash is /bin/sh on Debian and Ubuntu, which is what most installs pipe into.
+      - name: Install dash
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dash shellcheck
+      - run: ./scripts/check-installer.sh
+
+  terraform:
+    name: Terraform
+    needs: changes
+    if: needs.changes.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff deploy/terraform
+      - name: terraform validate
+        run: |
+          for d in deploy/terraform/environments/* deploy/terraform/modules/*; do
+            echo "::group::$d"
+            terraform -chdir="$d" init -backend=false -input=false -lockfile=readonly >/dev/null 2>&1 ||
+              terraform -chdir="$d" init -backend=false -input=false >/dev/null
+            terraform -chdir="$d" validate
+            echo "::endgroup::"
+          done
+      # Informational: the network deliberately uses public subnets with
+      # security groups instead of a NAT Gateway (deploy/README.md explains).
+      - name: Trivy IaC scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: deploy/terraform
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
+  cloudflare:
+    name: Cloudflare worker and Pages config
+    needs: changes
+    if: needs.changes.outputs.cloudflare == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/cloudflare/email-worker
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: deploy/cloudflare/email-worker/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Bundles
+        run: pnpm exec wrangler deploy --dry-run --outdir dist
+      - name: Pages runtime config
+        working-directory: .
+        run: node --test deploy/cloudflare/pages/app/write-config.test.mjs
+
+  # A Neon branch per PR, from production, so migrations are proven against
+  # Neon itself (pooler and all) before they reach it. Deleted when the PR
+  # closes (neon-cleanup.yml). Fork PRs have no secrets and skip this.
+  neon-branch:
+    name: Neon branch and migrations
+    needs: [changes, go]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      needs.changes.outputs.migrations == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Branch expiry
+        id: expiry
+        # A safety net in case the close event is missed.
+        run: echo "at=$(date -u -d '+14 days' +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Create Neon branch
+        id: neon
+        uses: neondatabase/create-branch-action@72ed4f69a12b6be9c16aebfad893f6a21e9aba8b # v6.4.0
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          branch_name: preview/pr-${{ github.event.pull_request.number }}
+          parent_branch: production
+          database: opendesk
+          role: opendesk
+          expires_at: ${{ steps.expiry.outputs.at }}
+      - name: Placeholder web build for go:embed
+        run: mkdir -p internal/webui/dist && echo '<!doctype html>' > internal/webui/dist/index.html
+      - name: Apply migrations on the branch (direct connection)
+        env:
+          OPENDESK_ENV: development
+          DATABASE_URL: ${{ steps.neon.outputs.db_url_pooled }}
+          DATABASE_URL_DIRECT: ${{ steps.neon.outputs.db_url }}
+        run: |
+          echo "::add-mask::$DATABASE_URL"
+          echo "::add-mask::$DATABASE_URL_DIRECT"
+          go run ./cmd/opendesk migrate
+          # Twice: a second run must be a no-op.
+          go run ./cmd/opendesk migrate
+
+  ci-status:
+    name: CI status
+    runs-on: ubuntu-latest
+    needs: [changes, go, migrations, web, site, docs, realtime, images, installer, terraform, cloudflare, neon-branch]
+    if: always()
+    steps:
+      # The one check to require in branch protection. Skipped jobs pass;
+      # failed or cancelled ones fail it.
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "CI passed"

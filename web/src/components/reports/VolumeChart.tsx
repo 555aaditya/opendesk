@@ -1,0 +1,205 @@
+import { format, parseISO } from "date-fns";
+import { useState } from "react";
+import type { ReportsOverview } from "@/lib/api/types";
+import { monotonePath, niceTicks, useWidth } from "./useSize";
+
+type Day = ReportsOverview["by_day"][number];
+
+const H = 240; // plot height
+const AXIS = 28; // x-axis band, inside the container height
+const ML = 36;
+const MR = 40;
+const MT = 12;
+
+export const series = [
+  { key: "created", label: "Created", color: "var(--fg)" },
+  { key: "solved", label: "Solved", color: "var(--fg-3)" },
+] as const;
+
+/** Created vs solved per day: two lines on one axis, crosshair + tooltip on hover and arrow keys. */
+export function VolumeChart({ days }: { days: Day[] }) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+
+  const plotW = Math.max(0, width - ML - MR);
+  const max = Math.max(1, ...days.map((d) => Math.max(d.created, d.solved)));
+  const ticks = niceTicks(max);
+  const top = ticks[ticks.length - 1];
+  const x = (i: number) => ML + (days.length <= 1 ? plotW / 2 : (i / (days.length - 1)) * plotW);
+  const y = (v: number) => MT + H - (v / top) * H;
+
+  const paths = series.map((s) => {
+    const pts = days.map((d, i) => [x(i), y(d[s.key])] as [number, number]);
+    return { ...s, d: monotonePath(pts), pts };
+  });
+  const area = paths[0].pts.length
+    ? `${paths[0].d}L${x(days.length - 1)},${y(0)}L${x(0)},${y(0)}Z`
+    : "";
+
+  const step = Math.max(1, Math.ceil(days.length / Math.max(2, Math.floor(plotW / 84))));
+  const xTicks = days.map((d, i) => ({ d, i })).filter(({ i }) => i % step === 0);
+
+  const last = days.length - 1;
+  const ends = series.map((s) => ({ ...s, v: days[last]?.[s.key] ?? 0 }));
+  const endsCollide = ends.length === 2 && Math.abs(y(ends[0].v) - y(ends[1].v)) < 14;
+
+  const pick = (clientX: number, rect: DOMRect) => {
+    if (!days.length) return;
+    const px = clientX - rect.left - ML;
+    const i = Math.round((px / (plotW || 1)) * (days.length - 1));
+    setHover(Math.min(last, Math.max(0, i)));
+  };
+
+  const h = hover !== null ? days[hover] : null;
+  const tipLeft = hover !== null ? x(hover) : 0;
+  const flip = tipLeft > width - 180;
+
+  return (
+    <div ref={ref} className="relative w-full select-none" style={{ height: H + MT + AXIS }}>
+      {width > 0 && (
+        <svg width={width} height={H + MT + AXIS} className="block overflow-visible" aria-hidden>
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={ML} x2={ML + plotW} y1={y(t)} y2={y(t)} stroke="var(--line-soft)" strokeWidth={1} shapeRendering="crispEdges" />
+              <text x={ML - 8} y={y(t)} dy="0.32em" textAnchor="end" className="mono" fontSize={10.5} fill="var(--fg-4)">
+                {t.toLocaleString()}
+              </text>
+            </g>
+          ))}
+          <line x1={ML} x2={ML + plotW} y1={y(0)} y2={y(0)} stroke="var(--line)" strokeWidth={1} shapeRendering="crispEdges" />
+          {xTicks.map(({ d, i }) => (
+            <text key={d.date} x={x(i)} y={MT + H + 18} textAnchor="middle" className="mono" fontSize={10.5} fill="var(--fg-4)">
+              {format(parseISO(d.date), "MMM d")}
+            </text>
+          ))}
+
+          <defs>
+            <linearGradient id="od-vol-wash" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="var(--fg)" stopOpacity={0.1} />
+              <stop offset="100%" stopColor="var(--fg)" stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d={area} fill="url(#od-vol-wash)" />
+          {[...paths].reverse().map((p) => (
+            <path key={p.key} d={p.d} fill="none" stroke={p.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          ))}
+
+          {hover === null &&
+            last >= 0 &&
+            ends.map((e) => (
+              <g key={e.key}>
+                <circle cx={x(last)} cy={y(e.v)} r={4} fill={e.color} stroke="var(--surface)" strokeWidth={2} />
+                {!endsCollide && (
+                  <text x={x(last) + 9} y={y(e.v)} dy="0.32em" className="mono" fontSize={11} fill={e.key === "created" ? "var(--fg)" : "var(--fg-2)"}>
+                    {e.v}
+                  </text>
+                )}
+              </g>
+            ))}
+
+          {hover !== null && h && (
+            <g>
+              <line x1={x(hover)} x2={x(hover)} y1={MT} y2={MT + H} stroke="var(--line-strong)" strokeWidth={1} shapeRendering="crispEdges" />
+              {series.map((s) => (
+                <circle key={s.key} cx={x(hover)} cy={y(h[s.key])} r={4} fill={s.color} stroke="var(--surface)" strokeWidth={2} />
+              ))}
+            </g>
+          )}
+        </svg>
+      )}
+
+      {/* Hit layer: the whole plot, not the 2px lines. Arrow keys move the crosshair. */}
+      <div
+        role="img"
+        tabIndex={0}
+        aria-label={`Tickets created and solved per day, ${days.length} days. Use the arrow keys to read each day.`}
+        className="absolute rounded-md outline-none focus-visible:shadow-[0_0_0_2px_var(--focus)]"
+        style={{ left: ML, top: MT, width: plotW, height: H }}
+        onPointerMove={(e) => pick(e.clientX, e.currentTarget.parentElement!.getBoundingClientRect())}
+        onPointerLeave={() => setHover(null)}
+        onBlur={() => setHover(null)}
+        onFocus={() => setHover((v) => v ?? last)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight") setHover((v) => Math.min(last, (v ?? -1) + 1));
+          else if (e.key === "ArrowLeft") setHover((v) => Math.max(0, (v ?? last + 1) - 1));
+          else if (e.key === "Escape") setHover(null);
+          else return;
+          e.preventDefault();
+        }}
+      />
+
+      {h && (
+        <div
+          role="status"
+          className="pointer-events-none absolute z-10 min-w-[148px] rounded-md border border-line bg-raised px-2.5 py-2 shadow-pop"
+          style={{ left: flip ? tipLeft - 12 : tipLeft + 12, top: MT + 4, transform: flip ? "translateX(-100%)" : undefined }}
+        >
+          <div className="mono mb-1.5 text-[10.5px] text-fg-3">{format(parseISO(h.date), "EEE, MMM d")}</div>
+          {series.map((s) => (
+            <div key={s.key} className="flex items-center gap-2 py-px">
+              <span className="h-0.5 w-3 rounded-full" style={{ background: s.color }} />
+              <span className="mono min-w-6 text-[12.5px] font-semibold text-fg">{h[s.key]}</span>
+              <span className="text-xs text-fg-3">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function VolumeLegend() {
+  return (
+    <div className="flex items-center gap-3">
+      {series.map((s) => (
+        <span key={s.key} className="flex items-center gap-1.5 text-xs text-fg-2">
+          <span className="h-0.5 w-3.5 rounded-full" style={{ background: s.color }} />
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function VolumeTable({ days }: { days: Day[] }) {
+  return (
+    <div className="max-h-[268px] overflow-y-auto">
+      <table className="w-full text-[12.5px]">
+        <caption className="sr-only">Tickets created and solved per day</caption>
+        <thead className="sticky top-0 bg-surface">
+          <tr className="border-b border-line text-left">
+            <th className="label-caps py-2 font-normal">Day</th>
+            <th className="label-caps py-2 text-right font-normal">Created</th>
+            <th className="label-caps py-2 text-right font-normal">Solved</th>
+          </tr>
+        </thead>
+        <tbody>
+          {[...days].reverse().map((d) => (
+            <tr key={d.date} className="border-b border-line-soft">
+              <td className="py-1.5 text-fg-2">{format(parseISO(d.date), "EEE, MMM d")}</td>
+              <td className="mono py-1.5 text-right tabular-nums">{d.created}</td>
+              <td className="mono py-1.5 text-right tabular-nums text-fg-2">{d.solved}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** A 12-point de-emphasised trend for a stat tile. */
+export function Sparkline({ values }: { values: number[] }) {
+  const v = values.slice(-12);
+  if (v.length < 2) return null;
+  const w = 72;
+  const hh = 22;
+  const max = Math.max(1, ...v);
+  const pts = v.map((n, i) => [(i / (v.length - 1)) * (w - 4) + 2, hh - 2 - (n / max) * (hh - 4)] as [number, number]);
+  const lastPt = pts[pts.length - 1];
+  return (
+    <svg width={w} height={hh} aria-hidden className="shrink-0 overflow-visible">
+      <path d={monotonePath(pts)} fill="none" stroke="var(--fg-4)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastPt[0]} cy={lastPt[1]} r={2.5} fill="var(--fg)" />
+    </svg>
+  );
+}

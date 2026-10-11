@@ -1,0 +1,63 @@
+{
+  "help": {
+    "default_title": "Help center",
+    "hero_title": "How can we help?",
+    "hero_subtitle": "Search the articles or browse by topic.",
+    "search_placeholder": "Search articles",
+    "topics": "Topics",
+    "popular": "Popular articles",
+    "articles_one": "{{count}} article",
+    "articles_other": "{{count}} articles",
+    "empty_title": "Nothing here yet",
+    "empty_body": "Articles will appear here once they are published.",
+    "not_found_title": "Help center not found",
+    "not_found_body": "This help center doesn't exist or isn't public yet.",
+    "topic_not_found_title": "Topic not found",
+    "topic_not_found_body": "It may have been renamed or removed.",
+    "topic_empty": "No articles yet",
+    "article_not_found_title": "Article not found",
+    "article_not_found_body": "It may have been moved or unpublished.",
+    "updated": "Updated {{date}}",
+    "breadcrumb": "Breadcrumb",
+    "search": "Search",
+    "search_min": "Type at least two characters",
+    "no_results_title": "No results for “{{term}}”",
+    "no_results_body": "Try fewer or different words.",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "theme_light": "Switch to light theme",
+    "theme_dark": "Switch to dark theme"
+  },
+  "csat": {
+    "page_title": "Rate your conversation",
+    "invalid_title": "This link isn't valid",
+    "invalid_body": "It may have expired. Thanks for wanting to share feedback.",
+    "already_title": "You already rated this conversation",
+    "already_body": "Thanks, your feedback reached the team.",
+    "thanks_title": "Thanks for your feedback",
+    "thanks_body": "It helps {{name}} get better.",
+    "thanks_body_generic": "It helps the team get better.",
+    "question": "How was your conversation?",
+    "rating": "Rating",
+    "score_label": "{{score}}, {{label}}",
+    "scores": {
+      "1": "Very poor",
+      "2": "Poor",
+      "3": "Okay",
+      "4": "Good",
+      "5": "Great"
+    },
+    "comment_label": "Anything you'd like to add?",
+    "optional": "Optional",
+    "comment_placeholder": "What went well, or what could be better",
+    "saved": "Your rating was saved. Add a comment if you like.",
+    "send_comment": "Send comment",
+    "send_feedback": "Send feedback",
+    "error": "Something went wrong. Please try again.",
+    "offline": "Can't reach the server. Check your connection."
+  },
+  "footer": {
+    "powered_by": "Powered by",
+    "language": "Language"
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "help": {
+    "default_title": "고객센터",
+    "hero_title": "무엇을 도와드릴까요?",
+    "hero_subtitle": "문서를 검색하거나 주제별로 둘러보세요.",
+    "search_placeholder": "문서 검색",
+    "topics": "주제",
+    "popular": "인기 문서",
+    "articles_other": "문서 {{count}}개",
+    "empty_title": "아직 내용이 없습니다",
+    "empty_body": "문서가 게시되면 여기에 표시됩니다.",
+    "not_found_title": "고객센터를 찾을 수 없습니다",
+    "not_found_body": "이 고객센터가 없거나 아직 공개되지 않았습니다.",
+    "topic_not_found_title": "주제를 찾을 수 없습니다",
+    "topic_not_found_body": "이름이 바뀌었거나 삭제되었을 수 있습니다.",
+    "topic_empty": "아직 문서가 없습니다",
+    "article_not_found_title": "문서를 찾을 수 없습니다",
+    "article_not_found_body": "이동되었거나 게시가 중단되었을 수 있습니다.",
+    "updated": "{{date}} 업데이트",
+    "breadcrumb": "이동 경로",
+    "search": "검색",
+    "search_min": "두 글자 이상 입력하세요",
+    "no_results_title": "‘{{term}}’에 대한 결과가 없습니다",
+    "no_results_body": "검색어를 줄이거나 다른 단어로 검색해 보세요.",
+    "results_other": "결과 {{count}}개",
+    "theme_light": "밝은 테마로 전환",
+    "theme_dark": "어두운 테마로 전환"
+  },
+  "csat": {
+    "page_title": "상담 평가",
+    "invalid_title": "유효하지 않은 링크입니다",
+    "invalid_body": "링크가 만료되었을 수 있습니다. 의견을 남겨 주시려고 해서 감사합니다.",
+    "already_title": "이미 이 상담을 평가하셨습니다",
+    "already_body": "감사합니다. 의견이 팀에 전달되었습니다.",
+    "thanks_title": "의견을 보내 주셔서 감사합니다",
+    "thanks_body": "{{name}}이(가) 더 나아지는 데 도움이 됩니다.",
+    "thanks_body_generic": "팀이 더 나아지는 데 도움이 됩니다.",
+    "question": "상담은 어떠셨나요?",
+    "rating": "평가",
+    "score_label": "{{score}}, {{label}}",
+    "scores": {
+      "1": "매우 불만족",
+      "2": "불만족",
+      "3": "보통",
+      "4": "만족",
+      "5": "매우 만족"
+    },
+    "comment_label": "더 하고 싶은 말씀이 있으신가요?",
+    "optional": "선택 사항",
+    "comment_placeholder": "좋았던 점이나 개선할 점",
+    "saved": "평가가 저장되었습니다. 원하시면 의견을 추가해 주세요.",
+    "send_comment": "의견 보내기",
+    "send_feedback": "평가 보내기",
+    "error": "문제가 발생했습니다. 다시 시도해 주세요.",
+    "offline": "서버에 연결할 수 없습니다. 네트워크 연결을 확인하세요."
+  },
+  "footer": {
+    "powered_by": "Powered by",
+    "language": "언어"
+  }
+}

@@ -1,0 +1,283 @@
+name: Release
+
+# A v* tag publishes:
+#   ghcr.io/opendesk/opendesk:<tag>  multi-arch (amd64, arm64), API + workers + web
+#   ghcr.io/opendesk/realtime:<tag>  multi-arch, the gateway
+#   a GitHub release with the installer, its checksum, and the files the
+#   installer fetches (docker-compose.yml, Caddyfile, env.template,
+#   opendesk-ctl) listed in SHA256SUMS, plus images.json with the digests.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# One release at a time; never cancel one that is half way through pushing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/opendesk
+
+jobs:
+  validate:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: v
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::$TAG is not a semver tag (v1.2.3 or v1.2.3-rc.1)"; exit 1
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          case "$TAG" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac >> "$GITHUB_OUTPUT"
+      - name: Installer checksum is current
+        run: cd deploy/install && sha256sum -c install.sh.sha256
+
+  # The Go build cross-compiles and the web build is architecture independent,
+  # so one runner builds both platforms without QEMU.
+  opendesk:
+    name: Image opendesk
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/opendesk
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=semver,pattern=v{{major}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.prerelease == 'false' }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/opendesk.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.validate.outputs.version }}
+            COMMIT=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release-opendesk
+          cache-to: type=gha,mode=max,scope=release-opendesk
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}/opendesk
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # Erlang has no cross compiler and a QEMU build takes an hour, so each
+  # architecture builds on its own runner and the digests are merged.
+  realtime-arch:
+    name: Image realtime (${{ matrix.platform }})
+    needs: validate
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: pair
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "name=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/realtime.Dockerfile
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ needs.validate.outputs.version }}
+            COMMIT=${{ github.sha }}
+          outputs: type=image,name=${{ env.IMAGE_PREFIX }}/realtime,push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release-realtime-${{ steps.pair.outputs.name }}
+          cache-to: type=gha,mode=max,scope=release-realtime-${{ steps.pair.outputs.name }}
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: mkdir -p /tmp/digests && touch "/tmp/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: realtime-digest-${{ steps.pair.outputs.name }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  realtime:
+    name: Image realtime (manifest)
+    needs: [validate, realtime-arch]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      digest: ${{ steps.inspect.outputs.digest }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: realtime-digest-*
+          path: /tmp/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/realtime
+          tags: |
+            type=semver,pattern=v{{version}}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=semver,pattern=v{{major}},enable=${{ needs.validate.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.validate.outputs.prerelease == 'false' }}
+      - name: Create the multi-arch manifest
+        working-directory: /tmp/digests
+        env:
+          IMAGE: ${{ env.IMAGE_PREFIX }}/realtime
+        run: |
+          mapfile -t tags < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          args=()
+          for t in "${tags[@]}"; do args+=(-t "$t"); done
+          for d in *; do args+=("$IMAGE@sha256:$d"); done
+          docker buildx imagetools create "${args[@]}"
+      - id: inspect
+        env:
+          IMAGE: ${{ env.IMAGE_PREFIX }}/realtime
+          TAG: ${{ needs.validate.outputs.version }}
+        run: |
+          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_PREFIX }}/realtime
+          subject-digest: ${{ steps.inspect.outputs.digest }}
+          push-to-registry: true
+
+  scan:
+    name: Trivy (published images)
+    needs: [validate, opendesk, realtime]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [opendesk, realtime]
+    steps:
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ needs.validate.outputs.version }}
+          severity: CRITICAL,HIGH,MEDIUM
+          format: sarif
+          output: trivy.sarif
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: trivy.sarif
+          category: release-${{ matrix.image }}
+
+  github-release:
+    name: GitHub release
+    needs: [validate, opendesk, realtime]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # To refresh opendesk.sh/install.sh from this release (deploy.yml).
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Stage installer and self-host files
+        env:
+          TAG: ${{ needs.validate.outputs.version }}
+          OPENDESK_DIGEST: ${{ needs.opendesk.outputs.digest }}
+          REALTIME_DIGEST: ${{ needs.realtime.outputs.digest }}
+        run: |
+          sh deploy/install/stage-assets.sh dist
+          printf '{\n  "version": "%s",\n  "opendesk": "%s",\n  "realtime": "%s"\n}\n' \
+            "$TAG" "$OPENDESK_DIGEST" "$REALTIME_DIGEST" > dist/images.json
+          (cd dist && sha256sum images.json >> SHA256SUMS && sha256sum -c SHA256SUMS)
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.validate.outputs.version }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          flags="--verify-tag --generate-notes --title $TAG"
+          [ "$PRERELEASE" = true ] && flags="$flags --prerelease"
+          cat > notes.md <<EOF
+          ## Install
+
+          \`\`\`sh
+          curl -fsSL https://opendesk.sh/install.sh | sh -s -- --version $TAG
+          \`\`\`
+
+          Upgrade an existing install: \`/opt/opendesk/opendesk-ctl upgrade $TAG\`
+
+          Images: \`ghcr.io/opendesk/opendesk:$TAG\`, \`ghcr.io/opendesk/realtime:$TAG\` (digests in images.json).
+          EOF
+          # shellcheck disable=SC2086
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --notes-file notes.md $flags
+      - name: Publish this installer on opendesk.sh
+        if: needs.validate.outputs.prerelease == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main -f target=site

@@ -1,0 +1,103 @@
+---
+title: Google and Microsoft OAuth
+description: Register Google and Microsoft OAuth apps for sign-in and mailbox connections on your own instance.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Self-hosted instances use their own OAuth apps. One app per provider covers both **sign-in** and **mailbox connections**. Without them, password sign-in and IMAP, SMTP and forwarding mailboxes still work.
+
+## Redirect URIs
+
+Register both of these, with `API_URL` exactly as configured (on a single domain, your site URL):
+
+```
+API_URL/v1/auth/oauth/{provider}/callback        sign-in
+API_URL/v1/mailboxes/oauth/{provider}/callback   mailbox connections
+```
+
+For `API_URL=https://desk.example.com`:
+
+| provider | redirect URIs |
+| --- | --- |
+| Google | `https://desk.example.com/v1/auth/oauth/google/callback`, `https://desk.example.com/v1/mailboxes/oauth/google/callback` |
+| Microsoft | `https://desk.example.com/v1/auth/oauth/microsoft/callback`, `https://desk.example.com/v1/mailboxes/oauth/microsoft/callback` |
+
+## Scopes
+
+| provider | sign-in | mailbox connection |
+| --- | --- | --- |
+| Google | `openid`, `email`, `profile` | `openid`, `email`, `https://mail.google.com/` |
+| Microsoft | `openid`, `email`, `profile` | `openid`, `email`, `offline_access`, `https://outlook.office.com/IMAP.AccessAsUser.All`, `https://graph.microsoft.com/Mail.Send`, `https://graph.microsoft.com/User.Read` |
+
+Mailbox connections use PKCE and request offline access, so opendesk can keep reading mail.
+
+## Google
+
+<Steps>
+
+1. Open the [Google Cloud console](https://console.cloud.google.com) and create (or pick) a project.
+
+2. Go to **APIs & Services → Library**, search for **Gmail API** and click **Enable**. (Only needed for mailbox connections.)
+
+3. Go to **Google Auth Platform → Branding** (formerly **OAuth consent screen**). Enter the app name, support email, your domain under **Authorized domains**, and links to your privacy policy and terms.
+
+4. Under **Audience**, choose **Internal** if everyone who connects a mailbox is in your Google Workspace organization. Choose **External** otherwise.
+
+5. Under **Data Access**, add the scopes `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` and, for mailboxes, `https://mail.google.com/`.
+
+6. Go to **Clients → Create client**. Choose **Web application**, give it a name, and add both Google redirect URIs above under **Authorized redirect URIs**. Click **Create**.
+
+7. Copy the client id and secret into `.env` and restart opendesk:
+
+   ```sh
+   GOOGLE_CLIENT_ID=1234567890-abc.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=GOCSPX-...
+   ```
+
+</Steps>
+
+<Aside type="caution" title="Restricted scope">
+`https://mail.google.com/` is a **restricted** scope. An **Internal** app in your own Workspace can use it immediately. An **External** app in production needs Google's verification, including a security assessment (CASA), before people outside your test users can connect. While it is in **Testing**, add each Google account under **Audience → Test users**; refresh tokens for test apps expire after 7 days.
+</Aside>
+
+## Microsoft
+
+<Steps>
+
+1. Open the [Microsoft Entra admin center](https://entra.microsoft.com) → **Identity → Applications → App registrations → New registration**.
+
+2. Enter a name. Under **Supported account types**, choose who may sign in:
+   - **Accounts in this organizational directory only** for one tenant (set `MICROSOFT_TENANT` to your tenant id)
+   - **Accounts in any organizational directory and personal Microsoft accounts** for everyone (keep `MICROSOFT_TENANT=common`)
+
+3. Under **Redirect URI**, choose **Web** and enter the sign-in redirect URI. Click **Register**. Then open **Authentication** and add the mailbox redirect URI as a second **Web** URI.
+
+4. Open **Certificates & secrets → New client secret**. Copy the secret **value** (not its id) now; it is shown once. Note its expiry and rotate it before then.
+
+5. Open **API permissions → Add a permission**:
+   - **Microsoft Graph → Delegated**: `openid`, `email`, `profile`, `offline_access`, `User.Read`, `Mail.Send`
+   - **APIs my organization uses →** search **Office 365 Exchange Online → Delegated**: `IMAP.AccessAsUser.All`
+
+   For a single organization, click **Grant admin consent** so members are not asked individually.
+
+6. Copy the **Application (client) ID** from **Overview** and the secret into `.env`, then restart opendesk:
+
+   ```sh
+   MICROSOFT_CLIENT_ID=00000000-0000-0000-0000-000000000000
+   MICROSOFT_CLIENT_SECRET=...
+   MICROSOFT_TENANT=common
+   ```
+
+</Steps>
+
+Mailboxes connected through Microsoft read mail over IMAP, so IMAP must be enabled for each mailbox in Microsoft 365. See [Connect Microsoft](/guides/mailboxes/microsoft/#imap-must-be-enabled).
+
+## GitHub and OIDC sign-in
+
+These are for sign-in only.
+
+- **GitHub:** create an OAuth app under **Settings → Developer settings → OAuth Apps** with the callback `API_URL/v1/auth/oauth/github/callback`, then set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. It requests `read:user` and `user:email`.
+- **OIDC:** register a web client with your identity provider with the redirect URI `API_URL/v1/auth/oauth/oidc/callback` and scopes `openid email profile`, then set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` and optionally `OIDC_NAME` for the button label.
+
+Federated identities are bound by issuer and subject. If someone signs in with a provider using the email of an existing password account, the accounts are linked only after the password is entered.

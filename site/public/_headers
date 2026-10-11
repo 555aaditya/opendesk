@@ -1,0 +1,26 @@
+# Security headers for opendesk.sh (Cloudflare Pages). The site is static and sets
+# no cookies. CSP: scripts only from this origin plus the exact hashes of the inline
+# scripts in the build (theme, analytics bootstrap); scripts/postbuild.mjs fills the
+# script-src and connect-src placeholders in the built copy of this file.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' __SCRIPT_SRC__; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' __CONNECT_SRC__; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Resource-Policy: same-origin
+
+# Hashed build output never changes under the same name.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The installer is piped to sh: serve it as plain text and never cache it for long,
+# so a fix reaches everyone on the next run.
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300
+/install.sh.sha256
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300

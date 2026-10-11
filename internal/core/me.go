@@ -1,0 +1,240 @@
+package core
+
+import (
+	"context"
+	"net/http"
+	"net/url"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/opendesk/opendesk/internal/displayname"
+	"github.com/opendesk/opendesk/internal/httpx"
+)
+
+type coreMeResponse struct {
+	User        CoreUser         `json:"user"`
+	Memberships []CoreMembership `json:"memberships"`
+}
+
+// validAvatarURL accepts an empty value or an https URL without credentials.
+func validAvatarURL(s string) bool {
+	if s == "" {
+		return true
+	}
+	if len(s) > 500 {
+		return false
+	}
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil
+}
+
+func (s *svc) registerMe(api huma.API) {
+	tags := []string{"Account"}
+
+	register(s, api, huma.Operation{OperationID: "get-me", Method: http.MethodGet, Path: "/v1/me",
+		Summary: "Get your account and workspaces", Tags: tags},
+		func(ctx context.Context, _ *struct{}) (*struct{ Body coreMeResponse }, error) {
+			p, err := auth.RequireUser(ctx)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			u, err := loadUser(ctx, s.d.DB.Pool, p.UserID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			ms, err := loadMemberships(ctx, s.d.DB.Pool, p.UserID)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &struct{ Body coreMeResponse }{coreMeResponse{User: u, Memberships: ms}}, nil
+		})
+
+	register(s, api, huma.Operation{OperationID: "update-me", Method: http.MethodPatch, Path: "/v1/me",
+		Summary: "Update your profile", Tags: tags},
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Name      *string `json:"name,omitempty" maxLength:"200"`
+				AvatarURL *string `json:"avatar_url,omitempty" maxLength:"500"`
+			}
+		}) (*struct{ Body CoreUser }, error) {
+			p, err := auth.RequireUser(ctx)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			var name *string
+			if in.Body.Name != nil {
+				n, err := displayname.Validate("Name", *in.Body.Name, displayname.Person, false)
+				if err != nil {
+					return nil, httpx.Wrap(err)
+				}
+				name = &n
+			}
+			if in.Body.AvatarURL != nil && !validAvatarURL(*in.Body.AvatarURL) {
+				return nil, httpx.Validation("avatar_url must be an https URL.")
+			}
+			u, err := scanUser(s.d.DB.Pool.QueryRow(ctx, `UPDATE users SET name = COALESCE($2, name), avatar_url = COALESCE($3, avatar_url),
+				updated_at = now() WHERE id = $1 RETURNING `+userCols, p.UserID, name, in.Body.AvatarURL))
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &struct{ Body CoreUser }{u}, nil
+		})
+
+	register(s, api, huma.Operation{OperationID: "change-password", Method: http.MethodPost, Path: "/v1/me/password",
+		Summary: "Change your password", Tags: tags, DefaultStatus: http.StatusNoContent},
+		func(ctx context.Context, in *struct {
+			Body struct {
+				CurrentPassword string `json:"current_password,omitempty" maxLength:"1024" doc:"Required when the account has a password"`
+				NewPassword     string `json:"new_password" maxLength:"1024"`
+			}
+		}) (*struct{}, error) {
+			p, err := auth.RequireUser(ctx)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := s.limit("password:change:"+p.UserID.String(), 10, time.Hour); err != nil {
+				return nil, err
+			}
+			var hash *string
+			if err := s.d.DB.Pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id = $1`, p.UserID).Scan(&hash); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if hash == nil {
+				// Setting a first password on a provider-only account.
+				if err := requireRecentLogin(ctx, s.d.DB.Pool, p); err != nil {
+					return nil, httpx.Wrap(err)
+				}
+			} else if !auth.VerifyPassword(in.Body.CurrentPassword, *hash) {
+				return nil, httpx.E(401, "invalid_credentials", "Your current password is incorrect.")
+			}
+			if err := auth.CheckPassword(in.Body.NewPassword); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if hash != nil && auth.VerifyPassword(in.Body.NewPassword, *hash) {
+				return nil, httpx.E(422, "weak_password", "Choose a password different from your current one.")
+			}
+			newHash, err := auth.HashPassword(in.Body.NewPassword)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			err = s.tx(ctx, func(tx pgx.Tx) error {
+				if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, p.UserID, newHash); err != nil {
+					return err
+				}
+				if err := revokeOtherSessions(ctx, tx, p.UserID, p.SessionID); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, `UPDATE one_time_tokens SET used_at = now() WHERE user_id = $1 AND purpose = $2 AND used_at IS NULL`,
+					p.UserID, ottReset); err != nil {
+					return err
+				}
+				_, err := auditUser(ctx, tx, p, p.UserID, "password.changed", nil)
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			s.disconnect(p.UserID, uuid.Nil)
+			return nil, nil
+		})
+
+	register(s, api, huma.Operation{OperationID: "delete-me", Method: http.MethodDelete, Path: "/v1/me",
+		Summary: "Delete your account", Tags: tags, DefaultStatus: http.StatusNoContent},
+		func(ctx context.Context, in *struct {
+			Body struct {
+				Password string `json:"password,omitempty" maxLength:"1024"`
+				Code     string `json:"code,omitempty" maxLength:"64"`
+			} `required:"false"`
+		}) (*struct {
+			SetCookie string `header:"Set-Cookie"`
+		}, error) {
+			p, err := auth.RequireUser(ctx)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := s.limit("me:delete:"+p.UserID.String(), 10, time.Hour); err != nil {
+				return nil, err
+			}
+			var hash *string
+			var totp bool
+			if err := s.d.DB.Pool.QueryRow(ctx, `SELECT password_hash, totp_enabled FROM users WHERE id = $1`, p.UserID).Scan(&hash, &totp); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if hash != nil {
+				if !auth.VerifyPassword(in.Body.Password, *hash) {
+					return nil, httpx.E(401, "invalid_credentials", "Your password is incorrect.")
+				}
+			} else if err := requireRecentLogin(ctx, s.d.DB.Pool, p); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			var keys []string
+			var disconnect []uuid.UUID
+			err = s.tx(ctx, func(tx pgx.Tx) error {
+				if totp {
+					if in.Body.Code == "" {
+						return httpx.E(403, "mfa_required", "Enter a code from your authenticator app.")
+					}
+					if _, err := s.checkSecondFactor(ctx, tx, p.UserID, in.Body.Code); err != nil {
+						return err
+					}
+				}
+				rows, err := tx.Query(ctx, `SELECT m.workspace_id, m.role,
+					(SELECT count(*) FROM members o WHERE o.workspace_id = m.workspace_id AND o.user_id <> m.user_id)
+					FROM members m WHERE m.user_id = $1 FOR UPDATE OF m`, p.UserID)
+				if err != nil {
+					return err
+				}
+				type mem struct {
+					wid    uuid.UUID
+					role   string
+					others int
+				}
+				mems, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (mem, error) {
+					var m mem
+					err := r.Scan(&m.wid, &m.role, &m.others)
+					return m, err
+				})
+				if err != nil {
+					return err
+				}
+				for _, m := range mems {
+					if m.role == string(auth.RoleOwner) && m.others > 0 {
+						return httpx.E(409, "sole_owner", "Transfer ownership of your workspaces that have other members before deleting your account.")
+					}
+				}
+				for _, m := range mems {
+					if m.role == string(auth.RoleOwner) {
+						_, k, err := s.deleteWorkspace(ctx, tx, m.wid)
+						if err != nil {
+							return err
+						}
+						keys = append(keys, k...)
+						continue
+					}
+					if err := s.removeMember(ctx, tx, p, m.wid, p.UserID, m.role, "member.account_deleted"); err != nil {
+						return err
+					}
+				}
+				disconnect = append(disconnect, p.UserID)
+				_, err = tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, p.UserID)
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			s.d.Log.Info("account deleted", "user_id", p.UserID, "ip", p.IP)
+			s.purgeFiles(keys)
+			for _, uid := range disconnect {
+				s.disconnect(uid, uuid.Nil)
+			}
+			return &struct {
+				SetCookie string `header:"Set-Cookie"`
+			}{s.refreshCookie("", -1)}, nil
+		})
+
+	s.registerSessions(api)
+}

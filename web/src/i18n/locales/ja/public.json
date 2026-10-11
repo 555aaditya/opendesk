@@ -1,0 +1,61 @@
+{
+  "help": {
+    "default_title": "ヘルプセンター",
+    "hero_title": "どのようなことでお困りですか？",
+    "hero_subtitle": "記事を検索するか、トピックから探してください。",
+    "search_placeholder": "記事を検索",
+    "topics": "トピック",
+    "popular": "よく読まれている記事",
+    "articles_other": "{{count}} 件の記事",
+    "empty_title": "まだ記事がありません",
+    "empty_body": "記事が公開されると、ここに表示されます。",
+    "not_found_title": "ヘルプセンターが見つかりません",
+    "not_found_body": "このヘルプセンターは存在しないか、まだ公開されていません。",
+    "topic_not_found_title": "トピックが見つかりません",
+    "topic_not_found_body": "名前が変更されたか、削除された可能性があります。",
+    "topic_empty": "まだ記事がありません",
+    "article_not_found_title": "記事が見つかりません",
+    "article_not_found_body": "移動されたか、公開が停止された可能性があります。",
+    "updated": "{{date}} に更新",
+    "breadcrumb": "パンくずリスト",
+    "search": "検索",
+    "search_min": "2 文字以上入力してください",
+    "no_results_title": "「{{term}}」に一致する結果はありません",
+    "no_results_body": "キーワードを減らすか、別の言葉でお試しください。",
+    "results_other": "{{count}} 件の結果",
+    "theme_light": "ライトテーマに切り替え",
+    "theme_dark": "ダークテーマに切り替え"
+  },
+  "csat": {
+    "page_title": "対応の評価",
+    "invalid_title": "このリンクは無効です",
+    "invalid_body": "有効期限が切れている可能性があります。ご意見をお寄せいただこうとしてくださり、ありがとうございます。",
+    "already_title": "この対応はすでに評価済みです",
+    "already_body": "ありがとうございます。ご意見はチームに届きました。",
+    "thanks_title": "ご意見ありがとうございます",
+    "thanks_body": "{{name}} のサービス向上に役立てさせていただきます。",
+    "thanks_body_generic": "チームのサービス向上に役立てさせていただきます。",
+    "question": "今回の対応はいかがでしたか？",
+    "rating": "評価",
+    "score_label": "{{score}}、{{label}}",
+    "scores": {
+      "1": "とても不満",
+      "2": "不満",
+      "3": "普通",
+      "4": "満足",
+      "5": "とても満足"
+    },
+    "comment_label": "ほかにご意見はありますか？",
+    "optional": "任意",
+    "comment_placeholder": "よかった点や改善してほしい点",
+    "saved": "評価を保存しました。よろしければコメントもお寄せください。",
+    "send_comment": "コメントを送信",
+    "send_feedback": "評価を送信",
+    "error": "問題が発生しました。もう一度お試しください。",
+    "offline": "サーバーに接続できません。接続を確認してください。"
+  },
+  "footer": {
+    "powered_by": "Powered by",
+    "language": "言語"
+  }
+}

@@ -94,3 +94,54 @@ type SystemEmailArgs struct {
 }
 
 func (SystemEmailArgs) Kind() string { return "mail.system" }
+
+// SyncSeatsArgs sets a workspace's Stripe subscription quantity to its billed seats.
+// Enqueued (unique, debounced) when members change. Owner: billing.
+type SyncSeatsArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+}
+
+func (SyncSeatsArgs) Kind() string { return "billing.sync_seats" }
+
+// ReconcileBillingArgs re-syncs seats for every paid workspace (hourly). Owner: billing.
+type ReconcileBillingArgs struct{}
+
+func (ReconcileBillingArgs) Kind() string { return "billing.reconcile" }
+
+// CancelSubscriptionArgs cancels a deleted workspace's Stripe subscription immediately.
+// The Stripe ids travel in the args because the workspace rows are gone. Owner: billing.
+type CancelSubscriptionArgs struct {
+	WorkspaceID    uuid.UUID `json:"workspace_id"`
+	CustomerID     string    `json:"customer_id"`
+	SubscriptionID string    `json:"subscription_id"`
+}
+
+func (CancelSubscriptionArgs) Kind() string { return "billing.cancel_subscription" }
+
+// AIWidgetAnswerArgs lets the widget answer bot reply to one visitor chat message from
+// the knowledge base. Owner: ai.
+type AIWidgetAnswerArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+	MessageID   uuid.UUID `json:"message_id"`
+}
+
+func (AIWidgetAnswerArgs) Kind() string { return "ai.widget_answer" }
+
+// AIEmbedArgs (re)indexes one knowledge base article or ticket for semantic search, or
+// removes its embeddings when it is gone or no longer eligible. Owner: ai.
+type AIEmbedArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	Type        string    `json:"type"` // article | ticket
+	RefID       uuid.UUID `json:"ref_id"`
+}
+
+func (AIEmbedArgs) Kind() string { return "ai.embed" }
+
+// AISummarizeArgs refreshes a ticket's stored AI summary (settings.ai.auto_summarize). Owner: ai.
+type AISummarizeArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+}
+
+func (AISummarizeArgs) Kind() string { return "ai.summarize" }

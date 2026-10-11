@@ -1,0 +1,52 @@
+---
+/** Tabbed code panel. Each tab is highlighted at build time in the mono themes. */
+import { Code } from 'astro:components';
+import { monoLight, monoDark } from '../lib/shiki.mjs';
+
+type Tab = { label: string; lang: string; code: string; file?: string };
+interface Props {
+  tabs: Tab[];
+  class?: string;
+  id: string;
+}
+const { tabs, class: className = '', id } = Astro.props;
+---
+<div class={`overflow-hidden rounded-2xl border border-line bg-raised shadow-card ${className}`} data-tabs>
+  <div class="flex items-center gap-1 overflow-x-auto border-b border-line bg-surface-2 px-2 h-11" role="tablist">
+    {tabs.map((t, i) => (
+      <button type="button" role="tab" id={`${id}-tab-${i}`} aria-controls={`${id}-panel-${i}`} aria-selected={i === 0 ? 'true' : 'false'} tabindex={i === 0 ? 0 : -1}
+        class="h-7 shrink-0 rounded-md px-2.5 text-[12.5px] text-muted transition-colors hover:text-fg aria-selected:bg-bg aria-selected:text-fg aria-selected:ring-1 aria-selected:ring-line">
+        {t.label}
+      </button>
+    ))}
+  </div>
+  {tabs.map((t, i) => (
+    <div role="tabpanel" id={`${id}-panel-${i}`} aria-labelledby={`${id}-tab-${i}`} hidden={i !== 0} class="od-code">
+      {t.file && <div class="px-5 pt-4 font-mono text-[11px] text-subtle">{t.file}</div>}
+      <Code code={t.code} lang={t.lang as 'js'} themes={{ light: monoLight, dark: monoDark }} defaultColor="light" />
+    </div>
+  ))}
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-tabs]').forEach((root) => {
+    const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role=tab]')];
+    const select = (i: number) => {
+      tabs.forEach((t, j) => {
+        t.setAttribute('aria-selected', String(i === j));
+        t.tabIndex = i === j ? 0 : -1;
+        const panel = root.querySelector<HTMLElement>(`#${t.getAttribute('aria-controls')}`);
+        if (panel) panel.hidden = i !== j;
+      });
+    };
+    tabs.forEach((t, i) => {
+      t.addEventListener('click', () => select(i));
+      t.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const n = (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+        select(n);
+        tabs[n].focus();
+      });
+    });
+  });
+</script>

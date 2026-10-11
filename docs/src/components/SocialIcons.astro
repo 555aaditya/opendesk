@@ -1,0 +1,24 @@
+---
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+---
+
+<a class="od-site-link" href="https://opendesk.sh/">opendesk.sh</a>
+<Default />
+
+<style>
+  .od-site-link {
+    font-size: var(--sl-text-sm);
+    font-weight: 500;
+    color: var(--sl-color-gray-2);
+    text-decoration: none;
+    margin-inline-end: 0.5rem;
+  }
+  .od-site-link:hover {
+    color: var(--sl-color-white);
+  }
+  @media (max-width: 50em) {
+    .od-site-link {
+      display: none;
+    }
+  }
+</style>

@@ -1,0 +1,251 @@
+// Small pieces shared by the sign-in flows.
+
+import { useQuery } from "@tanstack/react-query";
+import { Eye, EyeOff } from "lucide-react";
+import { forwardRef, useId, useState, type ReactNode } from "react";
+import type { AuthProvider, TokenResponse } from "@/lib/api/types";
+import { config } from "@/lib/config";
+import { cn } from "@/lib/cn";
+import { q } from "@/lib/queries";
+import { signIn } from "@/lib/session";
+import { Button } from "@/components/ui/button";
+import { TextInput } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+
+/** A same-origin relative path, or null. Guards every post-login redirect. */
+export function safeNext(v: string | null | undefined): string | null {
+  if (!v || typeof v !== "string") return null;
+  if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\")) return null;
+  try {
+    const u = new URL(v, location.origin);
+    if (u.origin !== location.origin) return null;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return null;
+  }
+}
+
+/** Sign in, then return the path to land on: redirect_to, then next, then "/". */
+export async function completeSignIn(tok: TokenResponse, next?: string | null): Promise<string> {
+  const s = await signIn(tok);
+  const target = safeNext(tok.redirect_to) ?? safeNext(next);
+  if (target) return target;
+  return s.workspaceId ? "/" : "/onboarding";
+}
+
+/** Full-page navigation to a path the router may not know statically (invite links with tokens). */
+export function go(path: string) {
+  location.assign(path);
+}
+
+export function Notice({ children, tone = "danger", className }: { children: ReactNode; tone?: "danger" | "ok" | "info"; className?: string }) {
+  return (
+    <div
+      role={tone === "danger" ? "alert" : "status"}
+      aria-live="polite"
+      className={cn("flex items-start gap-2.5 rounded-md border border-line bg-surface px-3 py-2.5 text-[12.5px] leading-[18px] text-fg-2", className)}
+    >
+      <span
+        aria-hidden
+        className={cn("mt-[6px] size-1.5 shrink-0 rounded-full", tone === "danger" ? "bg-danger" : tone === "ok" ? "bg-ok" : "bg-fg-3")}
+      />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+export function OrDivider({ label = "or" }: { label?: string }) {
+  return (
+    <div className="my-5 flex items-center gap-3" role="separator">
+      <span className="h-px flex-1 bg-line" />
+      <span className="text-[11.5px] text-fg-4">{label}</span>
+      <span className="h-px flex-1 bg-line" />
+    </div>
+  );
+}
+
+export const PasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
+  function PasswordInput({ className, ...rest }, ref) {
+    const [show, setShow] = useState(false);
+    return (
+      <TextInput
+        ref={ref}
+        type={show ? "text" : "password"}
+        className={cn("[&_input]:h-9", className)}
+        trailing={
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            aria-label={show ? "Hide password" : "Show password"}
+            className="flex size-6 items-center justify-center rounded-[5px] text-fg-4 hover:bg-hover hover:text-fg"
+          >
+            {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+          </button>
+        }
+        {...rest}
+      />
+    );
+  },
+);
+
+/** Length matters most; variety adds a little. Quiet, four segments. */
+export function passwordScore(pw: string): 0 | 1 | 2 | 3 | 4 {
+  if (!pw) return 0;
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(pw)).length;
+  const unique = new Set(pw).size;
+  let s = 0;
+  if (pw.length >= 12) s = 2;
+  else if (pw.length >= 8) s = 1;
+  if (pw.length >= 16) s += 1;
+  if (kinds >= 3 && pw.length >= 12) s += 1;
+  if (unique < 5) s = Math.min(s, 1);
+  return Math.max(1, Math.min(4, s)) as 1 | 2 | 3 | 4;
+}
+
+export function StrengthMeter({ password }: { password: string }) {
+  const score = passwordScore(password);
+  const label = password.length < 12 ? `${Math.max(0, 12 - password.length)} more characters` : ["", "Weak", "Fair", "Good", "Strong"][score];
+  return (
+    <div className="flex items-center gap-2.5" aria-live="polite">
+      <div className="flex flex-1 gap-1" aria-hidden>
+        {[1, 2, 3, 4].map((i) => (
+          <span key={i} className={cn("h-[3px] flex-1 rounded-full transition-colors duration-200", i <= score && password ? (score >= 3 ? "bg-fg" : "bg-fg-3") : "bg-line")} />
+        ))}
+      </div>
+      <span className="mono shrink-0 whitespace-nowrap text-right text-[11px] text-fg-3">{password ? label : "12 characters minimum"}</span>
+    </div>
+  );
+}
+
+// ─── Providers ─────────────────────────────────────────────────────────────
+
+function ProviderGlyph({ id }: { id: AuthProvider["id"] }) {
+  const cls = "size-4 shrink-0";
+  switch (id) {
+    case "google":
+      return (
+        <svg viewBox="0 0 24 24" className={cls} aria-hidden fill="currentColor">
+          <path d="M21.6 12.23c0-.71-.06-1.4-.18-2.06H12v3.9h5.39a4.6 4.6 0 0 1-2 3.02v2.5h3.24c1.9-1.75 2.97-4.32 2.97-7.36Z" />
+          <path d="M12 22c2.7 0 4.97-.9 6.63-2.42l-3.24-2.5c-.9.6-2.04.95-3.39.95-2.6 0-4.81-1.76-5.6-4.12H3.06v2.58A10 10 0 0 0 12 22Z" opacity=".75" />
+          <path d="M6.4 13.9a6 6 0 0 1 0-3.8V7.52H3.06a10 10 0 0 0 0 8.96L6.4 13.9Z" opacity=".55" />
+          <path d="M12 5.98c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.62 9.62 0 0 0 12 2a10 10 0 0 0-8.94 5.52L6.4 10.1C7.19 7.74 9.4 5.98 12 5.98Z" opacity=".9" />
+        </svg>
+      );
+    case "microsoft":
+      return (
+        <svg viewBox="0 0 24 24" className={cls} aria-hidden fill="currentColor">
+          <rect x="3" y="3" width="8.5" height="8.5" rx="1" />
+          <rect x="12.5" y="3" width="8.5" height="8.5" rx="1" opacity=".7" />
+          <rect x="3" y="12.5" width="8.5" height="8.5" rx="1" opacity=".7" />
+          <rect x="12.5" y="12.5" width="8.5" height="8.5" rx="1" opacity=".45" />
+        </svg>
+      );
+    case "github":
+      return (
+        <svg viewBox="0 0 24 24" className={cls} aria-hidden fill="currentColor">
+          <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" className={cls} aria-hidden fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="4" y="10.5" width="16" height="10" rx="2.5" />
+          <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+          <circle cx="12" cy="15.5" r="1.25" fill="currentColor" stroke="none" />
+        </svg>
+      );
+  }
+}
+
+export function startOAuth(provider: AuthProvider["id"], next?: string | null) {
+  if (import.meta.env.VITE_MOCK === "1") {
+    location.assign(`/auth/callback?code=mock-${provider}`);
+    return;
+  }
+  const back = new URL("/auth/callback", location.origin);
+  const n = safeNext(next);
+  if (n) back.searchParams.set("next", n);
+  location.assign(`${config.apiUrl}/v1/auth/oauth/${provider}/start?redirect_to=${encodeURIComponent(back.toString())}`);
+}
+
+export function ProviderButtons({ next, verb = "Continue" }: { next?: string | null; verb?: string }) {
+  const { data, isLoading } = useQuery(q.authConfig());
+  const [pending, setPending] = useState<string | null>(null);
+  if (isLoading)
+    return (
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-9 rounded-md" />
+        <Skeleton className="h-9 rounded-md" />
+      </div>
+    );
+  const providers = data?.providers ?? [];
+  if (!providers.length) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {providers.map((p) => (
+        <Button
+          key={p.id}
+          variant="secondary"
+          size="lg"
+          className="w-full"
+          loading={pending === p.id}
+          icon={<ProviderGlyph id={p.id} />}
+          onClick={() => {
+            setPending(p.id);
+            startOAuth(p.id, next);
+          }}
+        >
+          {verb} with {p.id === "oidc" ? p.name || "SSO" : p.name}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+export function providerName(id: string | undefined): string {
+  return { google: "Google", microsoft: "Microsoft", github: "GitHub", oidc: "SSO" }[id ?? ""] ?? "your provider";
+}
+
+export const oauthErrors: Record<string, string> = {
+  access_denied: "Sign-in was cancelled.",
+  invalid_state: "That sign-in link expired. Start again.",
+  invalid_request: "The sign-in request was not valid. Start again.",
+  provider_error: "The provider returned an error. Try again.",
+  provider_unavailable: "The provider is not reachable right now. Try again in a moment.",
+  email_unverified: "Your email is not verified with that provider. Verify it there, then try again.",
+  signup_disabled: "New sign-ups are turned off on this instance. Ask an admin for an invitation.",
+  server_error: "Something went wrong on our side. Try again.",
+};
+
+export function oauthErrorMessage(code: string | undefined): string | null {
+  if (!code) return null;
+  return oauthErrors[code] ?? "Sign-in failed. Try again.";
+}
+
+/** A labelled h-9 field used across the auth screens. */
+export function AuthField({ label, children, aside }: { label: string; children: (id: string) => ReactNode; aside?: ReactNode }) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <label htmlFor={id} className="text-[12.5px] font-medium text-fg">
+          {label}
+        </label>
+        {aside}
+      </div>
+      {children(id)}
+    </div>
+  );
+}
+
+export function slugify(name: string) {
+  return (
+    name
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "your-team"
+  );
+}

@@ -86,7 +86,33 @@ type Config struct {
 	PosthogHost string
 
 	EventRetention time.Duration
+
+	// Billing (opendesk Cloud). Billing is on only when STRIPE_SECRET_KEY is set; without it
+	// every workspace has unlimited use, which is the self-hosted default.
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	StripePricePro      string // recurring per-seat price, monthly
+	StripePriceProYear  string // optional recurring per-seat price, yearly
+	StripePriceCredits  string // one-time price for an AI credit pack
+	StripeTax           bool   // Stripe Tax automatic tax on Checkout
+
+	// AI. AIProvider: anthropic | openai (any OpenAI-compatible endpoint, e.g. Ollama) | none.
+	AIProvider       string
+	AnthropicAPIKey  string
+	OpenAIAPIKey     string
+	OpenAIBaseURL    string
+	AIModel          string // drafting, summaries, answers
+	AIFastModel      string // triage, classification, short rewrites
+	EmbeddingsDriver string // voyage | openai | none
+	VoyageAPIKey     string
+	EmbeddingsModel  string
 }
+
+// BillingEnabled reports whether plans, limits and credits are enforced.
+func (c *Config) BillingEnabled() bool { return c.StripeSecretKey != "" }
+
+// AIEnabled reports whether an AI provider is configured.
+func (c *Config) AIEnabled() bool { return c.AIProvider != "none" && c.AIProvider != "" }
 
 func (c *Config) IsProduction() bool { return c.Env == "production" }
 
@@ -146,6 +172,52 @@ func Load() (*Config, error) {
 		PosthogKey:       env("POSTHOG_KEY", ""),
 		PosthogHost:      env("POSTHOG_HOST", "https://us.i.posthog.com"),
 		EventRetention:   envDuration("EVENT_RETENTION", 7*24*time.Hour),
+
+		StripeSecretKey:     env("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
+		StripePricePro:      env("STRIPE_PRICE_PRO", ""),
+		StripePriceProYear:  env("STRIPE_PRICE_PRO_YEARLY", ""),
+		StripePriceCredits:  env("STRIPE_PRICE_CREDITS", ""),
+		StripeTax:           envBool("STRIPE_TAX", true),
+
+		AIProvider:       env("AI_PROVIDER", ""),
+		AnthropicAPIKey:  env("ANTHROPIC_API_KEY", ""),
+		OpenAIAPIKey:     env("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:    strings.TrimRight(env("OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
+		AIModel:          env("AI_MODEL", ""),
+		AIFastModel:      env("AI_FAST_MODEL", ""),
+		EmbeddingsDriver: env("EMBEDDINGS_DRIVER", ""),
+		VoyageAPIKey:     env("VOYAGE_API_KEY", ""),
+		EmbeddingsModel:  env("EMBEDDINGS_MODEL", ""),
+	}
+	if c.AIProvider == "" {
+		switch {
+		case c.AnthropicAPIKey != "":
+			c.AIProvider = "anthropic"
+		case c.OpenAIAPIKey != "":
+			c.AIProvider = "openai"
+		default:
+			c.AIProvider = "none"
+		}
+	}
+	if c.AIModel == "" && c.AIProvider == "anthropic" {
+		c.AIModel = "claude-sonnet-5-5"
+	}
+	if c.AIFastModel == "" && c.AIProvider == "anthropic" {
+		c.AIFastModel = "claude-haiku-4-5-20251001"
+	}
+	if c.AIFastModel == "" {
+		c.AIFastModel = c.AIModel
+	}
+	if c.EmbeddingsDriver == "" {
+		switch {
+		case c.VoyageAPIKey != "":
+			c.EmbeddingsDriver = "voyage"
+		case c.AIProvider == "openai":
+			c.EmbeddingsDriver = "openai"
+		default:
+			c.EmbeddingsDriver = "none"
+		}
 	}
 	if c.DatabaseURLDirect == "" {
 		c.DatabaseURLDirect = c.DatabaseURL
@@ -187,6 +259,9 @@ func Load() (*Config, error) {
 
 	if c.IsProduction() && c.NATSURL == "" && c.NATSToken == "" && !strings.HasPrefix(c.NATSListen, "127.0.0.1") {
 		return nil, errors.New("NATS_TOKEN is required when the embedded NATS server listens beyond localhost")
+	}
+	if c.BillingEnabled() && (c.StripeWebhookSecret == "" || c.StripePricePro == "") {
+		return nil, errors.New("STRIPE_WEBHOOK_SECRET and STRIPE_PRICE_PRO are required when STRIPE_SECRET_KEY is set")
 	}
 	return c, nil
 }

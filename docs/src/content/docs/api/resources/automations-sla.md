@@ -1,0 +1,64 @@
+---
+title: Automations and SLA
+description: Manage automation rules and SLA policies through the API.
+---
+
+Both are settings: they need an `admin` user, or an API key with `settings:read` and `settings:write`.
+
+| method | path | |
+| --- | --- | --- |
+| `GET`, `POST` | `/v1/automations` | List or create automations |
+| `GET`, `PATCH`, `DELETE` | `/v1/automations/{id}` | |
+| `GET`, `POST` | `/v1/sla-policies` | List or create SLA policies |
+| `GET`, `PATCH`, `DELETE` | `/v1/sla-policies/{id}` | |
+
+## Objects
+
+```ts
+type Automation = {
+  id: string; name: string;
+  trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
+  conditions: { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag";
+                op: "contains" | "not_contains" | "equals" | "not_equals"; value: string }[];
+  actions: { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag"
+                 | "send_reply" | "add_note" | "mark_spam"; value: string }[];
+  enabled: boolean; position: number; run_count: number;
+};
+
+type SlaPolicy = {
+  id: string; name: string; priority: Priority | null;
+  first_response_minutes: number; resolution_minutes: number; enabled: boolean; position: number;
+};
+```
+
+See [Automations](/guides/automations/) and [SLA policies](/guides/sla-policies/) for how they behave.
+
+## Create an automation
+
+```sh
+curl https://api.opendesk.sh/v1/automations \
+  -H "Authorization: Bearer od_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Outages are urgent",
+    "trigger": "ticket_created",
+    "conditions": [{ "field": "subject", "op": "contains", "value": "outage" }],
+    "actions": [{ "type": "set_priority", "value": "urgent" }, { "type": "add_tag", "value": "incident" }],
+    "enabled": true
+  }'
+```
+
+## Create an SLA policy
+
+```sh
+curl https://api.opendesk.sh/v1/sla-policies \
+  -H "Authorization: Bearer od_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Urgent", "priority": "urgent", "first_response_minutes": 30, "resolution_minutes": 240, "enabled": true }'
+```
+
+`priority: null` applies the policy to any priority.
+
+## Events
+
+`automation.*` and `sla_policy.*`.

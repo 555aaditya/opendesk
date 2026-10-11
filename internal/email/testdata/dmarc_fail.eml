@@ -1,0 +1,11 @@
+Authentication-Results: mx.in.test; dkim=none; spf=softfail smtp.mailfrom=bank.example; dmarc=fail (p=NONE) header.from=bank.example
+Authentication-Results: spoofed.example; dmarc=pass header.from=bank.example
+From: Your Bank <{{FROM}}>
+To: {{TO}}
+Subject: Verify your account
+Date: Sat, 10 Oct 2026 17:00:00 +0000
+Message-ID: <dmarc{{ID}}@spoof.test>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<p>Click <a href="https://phish.example/login">here</a></p><script>steal()</script><style>p{}</style>

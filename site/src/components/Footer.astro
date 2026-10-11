@@ -1,0 +1,112 @@
+---
+import Logo from './Logo.astro';
+import Icon from './Icon.astro';
+import { LINKS, EMAILS } from '../lib/site';
+
+const cols = [
+  {
+    title: 'Product',
+    links: [
+      { href: '/features/#inbox', label: 'Shared inbox' },
+      { href: '/features/#chat', label: 'Live chat' },
+      { href: '/features/#ai', label: 'AI' },
+      { href: '/features/#knowledge-base', label: 'Knowledge base' },
+      { href: '/features/#automations', label: 'Automations and SLAs' },
+      { href: '/features/#reports', label: 'Reports' },
+      { href: '/features/#api', label: 'API and webhooks' },
+      { href: '/pricing/', label: 'Pricing' },
+    ],
+  },
+  {
+    title: 'Open source',
+    links: [
+      { href: '/self-hosting/', label: 'Self-hosting' },
+      { href: '/open-source/', label: 'Why open source' },
+      { href: LINKS.github, label: 'GitHub' },
+      { href: '/changelog/', label: 'Changelog' },
+      { href: `${LINKS.docs}/contributing/`, label: 'Contributing' },
+    ],
+  },
+  {
+    title: 'Developers',
+    links: [
+      { href: LINKS.docs, label: 'Documentation' },
+      { href: `${LINKS.docs}/api/`, label: 'API overview' },
+      { href: LINKS.apiReference, label: 'API reference' },
+      { href: `${LINKS.docs}/api/webhooks/`, label: 'Webhooks' },
+      { href: `${LINKS.docs}/api/realtime/`, label: 'Realtime' },
+    ],
+  },
+  {
+    title: 'Company',
+    links: [
+      { href: '/blog/', label: 'Blog' },
+      { href: '/security/', label: 'Security' },
+      { href: '/contact/', label: 'Contact' },
+      { href: '/privacy/', label: 'Privacy' },
+      { href: '/terms/', label: 'Terms' },
+    ],
+  },
+];
+const year = new Date().getFullYear();
+---
+<footer class="border-t border-line mt-24">
+  <div class="container-page py-14 md:py-16">
+    <div class="grid gap-12 lg:grid-cols-[1.3fr_repeat(4,1fr)]">
+      <div class="max-w-xs">
+        <a href="/" aria-label="opendesk home" class="inline-block text-fg"><Logo class="h-[22px] w-auto" /></a>
+        <p class="mt-4 text-[14px] leading-relaxed text-muted">The open-source helpdesk. Run it on our cloud or on your own servers. Same code either way.</p>
+        <div class="mt-6 flex items-center gap-1 rounded-full border border-line p-1 w-fit" role="radiogroup" aria-label="Theme" data-theme-switch>
+          {[
+            { v: 'system', icon: 'monitor', label: 'System theme' },
+            { v: 'light', icon: 'sun', label: 'Light theme' },
+            { v: 'dark', icon: 'moon', label: 'Dark theme' },
+          ].map((o) => (
+            <button type="button" role="radio" aria-checked="false" data-value={o.v} aria-label={o.label}
+              class="inline-flex size-7 items-center justify-center rounded-full text-subtle transition-colors hover:text-fg aria-checked:bg-surface aria-checked:text-fg">
+              <Icon name={o.icon as 'sun'} size={14} />
+            </button>
+          ))}
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-10 sm:grid-cols-4 lg:contents">
+        {cols.map((c) => (
+          <div>
+            <div class="text-[13px] font-medium text-fg">{c.title}</div>
+            <ul class="mt-4 space-y-2.5">
+              {c.links.map((l) => (
+                <li><a href={l.href} class="text-[14px] text-muted transition-colors hover:text-fg">{l.label}</a></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+    <div class="mt-14 flex flex-col gap-4 border-t border-line pt-6 text-[13px] text-subtle sm:flex-row sm:items-center sm:justify-between">
+      <div>© {year} opendesk. Apache-2.0 licensed.</div>
+      <div class="flex items-center gap-5">
+        <a href={`mailto:${EMAILS.hello}`} class="hover:text-fg">{EMAILS.hello}</a>
+        <a href={LINKS.github} class="hover:text-fg inline-flex items-center gap-1.5" aria-label="GitHub"><Icon name="github" size={15} /></a>
+        <a href="/blog/rss.xml" class="hover:text-fg" aria-label="RSS feed"><Icon name="rss" size={15} /></a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  import { applyTheme, currentTheme, type Theme } from '../lib/theme';
+
+  const group = document.querySelector<HTMLElement>('[data-theme-switch]');
+  const sync = () => {
+    const t = currentTheme();
+    group?.querySelectorAll<HTMLButtonElement>('[data-value]').forEach((b) => {
+      b.setAttribute('aria-checked', String(b.dataset.value === t));
+    });
+  };
+  sync();
+  document.addEventListener('od:theme', sync);
+  group?.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-value]');
+    if (b) applyTheme(b.dataset.value as Theme);
+  });
+</script>

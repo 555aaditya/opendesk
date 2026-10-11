@@ -16,6 +16,7 @@ import (
 	"github.com/opendesk/opendesk/internal/httpx"
 	"github.com/opendesk/opendesk/internal/mailer"
 	"github.com/opendesk/opendesk/internal/natsx"
+	"github.com/opendesk/opendesk/internal/plan"
 	"github.com/opendesk/opendesk/internal/storage"
 )
 
@@ -33,4 +34,6 @@ type Deps struct {
 	Tokens    *auth.Tokens
 	Captcha   *captcha.Turnstile
 	Limiter   *httpx.Limiter
+	// Plan enforces plan limits and AI credits; unlimited when billing is disabled.
+	Plan *plan.Service
 }

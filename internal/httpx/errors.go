@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/opendesk/opendesk/internal/captcha"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/displayname"
+	"github.com/opendesk/opendesk/internal/plan"
 )
 
 // Error is the RFC 9457 problem body every route returns. Code is a stable machine string.
@@ -110,7 +113,12 @@ func Wrap(err error) error {
 		return se
 	}
 	var dn *displayname.InvalidError
+	var le *plan.LimitError
 	switch {
+	case errors.As(err, &le):
+		return E(402, "plan_limit", "Your plan includes "+plural(le.Limit, le.Resource)+". Upgrade to add more.")
+	case errors.Is(err, plan.ErrNoCredits):
+		return E(402, "no_credits", "Your workspace has no AI credits left this month. Buy credits or upgrade.")
 	case errors.Is(err, auth.ErrUnauthenticated):
 		return E(401, "unauthenticated", err.Error())
 	case errors.Is(err, auth.ErrForbidden):
@@ -131,4 +139,15 @@ func Wrap(err error) error {
 		return E(499, "canceled", "request canceled")
 	}
 	return huma.Error500InternalServerError(internalMessage, err)
+}
+
+func plural(n int, noun string) string {
+	if n == 1 {
+		noun = strings.TrimSuffix(noun, "es")
+		if noun == "mailbox" {
+			return "1 mailbox"
+		}
+		return "1 " + strings.TrimSuffix(noun, "s")
+	}
+	return strconv.Itoa(n) + " " + noun
 }

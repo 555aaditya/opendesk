@@ -56,19 +56,21 @@ type Message = {
   body_html: string; body_text: string; has_quoted: boolean; subject: string;
   from_email: string; from_name: string; to: string[]; cc: string[]; bcc: string[];
   attachments: Attachment[]; delivery_status: "none" | "pending" | "sent" | "failed" | "bounced"; delivery_error: string;
+  ai: boolean; // an automatic answer from the widget answer bot (contracts/ai.md)
   created_at: string;
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
 // activity types: status_changed{from,to} priority_changed{from,to} assigned{from,to} team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
+// AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,via} ai_answered{message_id,article_ids} ai_handoff (actor "ai" or "contact")
 type Tag = { id: string; name: string };
 type SavedReply = { id: string; title: string; shortcut: string; body_html: string; created_at: string; updated_at: string };
 type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number };
 type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string; tag?: string; channel?: Channel; q?: string };
 type SlaPolicy = { id: string; name: string; priority: Priority | null; first_response_minutes: number; resolution_minutes: number; enabled: boolean; position: number };
 type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
-type Condition = { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag"; op: "contains" | "not_contains" | "equals" | "not_equals"; value: string };
-type Action = { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam"; value: string };
+type Condition = { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment"; op: "contains" | "not_contains" | "equals" | "not_equals" | "eq"; value: string }; // sentiment: equals/not_equals only; eq = equals
+type Action = { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag" | "send_reply" | "add_note" | "mark_spam" | "ai_triage"; value: string };
 type Mailbox = {
   id: string; name: string; email: string; display_name: string;
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft"; outbound_kind: "smtp" | "google" | "microsoft" | "system";
@@ -91,26 +93,27 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | method | path | body → response |
 | --- | --- | --- |
 | GET | `/v1/auth/config` | → `{ providers: [{id:"google"|"microsoft"|"github"|"oidc", name}], password_login: bool, signup_enabled: bool, turnstile_site_key: string \| null }` |
-| POST | `/v1/auth/register` | `{email,password,name,turnstile_token?}` → `{access_token, expires_in, user}` + refresh cookie |
+| POST | `/v1/auth/register` | `{email,password,name,turnstile_token?,invite_token?}` → `{access_token, expires_in, user}` + refresh cookie. `409 email_taken`. With signup off, only a valid `invite_token` for the same email may register (`403 signup_disabled`); an invite token also marks the email verified |
 | POST | `/v1/auth/login` | `{email,password,turnstile_token?}` → `{access_token, expires_in, user}` or `{mfa_required:true, mfa_token}` |
-| POST | `/v1/auth/mfa` | `{mfa_token, code}` → `{access_token, expires_in, user}` |
+| POST | `/v1/auth/mfa` | `{mfa_token, code}` → `{access_token, expires_in, user, redirect_to?}`. `code` is a 6-digit TOTP code or a recovery code (`xxxx-xxxx-xxxx-xxxx`) |
 | POST | `/v1/auth/refresh` | cookie → `{access_token, expires_in, user}` (rotates refresh) |
 | POST | `/v1/auth/logout` | → 204, revokes session, closes sockets |
-| POST | `/v1/auth/password/forgot` | `{email}` → 204 always |
+| POST | `/v1/auth/password/forgot` | `{email, turnstile_token?}` → 204 always |
 | POST | `/v1/auth/password/reset` | `{token,password}` → 204 |
 | POST | `/v1/auth/email/verify` | `{token}` → 204 |
 | POST | `/v1/auth/email/resend` | → 204 |
 | GET | `/v1/auth/oauth/{provider}/start?redirect_to=` | → 302 to provider |
 | GET | `/v1/auth/oauth/{provider}/callback` | → 302 to `APP_URL/auth/callback?code=<one-time>` or `?error=` |
-| POST | `/v1/auth/oauth/exchange` | `{code}` → `{access_token, expires_in, user}` or `{mfa_required, mfa_token}` |
+| POST | `/v1/auth/oauth/exchange` | `{code}` → `{access_token, expires_in, user, redirect_to?}` or `{mfa_required, mfa_token, redirect_to?}` or `{link_required: true, link_token, email, redirect_to?}` when the provider's verified email belongs to an existing password account |
+| POST | `/v1/auth/oauth/link` | `{link_token, password}` → same as exchange (tokens or `mfa_required`). Binds the provider identity after the account password is presented; `401 invalid_credentials` on a wrong password (the link token stays usable for 10 min) |
 | POST | `/v1/auth/totp/setup` | → `{secret, otpauth_url}` |
 | POST | `/v1/auth/totp/enable` | `{code}` → `{recovery_codes: string[]}` |
 | POST | `/v1/auth/totp/disable` | `{code}` → 204 |
 | GET | `/v1/me` | → `{user: User, memberships: Membership[]}` |
 | PATCH | `/v1/me` | `{name?, avatar_url?}` → `User` |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
-| GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | `[{id, user_agent, ip, created_at, last_used_at, current}]` / revoke |
-| DELETE | `/v1/me` | `{password?, code?}` → 204. Deletes the account (refused while sole owner of a workspace with other members) |
+| GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current}]` / revoke |
+| DELETE | `/v1/me` | `{password?, code?}` → 204. `password` when the account has one, `code` when 2FA is on. Deletes the account and every workspace it solely owns (`409 sole_owner` while owner of a workspace with other members) |
 
 ### Workspace (owner: backend-core)
 | method | path | notes |
@@ -125,14 +128,27 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | POST | `/v1/invitations/accept` | `{token}` → `Membership` (no workspace header) |
 | GET | `/v1/invitations/lookup?token=` | → `{workspace_name, email, role}` public |
 | CRUD | `/v1/teams`, `/v1/teams/{id}` | `{name, member_ids}` |
-| CRUD | `/v1/api-keys`, `/v1/api-keys/{id}` | create `{name, scopes, expires_at?}` → `ApiKey & {secret}` |
+| CRUD | `/v1/api-keys`, `/v1/api-keys/{id}` | admin users only (not API keys). create `{name, scopes, expires_at?}` → `ApiKey & {secret}` (`secret` shown once; `prefix` is `od_live_` + 8 chars); PATCH `{name}`; DELETE revokes |
 | CRUD | `/v1/webhooks`, `/v1/webhooks/{id}` | `{url, description, events, enabled}` create → `Webhook & {secret}` |
 | GET | `/v1/webhooks/{id}/deliveries` | list |
-| POST | `/v1/webhooks/{id}/test` | sends `webhook.test` |
-| GET | `/v1/audit-logs` | admin, list |
-| GET | `/v1/events?since=<seq>&limit=` | → `{data: Envelope[], latest_seq, resync: bool}` filtered by caller visibility |
+| POST | `/v1/webhooks/{id}/test` | sends `webhook.test` → 202 `WebhookDelivery` |
+| GET | `/v1/audit-logs` | admin, list, optional `?action=&entity_type=` |
+| GET | `/v1/events?since=<seq>&limit=` | `limit` default 500, max 1000 → `{data: Envelope[], latest_seq, resync: bool}`. Members, and API keys with `realtime` or `tickets:read` |
 | POST | `/v1/realtime/token` | → `{token, url, expires_at}` (users and keys with `realtime`) |
-| GET | `/v1/notifications` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}`. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached) with a `notification.created` event to `user:<uid>` |
+| GET | `/v1/notifications?unread=` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` → 204. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached, ai_handoff) with a `notification.created` event to `user:<uid>` |
+
+Core notes:
+- OAuth: `start` sets an `od_oauth` binding cookie (Path=`/v1/auth/oauth`) and an `oauth_state` JWT (`data.flow = "login"`).
+  Callback errors: `access_denied`, `invalid_state`, `invalid_request`, `provider_error`, `provider_unavailable`,
+  `email_unverified`, `signup_disabled`, `server_error`. A first sign-in needs a provider-verified email (GitHub: verified
+  primary; Microsoft: personal account or the `xms_edov` claim).
+- Owner-level operations (`DELETE /v1/workspace`, `/v1/workspace/transfer`, `/v1/workspace/widget-secret/rotate`,
+  `/v1/auth/totp/disable`) answer `403 mfa_required` when 2FA is on but this session did not pass it, and
+  `403 reauth_required` when the session is older than 12 hours (sign in again).
+- Member rules: owners change and remove anyone but themselves; admins manage agents and viewers; only the owner grants
+  `admin`; `owner` moves only by transfer. `DELETE /v1/members/{own id}` leaves (owner: `409 owner_cannot_leave`).
+- `POST /v1/invitations/accept` needs the signed-in user's email to equal the invited one (`403 invitation_email_mismatch`).
+- Role and list endpoints for API keys: workspace/members/teams read `settings:read`; writes `settings:write`.
 
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
@@ -181,6 +197,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | POST | `/v1/widget/conversations` | `{body}` → conversation + first message |
 | GET | `/v1/widget/conversations/{id}/messages` | public messages only (no notes) |
 | POST | `/v1/widget/conversations/{id}/messages` | `{body, attachment_ids?}` |
+| POST | `/v1/widget/conversations/{id}/handoff` | → 204; ask for a person after an AI answer (contracts/ai.md) |
 | POST | `/v1/widget/attachments` | multipart |
 | GET/PATCH | `/v1/widget/settings` | admin, agent-side: `{greeting, require_email, enabled, allowed_origins}` (stored in workspace settings.widget) |
 

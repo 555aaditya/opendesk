@@ -1,0 +1,7 @@
+# opendesk-app (app.opendesk.sh). Copied into web/dist by deploy.yml.
+#
+# Client routes need no rule here: a Pages project whose output has no top-level
+# 404.html serves index.html for any path that is not a file, which is the SPA
+# fallback. A "/* /index.html 200" rule would also shadow real files, so it is
+# deliberately absent. HTML is served with Pages' default
+# "Cache-Control: public, max-age=0, must-revalidate", so every visit revalidates.

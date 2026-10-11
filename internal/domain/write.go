@@ -126,6 +126,8 @@ type NewMessage struct {
 	// Trigger overrides the job trigger: "" derives it, "none" skips automations.
 	Trigger   string
 	CreatedAt time.Time
+	// AI marks a reply written by the widget answer bot (messages.ai).
+	AI bool
 }
 
 // AddMessage inserts a message, updates the ticket's activity fields, publishes events and
@@ -153,11 +155,11 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 	id := ids.New()
 	_, err := tx.Exec(ctx, `INSERT INTO messages (id, workspace_id, ticket_id, kind, direction, author_type, author_user_id,
 		author_contact_id, body_html, body_text, full_html, subject, from_email, from_name, to_emails, cc_emails, bcc_emails,
-		email_message_id, in_reply_to, "references", inbound_email_id, delivery_status, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+		email_message_id, in_reply_to, "references", inbound_email_id, delivery_status, created_at, ai)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
 		id, nm.WorkspaceID, nm.TicketID, nm.Kind, nm.Direction, nm.AuthorType, nm.AuthorUserID, nm.AuthorContactID,
 		nm.BodyHTML, nm.BodyText, nm.FullHTML, truncateRunes(nm.Subject, 500), nm.FromEmail, nm.FromName, nm.To, nm.Cc, nm.Bcc,
-		nm.EmailMessageID, nm.InReplyTo, nm.References, nm.InboundEmailID, nm.DeliveryStatus, nm.CreatedAt)
+		nm.EmailMessageID, nm.InReplyTo, nm.References, nm.InboundEmailID, nm.DeliveryStatus, nm.CreatedAt, nm.AI)
 	if err != nil {
 		return Message{}, fmt.Errorf("insert message: %w", err)
 	}
@@ -211,6 +213,7 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 	if nm.Kind == "reply" && channel == ChannelChat && contactID != nil {
 		ev.Visibility = events.VisibilityPublic
 		ev.Topics = []string{events.ContactTopic(nm.WorkspaceID, *contactID)}
+		ev.Data = map[string]any{"ticket_id": nm.TicketID, "message": PublicMessage(msg)}
 	}
 	if _, err := events.Publish(ctx, tx, ev); err != nil {
 		return Message{}, err

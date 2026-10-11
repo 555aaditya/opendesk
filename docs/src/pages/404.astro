@@ -1,0 +1,21 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import { LinkButton } from '@astrojs/starlight/components';
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'Page not found',
+    description: 'This page does not exist.',
+    template: 'splash',
+    editUrl: false,
+    pagefind: false,
+  }}
+>
+  <p>The page you are looking for does not exist or has moved. Try search, or start from one of these.</p>
+  <p>
+    <LinkButton href="/">Docs home</LinkButton>
+    <LinkButton href="/api/" variant="secondary">API overview</LinkButton>
+    <LinkButton href="/self-hosting/" variant="secondary">Self-hosting</LinkButton>
+  </p>
+</StarlightPage>

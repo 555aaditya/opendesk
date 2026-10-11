@@ -141,7 +141,9 @@ type Message struct {
 	Attachments    []Attachment  `json:"attachments"`
 	DeliveryStatus string        `json:"delivery_status" enum:"none,pending,sent,failed,bounced"`
 	DeliveryError  string        `json:"delivery_error"`
-	CreatedAt      time.Time     `json:"created_at"`
+	// AI marks a reply written by the widget answer bot.
+	AI        bool      `json:"ai"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type ActivityActor struct {

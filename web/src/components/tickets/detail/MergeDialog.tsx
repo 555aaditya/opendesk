@@ -1,0 +1,107 @@
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { GitMerge } from "lucide-react";
+import { useDeferredValue, useState } from "react";
+import type { Ticket } from "@/lib/api/types";
+import { api } from "@/lib/api/endpoints";
+import { errorMessage } from "@/lib/api/client";
+import { relShort } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { Dialog } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { SearchInput } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { toast } from "@/components/ui/toast";
+import { StatusIcon } from "../bits";
+import { useMergeTicket } from "../useTicketActions";
+
+export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [term, setTerm] = useState("");
+  const deferred = useDeferredValue(term.trim());
+  const [target, setTarget] = useState<Ticket | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const merge = useMergeTicket();
+  const navigate = useNavigate();
+
+  // Default to the same customer's other tickets; search everything when typing.
+  const results = useQuery({
+    queryKey: ["merge-search", ticket.id, deferred],
+    queryFn: () =>
+      deferred
+        ? api.tickets.list({ q: deferred, limit: 10 })
+        : api.tickets.list({ contact_id: ticket.contact?.id, limit: 10, status: ["open", "pending", "on_hold", "solved"] }),
+    enabled: open,
+  });
+  const list = (results.data?.data ?? []).filter((t) => t.id !== ticket.id);
+
+  const run = () => {
+    if (!target) return;
+    setError(null);
+    merge.mutate(
+      { id: ticket.id, into: target.id },
+      {
+        onSuccess: () => {
+          toast.success(`Merged into #${target.number}`);
+          onOpenChange(false);
+          void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "open", ticketId: target.id } });
+        },
+        onError: (e) => setError(errorMessage(e)),
+      },
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`Merge #${ticket.number} into another ticket`}
+      description="Messages and notes move to the ticket you choose. This ticket is closed and points to it."
+      footer={
+        <>
+          {error && <p className="mr-auto text-xs text-danger-fg">{error}</p>}
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" icon={<GitMerge className="size-3.5" />} disabled={!target} loading={merge.isPending} onClick={run}>
+            {target ? `Merge into #${target.number}` : "Merge"}
+          </Button>
+        </>
+      }
+    >
+      <SearchInput value={term} onChange={setTerm} placeholder="Search by subject, customer or #number" inputSize="md" autoFocus />
+      <div className="mt-3 flex min-h-[220px] flex-col gap-0.5">
+        {!deferred && <p className="label-caps px-1 pb-1">{ticket.contact ? `Other tickets from ${ticket.contact.name || ticket.contact.email}` : "Recent tickets"}</p>}
+        {results.isPending ? (
+          <div className="flex justify-center py-8">
+            <Spinner className="text-fg-4" />
+          </div>
+        ) : !list.length ? (
+          <p className="py-8 text-center text-[12.5px] text-fg-3">No tickets found</p>
+        ) : (
+          list.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTarget(t)}
+              aria-pressed={target?.id === t.id}
+              className={cn(
+                "flex h-10 items-center gap-2.5 rounded-md px-2.5 text-left text-[12.5px] hover:bg-hover",
+                target?.id === t.id && "bg-active shadow-[inset_0_0_0_1px_var(--line-strong)]",
+              )}
+            >
+              <StatusIcon status={t.status} />
+              <span className="mono w-12 shrink-0 text-fg-3">#{t.number}</span>
+              <span className="min-w-0 flex-1 truncate" data-ph-mask>
+                {t.subject}
+              </span>
+              <span className="shrink-0 truncate text-xs text-fg-3" data-ph-mask>
+                {t.contact?.name}
+              </span>
+              <span className="mono w-8 shrink-0 text-right text-[11px] text-fg-4">{relShort(t.last_message_at)}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </Dialog>
+  );
+}

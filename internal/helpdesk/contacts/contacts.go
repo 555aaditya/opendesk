@@ -1,0 +1,380 @@
+package contacts
+
+import (
+	"context"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/opendesk/opendesk/internal/displayname"
+	"github.com/opendesk/opendesk/internal/domain"
+	"github.com/opendesk/opendesk/internal/events"
+	"github.com/opendesk/opendesk/internal/helpdesk/hd"
+	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/opendesk/opendesk/internal/ids"
+)
+
+type contactWriteBody struct {
+	Email      Nullable[string] `json:"email,omitempty" doc:"Email address; null clears it"`
+	Name       *string          `json:"name,omitempty" maxLength:"200"`
+	Phone      *string          `json:"phone,omitempty" maxLength:"50"`
+	AvatarURL  *string          `json:"avatar_url,omitempty" maxLength:"2000"`
+	CompanyID  Nullable[string] `json:"company_id,omitempty" doc:"Company id; null clears it"`
+	ExternalID Nullable[string] `json:"external_id,omitempty" doc:"Your system's id; null clears it"`
+	Notes      *string          `json:"notes,omitempty" maxLength:"10000"`
+	Custom     map[string]any   `json:"custom,omitempty"`
+	Blocked    *bool            `json:"blocked,omitempty"`
+}
+
+type contactOut struct{ Body domain.Contact }
+
+type contactCursor struct {
+	T  time.Time `json:"t"`
+	ID uuid.UUID `json:"id"`
+}
+
+type ticketCursor struct {
+	T  time.Time `json:"t"`
+	ID uuid.UUID `json:"id"`
+}
+
+// contactRow is the editable state of a contact.
+type contactRow struct {
+	Email      *string
+	Name       string
+	Phone      string
+	AvatarURL  string
+	CompanyID  *uuid.UUID
+	ExternalID *string
+	Notes      string
+	Custom     map[string]any
+	Blocked    bool
+}
+
+// apply validates b and merges it into row.
+func (b *contactWriteBody) apply(ctx context.Context, q db.Querier, wid uuid.UUID, row *contactRow) error {
+	if b.Email.Set {
+		if b.Email.Null {
+			row.Email = nil
+		} else {
+			e, err := cleanEmail(b.Email.Value)
+			if err != nil {
+				return err
+			}
+			if e == "" {
+				row.Email = nil
+			} else {
+				row.Email = &e
+			}
+		}
+	}
+	if b.Name != nil {
+		n, err := displayname.Validate("Name", *b.Name, displayname.Person, true)
+		if err != nil {
+			return err
+		}
+		row.Name = n
+	}
+	if row.Name == "" && row.Email != nil {
+		row.Name = displayname.FromEmail(*row.Email)
+	}
+	if b.Phone != nil {
+		s, err := cleanText("phone", *b.Phone, 50, false)
+		if err != nil {
+			return err
+		}
+		row.Phone = s
+	}
+	if b.AvatarURL != nil {
+		s, err := cleanAvatar(*b.AvatarURL)
+		if err != nil {
+			return err
+		}
+		row.AvatarURL = s
+	}
+	if b.CompanyID.Set {
+		if b.CompanyID.Null || strings.TrimSpace(b.CompanyID.Value) == "" {
+			row.CompanyID = nil
+		} else {
+			id, err := hd.ParseRef(b.CompanyID.Value, "company_id")
+			if err != nil {
+				return err
+			}
+			if err := hd.CheckRef(ctx, q, wid, "company", id); err != nil {
+				return err
+			}
+			row.CompanyID = &id
+		}
+	}
+	if b.ExternalID.Set {
+		s := strings.TrimSpace(b.ExternalID.Value)
+		if b.ExternalID.Null || s == "" {
+			row.ExternalID = nil
+		} else {
+			s, err := cleanText("external_id", s, 200, false)
+			if err != nil {
+				return err
+			}
+			row.ExternalID = &s
+		}
+	}
+	if b.Notes != nil {
+		s, err := cleanText("notes", *b.Notes, 10000, true)
+		if err != nil {
+			return err
+		}
+		row.Notes = s
+	}
+	if b.Custom != nil {
+		m, err := cleanCustom(b.Custom)
+		if err != nil {
+			return err
+		}
+		row.Custom = m
+	}
+	if b.Blocked != nil {
+		row.Blocked = *b.Blocked
+	}
+	if row.Custom == nil {
+		row.Custom = map[string]any{}
+	}
+	return nil
+}
+
+func uniqueErr(err error) error {
+	switch {
+	case db.IsUniqueViolation(err, "contacts_ws_email_uq"):
+		return httpx.Conflict("A contact with this email already exists.")
+	case db.IsUniqueViolation(err, "contacts_ws_external_uq"):
+		return httpx.Conflict("A contact with this external_id already exists.")
+	}
+	return err
+}
+
+func registerContacts(d *deps.Deps, api huma.API) {
+	huma.Register(api, op("list-contacts", http.MethodGet, "/v1/contacts", "List contacts", "Contacts", 0),
+		func(ctx context.Context, in *struct {
+			httpx.ListParams
+			Q         string `query:"q" maxLength:"200" doc:"Search name, email and phone"`
+			CompanyID string `query:"company_id" doc:"Only contacts of this company"`
+		}) (*struct{ Body httpx.Page[domain.Contact] }, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeContactsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			var cur contactCursor
+			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
+				return nil, err
+			}
+			var companyID *uuid.UUID
+			if in.CompanyID != "" {
+				id, err := hd.ParseRef(in.CompanyID, "company_id")
+				if err != nil {
+					return nil, err
+				}
+				companyID = &id
+			}
+			var curT *time.Time
+			if in.Cursor != "" {
+				curT = &cur.T
+			}
+			q := strings.TrimSpace(in.Q)
+			rows, err := d.DB.Pool.Query(ctx, domain.ContactSelect+` WHERE ct.workspace_id = $1
+				AND ($2 = '' OR ct.search @@ websearch_to_tsquery('simple', $2) OR ct.email::text ILIKE $3 OR ct.name ILIKE $3)
+				AND ($4::uuid IS NULL OR ct.company_id = $4)
+				AND ($5::timestamptz IS NULL OR (ct.created_at, ct.id) < ($5, $6))
+				ORDER BY ct.created_at DESC, ct.id DESC LIMIT $7`,
+				p.WorkspaceID, q, likePrefix(q), companyID, curT, cur.ID, in.Limit+1)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Contact, error) { return domain.ScanContact(r) })
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			page := httpx.NewPage(list, in.Limit, func(c domain.Contact) any { return contactCursor{T: c.CreatedAt, ID: c.ID} })
+			return &struct{ Body httpx.Page[domain.Contact] }{page}, nil
+		})
+
+	huma.Register(api, op("create-contact", http.MethodPost, "/v1/contacts", "Create a contact", "Contacts", http.StatusCreated),
+		func(ctx context.Context, in *struct{ Body contactWriteBody }) (*contactOut, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeContactsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			var c domain.Contact
+			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				row := contactRow{}
+				if err := in.Body.apply(ctx, tx, p.WorkspaceID, &row); err != nil {
+					return err
+				}
+				if row.Email == nil && row.Name == "" {
+					return httpx.Validation("a contact needs an email or a name")
+				}
+				id := ids.New()
+				if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, email, name, phone, avatar_url, company_id,
+					external_id, notes, custom, blocked) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+					id, p.WorkspaceID, row.Email, row.Name, row.Phone, row.AvatarURL, row.CompanyID, row.ExternalID,
+					row.Notes, row.Custom, row.Blocked); err != nil {
+					return uniqueErr(err)
+				}
+				if c, err = domain.LoadContact(ctx, tx, p.WorkspaceID, id); err != nil {
+					return err
+				}
+				_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "contact.created", Data: map[string]any{"contact": c}})
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &contactOut{c}, nil
+		})
+
+	huma.Register(api, op("get-contact", http.MethodGet, "/v1/contacts/{id}", "Get a contact", "Contacts", 0),
+		func(ctx context.Context, in *struct {
+			ID string `path:"id"`
+		}) (*contactOut, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeContactsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := hd.ParseID(in.ID, "Contact")
+			if err != nil {
+				return nil, err
+			}
+			c, err := domain.LoadContact(ctx, d.DB.Pool, p.WorkspaceID, id)
+			if db.IsNotFound(err) {
+				return nil, httpx.NotFound("Contact")
+			}
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &contactOut{c}, nil
+		})
+
+	huma.Register(api, op("update-contact", http.MethodPatch, "/v1/contacts/{id}", "Update a contact", "Contacts", 0),
+		func(ctx context.Context, in *struct {
+			ID   string `path:"id"`
+			Body contactWriteBody
+		}) (*contactOut, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeContactsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := hd.ParseID(in.ID, "Contact")
+			if err != nil {
+				return nil, err
+			}
+			var c domain.Contact
+			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				var row contactRow
+				err := tx.QueryRow(ctx, `SELECT email, name, phone, avatar_url, company_id, external_id, notes, custom, blocked
+					FROM contacts WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).
+					Scan(&row.Email, &row.Name, &row.Phone, &row.AvatarURL, &row.CompanyID, &row.ExternalID, &row.Notes, &row.Custom, &row.Blocked)
+				if db.IsNotFound(err) {
+					return httpx.NotFound("Contact")
+				}
+				if err != nil {
+					return err
+				}
+				if err := in.Body.apply(ctx, tx, p.WorkspaceID, &row); err != nil {
+					return err
+				}
+				if row.Email == nil && row.Name == "" {
+					return httpx.Validation("a contact needs an email or a name")
+				}
+				if _, err := tx.Exec(ctx, `UPDATE contacts SET email = $3, name = $4, phone = $5, avatar_url = $6, company_id = $7,
+					external_id = $8, notes = $9, custom = $10, blocked = $11, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					p.WorkspaceID, id, row.Email, row.Name, row.Phone, row.AvatarURL, row.CompanyID, row.ExternalID,
+					row.Notes, row.Custom, row.Blocked); err != nil {
+					return uniqueErr(err)
+				}
+				if c, err = domain.LoadContact(ctx, tx, p.WorkspaceID, id); err != nil {
+					return err
+				}
+				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "contact.updated", Data: map[string]any{"contact": c}})
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &contactOut{c}, nil
+		})
+
+	huma.Register(api, op("delete-contact", http.MethodDelete, "/v1/contacts/{id}", "Delete a contact", "Contacts", http.StatusNoContent),
+		func(ctx context.Context, in *struct {
+			ID string `path:"id"`
+		}) (*struct{}, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeContactsWrite)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			id, err := hd.ParseID(in.ID, "Contact")
+			if err != nil {
+				return nil, err
+			}
+			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				tag, err := tx.Exec(ctx, `DELETE FROM contacts WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id)
+				if err != nil {
+					return err
+				}
+				if tag.RowsAffected() == 0 {
+					return httpx.NotFound("Contact")
+				}
+				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "contact.deleted", Data: map[string]any{"contact_id": id}})
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return nil, nil
+		})
+
+	huma.Register(api, op("list-contact-tickets", http.MethodGet, "/v1/contacts/{id}/tickets", "List a contact's tickets", "Contacts", 0),
+		func(ctx context.Context, in *struct {
+			ID string `path:"id"`
+			httpx.ListParams
+		}) (*struct{ Body httpx.Page[domain.Ticket] }, error) {
+			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeContactsRead)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if p.Kind == auth.KindAPIKey && !p.HasScope(auth.ScopeTicketsRead) {
+				return nil, httpx.Forbidden()
+			}
+			id, err := hd.ParseID(in.ID, "Contact")
+			if err != nil {
+				return nil, err
+			}
+			if err := hd.CheckRef(ctx, d.DB.Pool, p.WorkspaceID, "contact", id); err != nil {
+				return nil, httpx.NotFound("Contact")
+			}
+			var cur ticketCursor
+			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
+				return nil, err
+			}
+			var curT *time.Time
+			if in.Cursor != "" {
+				curT = &cur.T
+			}
+			rows, err := d.DB.Pool.Query(ctx, domain.TicketSelect+` WHERE t.workspace_id = $1 AND t.contact_id = $2 AND t.deleted_at IS NULL
+				AND ($3::timestamptz IS NULL OR (t.last_message_at, t.id) < ($3, $4))
+				ORDER BY t.last_message_at DESC, t.id DESC LIMIT $5`, p.WorkspaceID, id, curT, cur.ID, in.Limit+1)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Ticket, error) { return domain.ScanTicket(r) })
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			page := httpx.NewPage(list, in.Limit, func(t domain.Ticket) any { return ticketCursor{T: t.LastMessageAt, ID: t.ID} })
+			return &struct{ Body httpx.Page[domain.Ticket] }{page}, nil
+		})
+}

@@ -29,7 +29,10 @@ func Handler(rc RuntimeConfig, csp string) http.Handler {
 	files := http.FileServer(http.FS(sub))
 	cfg, _ := json.Marshal(rc)
 	configJS := []byte("window.__OPENDESK__=" + string(cfg) + ";")
-	index, _ := fs.ReadFile(sub, "index.html")
+	index, err := fs.ReadFile(sub, "index.html")
+	if err != nil {
+		index = []byte(`<!doctype html><meta charset="utf-8"><title>opendesk</title><p>The web app is not built into this binary. Run <code>make web-embed</code>.</p>`)
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", csp)

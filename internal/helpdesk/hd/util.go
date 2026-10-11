@@ -1,0 +1,164 @@
+package hd
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"golang.org/x/text/unicode/norm"
+
+	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/events"
+	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/opendesk/opendesk/internal/ids"
+)
+
+// ParseID parses a path or body id; a malformed id is answered as not found.
+func ParseID(s, what string) (uuid.UUID, error) {
+	id, err := uuid.Parse(strings.TrimSpace(s))
+	if err != nil {
+		return uuid.Nil, httpx.NotFound(what)
+	}
+	return id, nil
+}
+
+// ParseRef parses a referenced id in a body; a malformed id is a validation error.
+func ParseRef(s, field string) (uuid.UUID, error) {
+	id, err := uuid.Parse(strings.TrimSpace(s))
+	if err != nil {
+		return uuid.Nil, httpx.Validation(field + " is not a valid id")
+	}
+	return id, nil
+}
+
+// refTables are the tables a body may reference by id, each with workspace_id.
+var refTables = map[string]string{
+	"contact": "contacts", "company": "companies", "team": "teams", "mailbox": "mailboxes",
+	"tag": "tags", "kb_collection": "kb_collections", "sla_policy": "sla_policies",
+}
+
+// CheckRef confirms id is a row of kind in the workspace, answering 422 otherwise.
+func CheckRef(ctx context.Context, q db.Querier, wid uuid.UUID, kind string, id uuid.UUID) error {
+	table, ok := refTables[kind]
+	if !ok {
+		return fmt.Errorf("unknown ref kind %q", kind)
+	}
+	var exists bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM `+table+` WHERE workspace_id = $1 AND id = $2)`, wid, id).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return httpx.Validation(strings.ReplaceAll(kind, "_", " ") + " not found in this workspace")
+	}
+	return nil
+}
+
+// CheckMember confirms uid is a workspace member who can work tickets (not a viewer).
+func CheckMember(ctx context.Context, q db.Querier, wid, uid uuid.UUID) error {
+	var role string
+	err := q.QueryRow(ctx, `SELECT role FROM members WHERE workspace_id = $1 AND user_id = $2`, wid, uid).Scan(&role)
+	if db.IsNotFound(err) || role == "viewer" {
+		return httpx.Validation("assignee must be an agent in this workspace")
+	}
+	return err
+}
+
+// EnsureTags returns tag ids for names, creating missing tags (and publishing tag.created).
+func EnsureTags(ctx context.Context, tx pgx.Tx, wid uuid.UUID, names []string) ([]uuid.UUID, error) {
+	out := make([]uuid.UUID, 0, len(names))
+	seen := map[string]bool{}
+	for _, raw := range names {
+		name, err := CleanTagName(raw)
+		if err != nil {
+			return nil, err
+		}
+		key := strings.ToLower(name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		var id uuid.UUID
+		err = tx.QueryRow(ctx, `SELECT id FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2)`, wid, name).Scan(&id)
+		if db.IsNotFound(err) {
+			id = ids.New()
+			var created bool
+			err = tx.QueryRow(ctx, `INSERT INTO tags (id, workspace_id, name) VALUES ($1, $2, $3)
+				ON CONFLICT (workspace_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id, (xmax = 0)`, id, wid, name).Scan(&id, &created)
+			if err == nil && created {
+				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "tag.created",
+					Data: map[string]any{"tag": map[string]any{"id": id, "name": name}}})
+			}
+		}
+		if err != nil {
+			return nil, fmt.Errorf("ensure tag: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, nil
+}
+
+var tagChars = regexp.MustCompile(`^[\p{L}\p{N} _\-./:&+#]+$`)
+
+// CleanTagName normalizes a tag name: 1..50 characters, no markup.
+func CleanTagName(s string) (string, error) {
+	s = strings.Join(strings.Fields(norm.NFC.String(s)), " ")
+	if s == "" {
+		return "", httpx.Validation("tag name is required")
+	}
+	if len([]rune(s)) > 50 {
+		return "", httpx.Validation("tag names must be 50 characters or less")
+	}
+	if !tagChars.MatchString(s) {
+		return "", httpx.Validation("tag names may contain letters, numbers, spaces and - _ . / : & + #")
+	}
+	return s, nil
+}
+
+var slugStrip = regexp.MustCompile(`[^a-z0-9]+`)
+
+// Slugify makes a URL slug from a title (ASCII letters and digits, dash separated).
+func Slugify(s string) string {
+	s = strings.ToLower(norm.NFKD.String(s))
+	var b strings.Builder
+	for _, r := range s {
+		if r < 128 {
+			b.WriteRune(r)
+		}
+	}
+	out := strings.Trim(slugStrip.ReplaceAllString(b.String(), "-"), "-")
+	if len(out) > 80 {
+		out = strings.TrimRight(out[:80], "-")
+	}
+	return out
+}
+
+// UniqueSlug returns base, or base-2, base-3... so it is unique in table for the
+// workspace. table is a trusted constant. exclude skips the row being updated.
+func UniqueSlug(ctx context.Context, q db.Querier, table string, wid uuid.UUID, base string, exclude *uuid.UUID) (string, error) {
+	if base == "" {
+		base = crypto.RandomString(8)
+	}
+	slug := base
+	for i := 2; i < 1000; i++ {
+		var exists bool
+		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM `+table+` WHERE workspace_id = $1 AND slug = $2 AND ($3::uuid IS NULL OR id <> $3))`,
+			wid, slug, exclude).Scan(&exists); err != nil {
+			return "", err
+		}
+		if !exists {
+			return slug, nil
+		}
+		slug = fmt.Sprintf("%s-%d", base, i)
+	}
+	return base + "-" + crypto.RandomString(6), nil
+}
+
+// Ptr returns a pointer to v.
+func Ptr[T any](v T) *T { return &v }
+
+// Empty is a body-less response (204 when the operation sets DefaultStatus).
+type Empty struct{}

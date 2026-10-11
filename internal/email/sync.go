@@ -1,0 +1,239 @@
+package email
+
+import (
+	"context"
+	"slices"
+	"time"
+
+	"github.com/emersion/go-imap/v2"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
+
+	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/jobs"
+)
+
+// First-connect import window, and the most messages one pass ingests.
+const (
+	initialWindow = 7 * 24 * time.Hour
+	initialMax    = 200
+	syncBatch     = 100
+)
+
+// selectInfo is what SELECT told us about the folder.
+type selectInfo struct {
+	Validity uint32
+	UIDNext  uint32 // 0 when the server did not say
+	Exists   uint32
+}
+
+// planSync decides how to read the folder. initial is true on the first sync and
+// whenever UIDVALIDITY changed (every stored UID is then meaningless); upToDate is true
+// when UIDNEXT proves nothing arrived since lastUID.
+func planSync(storedValidity, lastUID uint32, sel selectInfo) (initial, upToDate bool) {
+	if storedValidity == 0 || storedValidity != sel.Validity {
+		return true, sel.Exists == 0
+	}
+	if sel.Exists == 0 {
+		return false, true
+	}
+	if sel.UIDNext != 0 && sel.UIDNext <= lastUID+1 {
+		return false, true
+	}
+	return false, false
+}
+
+// newUIDs keeps UIDs above lastUID, ascending and unique. "UID n:*" always returns
+// the newest message even when its UID is below n, so the filter is required.
+func newUIDs(uids []uint32, lastUID uint32) []uint32 {
+	out := make([]uint32, 0, len(uids))
+	for _, u := range uids {
+		if u > lastUID {
+			out = append(out, u)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// finalCursor is the UID to store after a pass. After an initial import the cursor
+// jumps to the end of the folder (older mail outside the window is not imported);
+// otherwise it is the last UID processed.
+func finalCursor(initial bool, processedLast uint32, sel selectInfo, complete bool) uint32 {
+	last := processedLast
+	if initial && complete && sel.UIDNext > 0 && sel.UIDNext-1 > last {
+		last = sel.UIDNext - 1
+	}
+	return last
+}
+
+type candidate struct {
+	uid  uint32
+	size int64
+}
+
+// syncMailbox runs one pass over INBOX. Failures are recorded on the mailbox (with a
+// safe message and backoff) rather than retried by River; the periodic job tries again.
+func (s *service) syncMailbox(ctx context.Context, id uuid.UUID) error {
+	m, err := scanMailbox(s.d.DB.Pool.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailboxes WHERE id = $1`, id))
+	if err != nil {
+		if db.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if m.InboundKind == InboundForwarding || m.Status == "disabled" {
+		return nil
+	}
+	sess, err := s.dialIMAP(ctx, m)
+	if err != nil {
+		return s.recordSyncError(ctx, m, err)
+	}
+	defer sess.Close()
+	c := sess.c
+
+	sd, err := c.Select("INBOX", &imap.SelectOptions{ReadOnly: true}).Wait()
+	if err != nil {
+		return s.recordSyncError(ctx, m, opError("opening INBOX", err))
+	}
+	sel := selectInfo{Validity: sd.UIDValidity, UIDNext: uint32(sd.UIDNext), Exists: sd.NumMessages}
+	initial, upToDate := planSync(uint32(m.UIDValidity), uint32(m.LastUID), sel)
+	lastUID := uint32(m.LastUID)
+	if initial {
+		lastUID = 0
+	}
+	if upToDate {
+		return s.setSyncOK(ctx, m, int64(sel.Validity), int64(finalCursor(initial, lastUID, sel, true)))
+	}
+
+	var cands []candidate
+	if initial {
+		from := uint32(1)
+		if sel.Exists > initialMax {
+			from = sel.Exists - initialMax + 1
+		}
+		var set imap.SeqSet
+		set.AddRange(from, sel.Exists)
+		msgs, err := c.Fetch(set, &imap.FetchOptions{UID: true, InternalDate: true, RFC822Size: true}).Collect()
+		if err != nil {
+			return s.recordSyncError(ctx, m, opError("listing messages", err))
+		}
+		since := time.Now().Add(-initialWindow)
+		for _, msg := range msgs {
+			if msg.InternalDate.IsZero() || !msg.InternalDate.Before(since) {
+				cands = append(cands, candidate{uid: uint32(msg.UID), size: msg.RFC822Size})
+			}
+		}
+	} else {
+		var set imap.UIDSet
+		set.AddRange(imap.UID(lastUID+1), 0) // lastUID+1:*
+		msgs, err := c.Fetch(set, &imap.FetchOptions{UID: true, RFC822Size: true}).Collect()
+		if err != nil {
+			return s.recordSyncError(ctx, m, opError("listing new messages", err))
+		}
+		sizes := map[uint32]int64{}
+		uids := make([]uint32, 0, len(msgs))
+		for _, msg := range msgs {
+			uids = append(uids, uint32(msg.UID))
+			sizes[uint32(msg.UID)] = msg.RFC822Size
+		}
+		for _, u := range newUIDs(uids, lastUID) {
+			cands = append(cands, candidate{uid: u, size: sizes[u]})
+		}
+	}
+	slices.SortFunc(cands, func(a, b candidate) int { return int(int64(a.uid) - int64(b.uid)) })
+	complete := true
+	if len(cands) > syncBatch && !initial {
+		cands, complete = cands[:syncBatch], false
+	}
+
+	cursor := lastUID
+	for _, cand := range cands {
+		if cand.size > maxRawBytes {
+			s.log.Warn("skipping oversized message", "mailbox_id", m.ID, "uid", cand.uid, "bytes", cand.size)
+			cursor = cand.uid
+			continue
+		}
+		var set imap.UIDSet
+		set.AddNum(imap.UID(cand.uid))
+		msgs, err := c.Fetch(set, &imap.FetchOptions{UID: true, BodySection: []*imap.FetchItemBodySection{{Peek: true}}}).Collect()
+		if err != nil {
+			_ = s.saveProgress(ctx, m, int64(sel.Validity), int64(cursor))
+			return s.recordSyncError(ctx, m, opError("fetching a message", err))
+		}
+		var raw []byte
+		for _, msg := range msgs {
+			if uint32(msg.UID) == cand.uid && len(msg.BodySection) > 0 {
+				raw = msg.BodySection[0].Bytes
+			}
+		}
+		if len(raw) > 0 && len(raw) <= maxRawBytes {
+			if _, _, err := s.ingest(ctx, m, raw, ""); err != nil {
+				_ = s.saveProgress(ctx, m, int64(sel.Validity), int64(cursor))
+				return err // storage or database trouble: let River log it
+			}
+		}
+		cursor = cand.uid
+	}
+	return s.setSyncOK(ctx, m, int64(sel.Validity), int64(finalCursor(initial, cursor, sel, complete)))
+}
+
+func (s *service) recordSyncError(ctx context.Context, m *mailboxRow, err error) error {
+	msg := safeError(err)
+	s.log.Info("mailbox sync failed", "mailbox_id", m.ID, "workspace_id", m.WorkspaceID, "reason", msg)
+	if e := s.setSyncError(ctx, m, msg); e != nil {
+		return e
+	}
+	return nil
+}
+
+// syncDueArgs is the minute tick that enqueues a sync for every due IMAP/OAuth mailbox.
+type syncDueArgs struct{}
+
+func (syncDueArgs) Kind() string { return "email.sync_due" }
+
+type syncDueWorker struct {
+	river.WorkerDefaults[syncDueArgs]
+	s *service
+}
+
+func (w *syncDueWorker) Work(ctx context.Context, _ *river.Job[syncDueArgs]) error {
+	return w.s.enqueueDue(ctx)
+}
+
+func (s *service) enqueueDue(ctx context.Context) error {
+	rows, err := s.d.DB.Pool.Query(ctx, `SELECT id FROM mailboxes WHERE inbound_kind IN ('imap', 'google', 'microsoft')
+		AND status <> 'disabled' AND (next_sync_at IS NULL OR next_sync_at <= now())`)
+	if err != nil {
+		return err
+	}
+	list, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return err
+	}
+	if len(list) > 0 {
+		params := make([]river.InsertManyParams, 0, len(list))
+		for _, id := range list {
+			params = append(params, river.InsertManyParams{Args: jobs.SyncMailboxArgs{MailboxID: id}, InsertOpts: syncInsertOpts()})
+		}
+		if _, err := s.d.Jobs.InsertMany(ctx, params); err != nil {
+			return err
+		}
+	}
+	_, err = s.d.DB.Pool.Exec(ctx, `DELETE FROM email_auto_replies WHERE sent_at < now() - interval '1 day'`)
+	return err
+}
+
+type syncMailboxWorker struct {
+	river.WorkerDefaults[jobs.SyncMailboxArgs]
+	s *service
+}
+
+func (w *syncMailboxWorker) Timeout(*river.Job[jobs.SyncMailboxArgs]) time.Duration {
+	return sessionTimeout + time.Minute
+}
+
+func (w *syncMailboxWorker) Work(ctx context.Context, job *river.Job[jobs.SyncMailboxArgs]) error {
+	return w.s.syncMailbox(ctx, job.Args.MailboxID)
+}

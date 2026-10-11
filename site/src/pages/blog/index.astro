@@ -1,0 +1,29 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import PageHero from '../../components/PageHero.astro';
+import Icon from '../../components/Icon.astro';
+import { getPublishedPosts, formatDate } from '../../lib/blog';
+
+const posts = await getPublishedPosts();
+---
+<Layout title="Blog" description="Notes from the team building opendesk, the open-source helpdesk: releases, engineering and how we think about support software.">
+  <PageHero eyebrow="Blog" title="Notes from the desk." lede="Releases, engineering and how we think about support software.">
+    <a href="/blog/rss.xml" class="mt-8 inline-flex items-center gap-2 text-[14px] text-muted hover:text-fg"><Icon name="rss" size={15} />Subscribe with RSS</a>
+  </PageHero>
+  <section class="container-page py-14 md:py-20">
+    <ul class="divide-y divide-line border-y border-line">
+      {posts.map((p) => (
+        <li>
+          <a href={`/blog/${p.id}/`} class="group grid gap-3 py-8 md:grid-cols-[200px_1fr_auto] md:items-baseline md:gap-10">
+            <time datetime={p.data.pubDate.toISOString()} class="font-mono text-[12.5px] text-subtle">{formatDate(p.data.pubDate)}</time>
+            <div>
+              <h2 class="text-[22px] font-semibold tracking-[-0.02em] text-fg group-hover:underline underline-offset-4 decoration-line">{p.data.title}</h2>
+              <p class="mt-2 max-w-2xl text-[15.5px] leading-relaxed text-muted">{p.data.description}</p>
+            </div>
+            <Icon name="arrowRight" size={18} class="hidden md:block text-subtle transition-transform group-hover:translate-x-1 group-hover:text-fg" />
+          </a>
+        </li>
+      ))}
+    </ul>
+  </section>
+</Layout>

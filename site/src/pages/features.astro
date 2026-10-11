@@ -1,0 +1,230 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PageHero from '../components/PageHero.astro';
+import Icon from '../components/Icon.astro';
+import CTA from '../components/CTA.astro';
+import CodeTabs from '../components/CodeTabs.astro';
+import MailboxMock from '../components/mock/MailboxMock.astro';
+import ChatMock from '../components/mock/ChatMock.astro';
+import KbMock from '../components/mock/KbMock.astro';
+import AutomationMock from '../components/mock/AutomationMock.astro';
+import SlaMock from '../components/mock/SlaMock.astro';
+import ReportsMock from '../components/mock/ReportsMock.astro';
+import PresenceMock from '../components/mock/PresenceMock.astro';
+import AiMock from '../components/mock/AiMock.astro';
+import AnswerBotMock from '../components/mock/AnswerBotMock.astro';
+import { LINKS } from '../lib/site';
+import { CREATE_TICKET, VERIFY, REALTIME } from '../lib/samples';
+
+type Section = {
+  id: string;
+  eyebrow: string;
+  title: string;
+  body: string;
+  points: string[];
+  docs?: string;
+};
+
+const sections: Section[] = [
+  {
+    id: 'inbox',
+    eyebrow: 'Shared inbox',
+    title: 'One queue for every mailbox.',
+    body: 'Email from every address your team answers becomes a ticket with a number, a status and an owner. Reply from the mailbox the customer wrote to, with your signature, and keep internal notes in the same thread.',
+    points: [
+      'Connect by forwarding, IMAP and SMTP, Google or Microsoft 365',
+      'Statuses: open, pending, on hold, solved and closed',
+      'Assign to an agent or a team, tag, snooze, merge and mark spam',
+      'Bulk actions across any selection of tickets',
+      'Internal notes with @mentions, kept out of customer replies',
+      'Saved replies with shortcuts, personal and shared views',
+      'Per-mailbox auto-replies, signatures and team routing',
+      'Delivery status on every reply: sent, failed or bounced',
+    ],
+    docs: '/guides/inbox-and-tickets/',
+  },
+  {
+    id: 'chat',
+    eyebrow: 'Live chat',
+    title: 'Chat that lands in the same inbox.',
+    body: 'Add the widget to your site and conversations arrive as chat tickets next to your email. Visitors see agents typing, agents see visitors typing, and replies arrive without a refresh on either side.',
+    points: [
+      'The widget speaks 13 languages, and messages translate both ways',
+      'Greeting, brand colour and an optional email requirement',
+      'Allowed origins, so the widget only loads where you put it',
+      'Identity verification: sign the user id with HMAC-SHA256 on your server',
+      'Conversation history kept per visitor, with attachments',
+      'A link to your help center from inside the widget',
+    ],
+    docs: '/guides/live-chat/',
+  },
+  {
+    id: 'ai',
+    eyebrow: 'AI',
+    title: 'AI that writes like your team.',
+    body: 'AI is built into the inbox, not bolted on. It drafts replies from the thread, your saved replies and your knowledge base, in your tone and in the customer’s language. It suggests; your agents decide. The only thing it sends by itself is the widget answer bot, which you turn on, which is labelled as AI, and which hands off to a person.',
+    points: [
+      'Reply drafts in your voice: set a tone and extra instructions once',
+      'Rewrite a draft: shorter, friendlier, more formal or fixed grammar',
+      'Summaries with key points and sentiment on long threads',
+      'A copilot that answers questions about a ticket, citing your articles',
+      'Auto-triage on arrival: tags, priority, sentiment and language',
+      'Translation both ways, so one team supports customers worldwide',
+      'An answer bot in the widget, grounded only in your published articles',
+      'Semantic search across tickets and articles',
+      'Customer content goes to the AI provider only to run the feature, and is never used to train models',
+      'Self-hosters bring their own key, or run a local model',
+    ],
+    docs: '/guides/ai/',
+  },
+  {
+    id: 'knowledge-base',
+    eyebrow: 'Knowledge base',
+    title: 'Answers customers find themselves.',
+    body: 'Write articles, group them into collections and publish them to a public help center at your workspace address. Drafts stay private until you publish.',
+    points: [
+      'Collections with ordering and descriptions',
+      'Draft and published states, with publish dates',
+      'Search across published articles, from the help center and the widget',
+      'View counts on every article',
+      'Global search covers tickets, contacts and articles together',
+    ],
+    docs: '/guides/knowledge-base/',
+  },
+  {
+    id: 'automations',
+    eyebrow: 'Automations and SLAs',
+    title: 'Rules that run before anyone looks.',
+    body: 'Automations run when a ticket is created, when a customer or agent replies, and when a ticket changes. Conditions all have to match; actions apply in order. SLA policies put first-reply and resolution clocks on tickets by priority.',
+    points: [
+      'Match on subject, body, sender, channel, mailbox, priority, status or tag',
+      'Set status or priority, assign a person or team, tag, reply, add a note or mark spam',
+      'Run counts on every rule, and a fixed order you control',
+      'First-reply and resolution targets per priority',
+      'Breaches show on the ticket and notify the assignee',
+      'Sort any view by what is due next',
+    ],
+    docs: '/guides/automations/',
+  },
+  {
+    id: 'reports',
+    eyebrow: 'Reports and CSAT',
+    title: 'The numbers support runs on.',
+    body: 'An overview report for any date range: tickets created and solved, what is open now, median first-reply and resolution times, SLA breaches and customer satisfaction, by day, channel and agent.',
+    points: [
+      'Median first reply and resolution, not averages skewed by outliers',
+      'Breakdowns by channel and by agent',
+      'CSAT surveys after a ticket is solved, with a score and a comment',
+      'Every number is also available from the API',
+    ],
+    docs: '/guides/reports/',
+  },
+  {
+    id: 'realtime',
+    eyebrow: 'Realtime and presence',
+    title: 'Everyone sees the same desk.',
+    body: 'Every change is written as an event in the same transaction as the change itself, then pushed to every open browser. Presence shows who is viewing a ticket and who is replying, so two people never answer the same customer.',
+    points: [
+      'Presence on every ticket: viewing, replying or idle',
+      'Typing indicators between agents, and to and from chat visitors',
+      'Notifications for assignments, mentions, replies and SLA breaches',
+      'Missed events are replayed on reconnect, in order',
+    ],
+    docs: '/api/realtime/',
+  },
+];
+const icons = { inbox: 'inbox', chat: 'chat', ai: 'sparkles', 'knowledge-base': 'book', automations: 'zap', reports: 'chart', realtime: 'radio' } as const;
+---
+<Layout title="Features" description="Shared inboxes, live chat, AI drafts and translation, a knowledge base, automations, SLA policies, reports, a public REST API, webhooks and realtime presence. Every feature in opendesk, on the cloud and self-hosted.">
+  <PageHero eyebrow="Features" title="Everything a support team does." lede="Email, chat and a help center in one inbox, with AI, rules, targets and reports that keep it moving, and an API under all of it.">
+    <nav class="mt-10 flex flex-wrap gap-2" aria-label="Feature sections">
+      {[...sections.map((s) => [s.id, s.eyebrow]), ['api', 'API and webhooks']].map(([id, label]) => (
+        <a href={`#${id}`} class="inline-flex h-8 items-center rounded-full border border-line bg-bg px-3.5 text-[13.5px] text-muted transition-colors hover:text-fg hover:border-fg/30">{label}</a>
+      ))}
+    </nav>
+  </PageHero>
+
+  {sections.map((s, i) => (
+    <section id={s.id} class="scroll-mt-20 border-b border-line">
+      <div class="container-page grid gap-12 py-20 md:py-28 lg:grid-cols-2 lg:items-center lg:gap-20">
+        <div class={`reveal ${i % 2 ? 'lg:order-2' : ''}`}>
+          <div class="flex items-center gap-2.5">
+            <span class="flex size-8 items-center justify-center rounded-lg bg-fg text-bg"><Icon name={icons[s.id as keyof typeof icons]} size={16} /></span>
+            <span class="eyebrow">{s.eyebrow}</span>
+          </div>
+          <h2 class="display mt-6 text-[34px] sm:text-[44px] text-fg">{s.title}</h2>
+          <p class="lede mt-5 text-[17px] leading-[1.65]">{s.body}</p>
+          <ul class="mt-8 grid gap-3 text-[15px] text-fg/85">
+            {s.points.map((p) => (
+              <li class="flex gap-3"><Icon name="check" size={17} class="mt-0.5 shrink-0 text-fg" />{p}</li>
+            ))}
+          </ul>
+          {s.docs && <a href={`${LINKS.docs}${s.docs}`} class="mt-8 inline-flex items-center gap-1.5 text-[14.5px] font-medium text-fg hover:underline underline-offset-4">Read the guide<Icon name="arrowRight" size={14} /></a>}
+        </div>
+        <div class={`reveal relative ${i % 2 ? 'lg:order-1' : ''}`} style="--d:80ms">
+          <div class="rounded-[24px] border border-line bg-surface-2 bg-dots p-5 sm:p-8 md:p-10">
+            {s.id === 'inbox' && <MailboxMock />}
+            {s.id === 'chat' && <ChatMock />}
+            {s.id === 'ai' && <div class="space-y-4"><AiMock /><AnswerBotMock /></div>}
+            {s.id === 'knowledge-base' && <KbMock />}
+            {s.id === 'automations' && <div class="space-y-4"><AutomationMock /><SlaMock /></div>}
+            {s.id === 'reports' && <ReportsMock />}
+            {s.id === 'realtime' && <PresenceMock />}
+          </div>
+        </div>
+      </div>
+    </section>
+  ))}
+
+  <section id="api" class="scroll-mt-20">
+    <div class="container-page grid gap-12 py-20 md:py-28 lg:grid-cols-[0.9fr_1.1fr] lg:items-start lg:gap-20">
+      <div class="reveal">
+        <div class="flex items-center gap-2.5">
+          <span class="flex size-8 items-center justify-center rounded-lg bg-fg text-bg"><Icon name="braces" size={16} /></span>
+          <span class="eyebrow">API and webhooks</span>
+        </div>
+        <h2 class="display mt-6 text-[34px] sm:text-[44px] text-fg">The API is the product.</h2>
+        <p class="lede mt-5 text-[17px] leading-[1.65]">The opendesk web app is a client of the public REST API, so anything you can do in the app you can do from code. The server generates an OpenAPI 3.1 spec, and webhooks carry the same events the app receives.</p>
+        <ul class="mt-8 grid gap-3 text-[15px] text-fg/85">
+          {[
+            'API keys bound to one workspace, with scopes for tickets, contacts, KB, settings and realtime',
+            'Idempotency keys on every create, kept for 24 hours',
+            'Cursor pagination, RFC 9457 errors with stable codes, rate limit headers',
+            'Webhooks for every event, signed with HMAC-SHA256, with delivery history and tests',
+            'A realtime socket for keys with the realtime scope',
+          ].map((p) => <li class="flex gap-3"><Icon name="check" size={17} class="mt-0.5 shrink-0 text-fg" />{p}</li>)}
+        </ul>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href={`${LINKS.docs}/api/`} class="btn btn-primary">API docs<Icon name="arrowRight" size={15} /></a>
+          <a href={LINKS.openapi} class="btn btn-ghost font-mono !text-[13px]">openapi.json</a>
+        </div>
+      </div>
+      <div class="reveal min-w-0" style="--d:80ms">
+        <CodeTabs id="features-code" tabs={[
+          { label: 'Create a ticket', lang: 'bash', code: CREATE_TICKET },
+          { label: 'Verify a webhook', lang: 'js', code: VERIFY },
+          { label: 'Realtime', lang: 'js', code: REALTIME },
+        ]} />
+      </div>
+    </div>
+  </section>
+
+  <section class="container-page">
+    <div class="reveal grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
+      {[
+        ['users', 'Teams and roles', 'Owner, admin, agent and viewer, plus teams for routing.'],
+        ['lock', 'Sign-in your way', 'Passwords, two-factor, and Google, Microsoft, GitHub or OIDC.'],
+        ['shield', 'Audit log', 'Sign-ins, role changes, keys, webhooks and mailbox changes.'],
+        ['keyboard', 'Keyboard-first', 'Move through the queue and reply without the mouse.'],
+      ].map(([icon, t, d]) => (
+        <div class="bg-bg p-6">
+          <Icon name={icon as 'users'} size={18} class="text-fg" />
+          <div class="mt-4 text-[15px] font-medium text-fg">{t}</div>
+          <div class="mt-1.5 text-[14px] leading-relaxed text-muted">{d}</div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <CTA />
+</Layout>

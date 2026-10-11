@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.astro/
+# Copied from ../deploy/install by scripts/prebuild.mjs
+public/install.sh
+public/install.sh.sha256

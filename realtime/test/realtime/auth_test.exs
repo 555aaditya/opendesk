@@ -1,0 +1,139 @@
+defmodule Realtime.AuthTest do
+  use ExUnit.Case, async: true
+
+  alias Realtime.Auth
+  alias Realtime.Test.Tokens
+
+  describe "verify/2 accepts" do
+    test "a ws token and returns its identity" do
+      claims = Tokens.ws_claims(%{"role" => "admin"})
+      assert {:ok, identity} = Auth.verify(Tokens.sign(claims))
+
+      assert identity == %{
+               kind: :user,
+               sub: claims["sub"],
+               wid: claims["wid"],
+               role: "admin",
+               name: "Anna",
+               avatar: "https://example.test/a.png"
+             }
+    end
+
+    test "an api_key ws token" do
+      assert {:ok, %{kind: :api_key}} =
+               Auth.verify(Tokens.sign(Tokens.ws_claims(%{"kind" => "api_key"})))
+    end
+
+    test "a widget_ws token as a contact" do
+      claims = Tokens.widget_claims()
+
+      assert {:ok, %{kind: :contact, sub: sub, wid: wid, role: nil}} =
+               Auth.verify(Tokens.sign(claims))
+
+      assert {sub, wid} == {claims["sub"], claims["wid"]}
+    end
+
+    test "uppercase ids, normalized to lowercase" do
+      claims = Tokens.ws_claims()
+      upper = %{claims | "sub" => String.upcase(claims["sub"])}
+      assert {:ok, %{sub: sub}} = Auth.verify(Tokens.sign(upper))
+      assert sub == claims["sub"]
+    end
+  end
+
+  describe "verify/2 refuses" do
+    test "every other purpose" do
+      for purpose <- ["access", "mfa", "oauth_state", "", nil, 1] do
+        token = Tokens.sign(Tokens.ws_claims(%{"purpose" => purpose}))
+        assert Auth.verify(token) == {:error, :wrong_purpose}, inspect(purpose)
+      end
+
+      assert Auth.verify(Tokens.sign(Map.delete(Tokens.ws_claims(), "purpose"))) ==
+               {:error, :wrong_purpose}
+    end
+
+    test "alg none" do
+      assert Auth.verify(Tokens.unsigned(Tokens.ws_claims())) == {:error, :invalid_token}
+    end
+
+    test "HS384 and HS512 even with the right secret" do
+      for alg <- ["HS384", "HS512"] do
+        assert Auth.verify(Tokens.sign(Tokens.ws_claims(), alg: alg)) == {:error, :invalid_token}
+      end
+    end
+
+    test "an asymmetric alg" do
+      jwk = JOSE.JWK.generate_key({:ec, "P-256"})
+
+      {_, token} =
+        JOSE.JWT.sign(jwk, %{"alg" => "ES256"}, Tokens.ws_claims()) |> JOSE.JWS.compact()
+
+      assert Auth.verify(token) == {:error, :invalid_token}
+    end
+
+    test "a wrong signature" do
+      token = Tokens.sign(Tokens.ws_claims(), secret: String.duplicate("x", 40))
+      assert Auth.verify(token) == {:error, :invalid_token}
+    end
+
+    test "an expired token" do
+      token = Tokens.sign(Tokens.ws_claims(%{"exp" => Tokens.now() - 1}))
+      assert Auth.verify(token) == {:error, :expired}
+
+      token = Tokens.sign(Tokens.ws_claims(%{"exp" => Tokens.now()}))
+      assert Auth.verify(token) == {:error, :expired}
+    end
+
+    test "a token without exp, or with a non-integer exp" do
+      assert Auth.verify(Tokens.sign(Map.delete(Tokens.ws_claims(), "exp"))) ==
+               {:error, :invalid_claims}
+
+      assert Auth.verify(Tokens.sign(Tokens.ws_claims(%{"exp" => "9999999999"}))) ==
+               {:error, :invalid_claims}
+    end
+
+    test "a token that is not valid yet" do
+      token = Tokens.sign(Tokens.ws_claims(%{"nbf" => Tokens.now() + 60}))
+      assert Auth.verify(token) == {:error, :invalid_token}
+    end
+
+    test "bad claims" do
+      for bad <- [
+            %{"sub" => "not-a-uuid"},
+            %{"wid" => nil},
+            %{"kind" => "admin"},
+            %{"role" => "root"},
+            %{"sub" => "../x"}
+          ] do
+        assert Auth.verify(Tokens.sign(Tokens.ws_claims(bad))) == {:error, :invalid_claims},
+               inspect(bad)
+      end
+
+      assert Auth.verify(Tokens.sign(Tokens.widget_claims(%{"wid" => "x"}))) ==
+               {:error, :invalid_claims}
+    end
+
+    test "missing, garbage and oversized tokens" do
+      assert Auth.verify(nil) == {:error, :missing_token}
+      assert Auth.verify("") == {:error, :missing_token}
+      assert Auth.verify("a.b.c") == {:error, :invalid_token}
+      assert Auth.verify(%{"x" => 1}) == {:error, :invalid_token}
+
+      huge = Tokens.sign(Tokens.ws_claims(%{"pad" => String.duplicate("a", 5000)}))
+      assert Auth.verify(huge) == {:error, :invalid_token}
+    end
+  end
+
+  describe "secret" do
+    test "under 32 bytes is refused" do
+      short = String.duplicate("s", 31)
+      assert Auth.validate_secret(short) == {:error, :secret_too_short}
+      assert Auth.validate_secret(nil) == {:error, :secret_too_short}
+      assert Auth.validate_secret(String.duplicate("s", 32)) == :ok
+
+      # A token signed with a short secret does not verify even against itself.
+      token = Tokens.sign(Tokens.ws_claims(), secret: short)
+      assert Auth.verify(token, secret: short) == {:error, :invalid_token}
+    end
+  end
+end

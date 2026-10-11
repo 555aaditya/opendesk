@@ -1,0 +1,98 @@
+---
+import Logo from './Logo.astro';
+import Icon from './Icon.astro';
+import { NAV, LINKS } from '../lib/site';
+import { getRepoStars } from '../lib/github';
+
+const stars = await getRepoStars();
+const path = Astro.url.pathname;
+const isActive = (href: string) => href.startsWith('/') && path.startsWith(href);
+---
+<header class="sticky top-0 z-50 border-b border-transparent bg-bg/80 backdrop-blur-xl transition-colors [&.is-scrolled]:border-line" data-header>
+  <div class="container-page flex h-16 items-center gap-6">
+    <a href="/" class="shrink-0 text-fg" aria-label="opendesk home">
+      <Logo class="h-[22px] w-auto" />
+    </a>
+
+    <nav class="hidden md:flex items-center gap-1 text-[14px]" aria-label="Main">
+      {NAV.map((n) => (
+        <a
+          href={n.href}
+          class={`rounded-full px-3 py-1.5 transition-colors hover:text-fg ${isActive(n.href) ? 'text-fg' : 'text-muted'}`}
+          aria-current={isActive(n.href) ? 'page' : undefined}
+        >{n.label}</a>
+      ))}
+    </nav>
+
+    <div class="ml-auto flex items-center gap-2">
+      <a
+        href={LINKS.github}
+        class="hidden sm:inline-flex h-8 items-center gap-2 rounded-full border border-line pl-2.5 pr-3 text-[13px] text-muted transition-colors hover:text-fg hover:border-fg/30"
+        aria-label={stars ? `opendesk on GitHub, ${stars} stars` : 'opendesk on GitHub'}
+      >
+        <Icon name="github" size={15} />
+        {stars ? (
+          <span class="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums text-fg"><Icon name="star" size={12} />{stars}</span>
+        ) : (
+          <span class="text-fg">GitHub</span>
+        )}
+      </a>
+      <button type="button" class="inline-flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface hover:text-fg" data-theme-toggle aria-label="Toggle dark mode">
+        <Icon name="sun" size={16} class="hidden dark:block" />
+        <Icon name="moon" size={16} class="block dark:hidden" />
+      </button>
+      <a href={LINKS.login} class="hidden lg:inline-flex px-3 text-[14px] text-muted hover:text-fg">Sign in</a>
+      <a href={LINKS.signup} class="btn btn-primary hidden sm:inline-flex !h-8 !px-3.5 !text-[13.5px]">Start free</a>
+      <button type="button" class="group md:hidden inline-flex size-9 items-center justify-center rounded-full text-fg hover:bg-surface" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open menu" data-menu-button>
+        <Icon name="menu" size={20} class="group-aria-expanded:hidden" />
+        <Icon name="x" size={20} class="hidden group-aria-expanded:block" />
+      </button>
+    </div>
+  </div>
+
+  <div id="mobile-nav" class="md:hidden hidden border-t border-line bg-bg" data-menu>
+    <nav class="container-page flex flex-col py-3" aria-label="Mobile">
+      {NAV.map((n) => (
+        <a href={n.href} class="flex items-center justify-between py-3 text-[17px] text-fg border-b border-line-soft">{n.label}<Icon name="chevronRight" size={16} class="text-subtle" /></a>
+      ))}
+      <a href={LINKS.github} class="flex items-center justify-between py-3 text-[17px] text-fg border-b border-line-soft">GitHub<Icon name="github" size={16} class="text-subtle" /></a>
+      <div class="mt-4 grid grid-cols-2 gap-2 pb-2">
+        <a href={LINKS.login} class="btn btn-ghost">Sign in</a>
+        <a href={LINKS.signup} class="btn btn-primary">Start free</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<script>
+  import { applyTheme } from '../lib/theme';
+
+  const header = document.querySelector<HTMLElement>('[data-header]');
+  const onScroll = () => header?.classList.toggle('is-scrolled', window.scrollY > 4);
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  document.querySelector('[data-theme-toggle]')?.addEventListener('click', () => {
+    const dark = document.documentElement.classList.contains('dark');
+    applyTheme(dark ? 'light' : 'dark');
+  });
+
+  // Mobile menu: closes on Escape, on click-away and when a link is followed.
+  const button = document.querySelector<HTMLButtonElement>('[data-menu-button]');
+  const menu = document.querySelector<HTMLElement>('[data-menu]');
+  const setOpen = (open: boolean) => {
+    if (!button || !menu) return;
+    button.setAttribute('aria-expanded', String(open));
+    button.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    menu.classList.toggle('hidden', !open);
+  };
+  button?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(button.getAttribute('aria-expanded') !== 'true');
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setOpen(false); });
+  document.addEventListener('click', (e) => {
+    if (menu && !menu.contains(e.target as Node)) setOpen(false);
+  });
+  window.matchMedia('(min-width: 768px)').addEventListener('change', () => setOpen(false));
+</script>

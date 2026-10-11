@@ -1,0 +1,63 @@
+// Package ai is the ai area: providers (Anthropic, OpenAI-compatible), embeddings
+// (Voyage, OpenAI-compatible, or Postgres full-text search), and the AI features of
+// contracts/ai.md. Register wires its HTTP routes, RegisterWorkers its River workers,
+// Periodic its scheduled jobs and Background its long-running loops.
+package ai
+
+import (
+	"context"
+	"sync"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/go-chi/chi/v5"
+	"github.com/riverqueue/river"
+
+	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/opendesk/opendesk/internal/helpdesk/hd"
+)
+
+var (
+	mu       sync.Mutex
+	services = map[*deps.Deps]*Service{}
+)
+
+// For returns the process's AI service for d, building it once. It also installs the
+// helpdesk hooks (auto-triage, the ai_triage automation action).
+func For(d *deps.Deps) *Service {
+	mu.Lock()
+	defer mu.Unlock()
+	if s, ok := services[d]; ok {
+		return s
+	}
+	s := New(context.Background(), d)
+	services[d] = s
+	s.installHooks()
+	return s
+}
+
+func (s *Service) installHooks() {
+	if !s.Enabled() {
+		hd.SetAIHooks(nil)
+		return
+	}
+	hd.SetAIHooks(&hd.AIHooks{AutoTriage: s.autoTriage, Triage: s.triageAction})
+}
+
+// Register adds this area's routes. Streaming variants are served by an operation
+// middleware on the same routes.
+func Register(d *deps.Deps, api huma.API, _ chi.Router) { For(d).register(api) }
+
+// RegisterWorkers adds this area's River workers.
+func RegisterWorkers(d *deps.Deps, w *river.Workers) {
+	s := For(d)
+	river.AddWorker(w, &EmbedWorker{S: s})
+	river.AddWorker(w, &SummarizeWorker{S: s})
+	river.AddWorker(w, &WidgetAnswerWorker{S: s})
+	river.AddWorker(w, &MaintainWorker{S: s})
+}
+
+// Periodic returns this area's scheduled jobs.
+func Periodic(d *deps.Deps) []*river.PeriodicJob { return []*river.PeriodicJob{maintainPeriodic()} }
+
+// Background runs until ctx is done, in the worker role only.
+func Background(ctx context.Context, d *deps.Deps) {}

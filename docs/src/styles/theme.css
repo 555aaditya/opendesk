@@ -1,0 +1,300 @@
+/* opendesk docs theme: monochrome only, from brand/tokens.css. */
+:root {
+  --od-ink: #0a0a0a;
+  --od-coal: #171717;
+  --od-charcoal: #262626;
+  --od-graphite: #525252;
+  --od-smoke: #8a8a8a;
+  --od-ash: #e4e4e4;
+  --od-mist: #f4f4f4;
+  --od-paper: #ffffff;
+
+  --sl-font: 'Geist Sans';
+  --sl-font-mono: 'Geist Mono';
+  --sl-content-width: 46rem;
+  --sl-line-height: 1.7;
+}
+
+/* Dark (Starlight's default scale) */
+:root,
+::backdrop {
+  --sl-color-white: #fafafa;
+  --sl-color-gray-1: #ededed;
+  --sl-color-gray-2: #c7c7c7;
+  --sl-color-gray-3: var(--od-smoke);
+  --sl-color-gray-4: #6b6b6b;
+  --sl-color-gray-5: var(--od-charcoal);
+  --sl-color-gray-6: var(--od-coal);
+  --sl-color-black: var(--od-ink);
+
+  --sl-color-accent-low: var(--od-charcoal);
+  --sl-color-accent: var(--od-paper);
+  --sl-color-accent-high: var(--od-paper);
+
+  --sl-color-text-accent: var(--od-paper);
+  --sl-color-text-invert: var(--od-ink);
+  --sl-color-bg-nav: var(--od-ink);
+  --sl-color-bg-sidebar: var(--od-ink);
+  --sl-color-bg-inline-code: var(--od-coal);
+  --sl-color-hairline-light: var(--od-charcoal);
+  --sl-color-hairline: var(--od-charcoal);
+  --sl-color-hairline-shade: var(--od-ink);
+  --sl-color-backdrop-overlay: rgb(10 10 10 / 0.7);
+
+  /* Asides stay grey; their icon and border carry the meaning. */
+  --sl-color-blue-low: var(--od-coal);
+  --sl-color-blue: var(--od-smoke);
+  --sl-color-blue-high: var(--od-paper);
+  --sl-color-purple-low: var(--od-coal);
+  --sl-color-purple: var(--od-smoke);
+  --sl-color-purple-high: var(--od-paper);
+  --sl-color-green-low: var(--od-coal);
+  --sl-color-green: var(--od-smoke);
+  --sl-color-green-high: var(--od-paper);
+  --sl-color-orange-low: var(--od-coal);
+  --sl-color-orange: #d4d4d4;
+  --sl-color-orange-high: var(--od-paper);
+  --sl-color-red-low: var(--od-coal);
+  --sl-color-red: var(--od-paper);
+  --sl-color-red-high: var(--od-paper);
+}
+
+:root[data-theme='light'],
+[data-theme='light'] ::backdrop {
+  --sl-color-white: var(--od-ink);
+  --sl-color-gray-1: var(--od-coal);
+  --sl-color-gray-2: var(--od-charcoal);
+  --sl-color-gray-3: var(--od-graphite);
+  --sl-color-gray-4: var(--od-smoke);
+  --sl-color-gray-5: var(--od-ash);
+  --sl-color-gray-6: var(--od-mist);
+  --sl-color-gray-7: #fafafa;
+  --sl-color-black: var(--od-paper);
+
+  --sl-color-accent-low: var(--od-mist);
+  --sl-color-accent: var(--od-ink);
+  --sl-color-accent-high: var(--od-ink);
+
+  --sl-color-text-accent: var(--od-ink);
+  --sl-color-text-invert: var(--od-paper);
+  --sl-color-bg-nav: var(--od-paper);
+  --sl-color-bg-sidebar: var(--od-paper);
+  --sl-color-bg-inline-code: var(--od-mist);
+  --sl-color-hairline-light: var(--od-ash);
+  --sl-color-hairline: var(--od-ash);
+  --sl-color-hairline-shade: var(--od-ash);
+  --sl-color-backdrop-overlay: rgb(10 10 10 / 0.35);
+
+  --sl-color-blue-low: var(--od-mist);
+  --sl-color-blue: var(--od-graphite);
+  --sl-color-blue-high: var(--od-ink);
+  --sl-color-purple-low: var(--od-mist);
+  --sl-color-purple: var(--od-graphite);
+  --sl-color-purple-high: var(--od-ink);
+  --sl-color-green-low: var(--od-mist);
+  --sl-color-green: var(--od-graphite);
+  --sl-color-green-high: var(--od-ink);
+  --sl-color-orange-low: var(--od-mist);
+  --sl-color-orange: var(--od-charcoal);
+  --sl-color-orange-high: var(--od-ink);
+  --sl-color-red-low: var(--od-mist);
+  --sl-color-red: var(--od-ink);
+  --sl-color-red-high: var(--od-ink);
+}
+
+/* Type */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+h1#_top {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--sl-color-white);
+}
+h1#_top {
+  letter-spacing: -0.04em;
+}
+.sl-markdown-content h2 {
+  font-size: var(--sl-text-2xl);
+  margin-top: 2.5rem;
+}
+.sl-markdown-content h3 {
+  font-size: var(--sl-text-xl);
+}
+@media (min-width: 50em) {
+  .sl-markdown-content h2 {
+    font-size: var(--sl-text-3xl);
+  }
+  .sl-markdown-content h3 {
+    font-size: var(--sl-text-xl);
+  }
+}
+
+.sl-markdown-content a {
+  color: var(--sl-color-white);
+  text-decoration-color: var(--sl-color-gray-4);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.sl-markdown-content a:hover {
+  text-decoration-color: var(--sl-color-white);
+}
+
+.sl-markdown-content :not(pre) > code {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  font-size: 0.86em;
+}
+
+/* Header */
+header.header {
+  border-bottom: 1px solid var(--sl-color-hairline);
+}
+.site-title img {
+  height: 1.375rem;
+  width: auto;
+}
+
+/* Sidebar */
+nav.sidebar .top-level > li > details > summary .group-label > span,
+nav.sidebar .group-label > span.large {
+  font-size: var(--sl-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--__sl-font-mono);
+  font-weight: 500;
+  color: var(--sl-color-gray-3);
+}
+nav.sidebar a {
+  border-radius: 6px;
+}
+nav.sidebar a[aria-current='page'],
+nav.sidebar a[aria-current='page']:hover,
+nav.sidebar a[aria-current='page']:focus {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  font-weight: 500;
+}
+
+/* Tables */
+.sl-markdown-content table {
+  font-size: var(--sl-text-sm);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.sl-markdown-content th {
+  font-weight: 500;
+  color: var(--sl-color-gray-2);
+  background: var(--sl-color-gray-6);
+}
+.sl-markdown-content th,
+.sl-markdown-content td {
+  border-bottom: 1px solid var(--sl-color-hairline);
+  padding: 0.55rem 0.8rem;
+}
+.sl-markdown-content td code {
+  white-space: nowrap;
+}
+
+/* Asides: monochrome, with a heavier left rule. */
+.starlight-aside {
+  border-radius: 8px;
+  border: 1px solid var(--sl-color-hairline);
+  border-inline-start: 3px solid var(--sl-color-white);
+  background: var(--sl-color-gray-6);
+}
+.starlight-aside--note,
+.starlight-aside--tip {
+  border-inline-start-color: var(--sl-color-gray-3);
+}
+
+/* Cards */
+.card {
+  border-radius: 10px;
+  border-color: var(--sl-color-hairline) !important;
+  background: transparent !important;
+}
+.card .icon {
+  color: var(--sl-color-white) !important;
+  background: var(--sl-color-gray-6) !important;
+  border-radius: 8px;
+  padding: 0.3rem;
+}
+.sl-link-card {
+  border-radius: 10px;
+  border-color: var(--sl-color-hairline) !important;
+  box-shadow: none !important;
+}
+.sl-link-card:hover {
+  border-color: var(--sl-color-gray-4) !important;
+  background: var(--sl-color-gray-6) !important;
+}
+
+/* Steps */
+.sl-steps > li::before {
+  background: var(--sl-color-gray-6) !important;
+  color: var(--sl-color-white) !important;
+  font-family: var(--__sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+/* Tabs */
+starlight-tabs [role='tab'][aria-selected='true'] {
+  border-color: var(--sl-color-white);
+  color: var(--sl-color-white);
+}
+
+/* Splash hero */
+.hero h1 {
+  letter-spacing: -0.045em;
+  font-weight: 600;
+}
+.hero .sl-link-button.primary,
+.sl-link-button.primary {
+  background: var(--sl-color-white);
+  color: var(--sl-color-black);
+  border-color: var(--sl-color-white);
+  border-radius: 8px;
+}
+.sl-link-button.secondary {
+  border-radius: 8px;
+  border-color: var(--sl-color-hairline);
+}
+.sl-link-button.minimal {
+  border-radius: 8px;
+}
+
+/* Pagination */
+.pagination-links a {
+  border-radius: 10px;
+  box-shadow: none;
+  border-color: var(--sl-color-hairline);
+}
+.pagination-links a:hover {
+  border-color: var(--sl-color-gray-4);
+}
+
+::selection {
+  background: var(--sl-color-white);
+  color: var(--sl-color-black);
+}
+
+kbd {
+  font-family: var(--__sl-font-mono);
+  font-size: 0.78em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--sl-color-hairline);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-white);
+  white-space: nowrap;
+}
+
+.hero > img,
+.hero .hero-html {
+  width: min(70%, 16rem);
+  opacity: 0.95;
+}

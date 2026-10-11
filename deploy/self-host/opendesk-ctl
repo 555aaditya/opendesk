@@ -1,0 +1,184 @@
+#!/bin/sh
+#
+# opendesk-ctl: day-two operations for a self-hosted opendesk.
+#
+#   ./opendesk-ctl status               containers, health, version
+#   ./opendesk-ctl logs [service]       follow logs (opendesk, realtime, postgres, caddy)
+#   ./opendesk-ctl backup [dir]         database dump + data volume + .env, into backups/<time>
+#   ./opendesk-ctl restore <backup>     put a backup back (stops the app while it runs)
+#   ./opendesk-ctl upgrade [version]    back up, then move to a release (default: newest)
+#   ./opendesk-ctl restart|stop|start
+#
+# The installer puts this next to docker-compose.yml (default /opt/opendesk),
+# and every command runs against the install in the directory it lives in, or
+# OPENDESK_DIR. Migrations run when opendesk boots, so an upgrade is a pull and
+# a restart.
+set -eu
+
+REPO="opendesk/opendesk"
+RELEASES="https://github.com/$REPO/releases"
+
+say() { printf '%s\n' "$*"; }
+info() { printf '  · %s\n' "$*"; }
+ok() { printf '  ✓ %s\n' "$*"; }
+die() { printf '  ✗ %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+find_dir() {
+    if [ -n "${OPENDESK_DIR:-}" ]; then
+        DIR=$OPENDESK_DIR
+    else
+        DIR=$(cd "$(dirname "$0")" && pwd)
+        [ -f "$DIR/docker-compose.yml" ] || DIR=$(pwd)
+    fi
+    [ -f "$DIR/docker-compose.yml" ] || die "no docker-compose.yml in $DIR (set OPENDESK_DIR)"
+    [ -f "$DIR/.env" ] || die "no .env in $DIR"
+}
+
+compose() {
+    if docker info >/dev/null 2>&1; then
+        (cd "$DIR" && docker compose "$@")
+    else
+        (cd "$DIR" && sudo docker compose "$@")
+    fi
+}
+
+dockerc() {
+    if docker info >/dev/null 2>&1; then docker "$@"; else sudo docker "$@"; fi
+}
+
+env_get() {
+    sed -n "s/^${1}=//p" "$DIR/.env" | tail -1
+}
+
+sha256() {
+    if have sha256sum; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+cmd_status() {
+    say "opendesk in $DIR, version $(env_get OPENDESK_VERSION)"
+    compose ps
+    if compose exec -T opendesk /opendesk healthcheck >/dev/null 2>&1; then
+        ok "opendesk answers /healthz"
+    else
+        say "  ! opendesk does not answer /healthz yet (first boot runs migrations)"
+    fi
+}
+
+cmd_logs() {
+    if [ $# -gt 0 ]; then
+        compose logs -f --tail=200 "$@"
+    else
+        compose logs -f --tail=200
+    fi
+}
+
+# backup writes three things, and all three are needed to restore:
+#   db.dump       pg_dump custom format of the whole database
+#   data.tar.gz   the opendesk data volume (local attachments, NATS store)
+#   env           the .env, which holds CREDENTIALS_KEY. Without it every
+#                 stored mailbox credential in db.dump is unreadable.
+cmd_backup() {
+    stamp=$(date -u '+%Y%m%dT%H%M%SZ')
+    dest=${1:-$DIR/backups}/$stamp
+    mkdir -p "$dest"
+    chmod 700 "$dest"
+    info "Dumping the database"
+    compose exec -T postgres pg_dump -U opendesk -d opendesk -Fc >"$dest/db.dump"
+    [ -s "$dest/db.dump" ] || die "pg_dump wrote nothing"
+    info "Copying the data volume"
+    cid=$(compose ps -q opendesk)
+    [ -n "$cid" ] || die "the opendesk container does not exist; start it first"
+    dockerc cp "$cid":/data - | gzip >"$dest/data.tar.gz"
+    (umask 077; cp "$DIR/.env" "$dest/env")
+    env_get OPENDESK_VERSION >"$dest/VERSION"
+    ok "Backup written to $dest"
+    say "    It contains the instance's secrets (env). Copy it off this machine and keep it private."
+}
+
+cmd_restore() {
+    src=${1:-}
+    [ -n "$src" ] && [ -f "$src/db.dump" ] || die "usage: opendesk-ctl restore <backup dir containing db.dump>"
+    say "This replaces the database and data volume of $DIR with $src."
+    if [ "${OPENDESK_YES:-0}" != 1 ]; then
+        printf '  Type "restore" to continue: '
+        read -r answer </dev/tty || answer=""
+        [ "$answer" = "restore" ] || die "nothing was changed"
+    fi
+    if [ -f "$src/env" ]; then
+        if [ "$(sed -n 's/^CREDENTIALS_KEY=//p' "$src/env" | tail -1)" != "$(env_get CREDENTIALS_KEY)" ]; then
+            say "  ! The backup was taken with a different CREDENTIALS_KEY than this .env has."
+            say "    Mailbox credentials will not decrypt unless you restore its env too:"
+            say "    cp $src/env $DIR/.env"
+        fi
+    fi
+    info "Stopping the app"
+    compose stop opendesk realtime caddy
+    compose up -d --wait postgres
+    info "Restoring the database"
+    compose exec -T postgres pg_restore -U opendesk -d opendesk --clean --if-exists --no-owner --single-transaction <"$src/db.dump"
+    if [ -f "$src/data.tar.gz" ]; then
+        info "Restoring the data volume"
+        # The app container's root is read-only, so the archive is unpacked
+        # by a short-lived container that mounts the same volume.
+        cid=$(compose ps -aq opendesk)
+        gunzip -c "$src/data.tar.gz" | dockerc run --rm -i --volumes-from "$cid" alpine:3.22 \
+            sh -c 'find /data -mindepth 1 -delete && tar -xf - -C / && chown -R 65532:65532 /data'
+    fi
+    compose up -d
+    ok "Restored from $src"
+}
+
+resolve_latest() {
+    curl -fsSL -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/releases/latest" |
+        sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1
+}
+
+# upgrade runs the installer of the target release, verified against the
+# checksum that release published, so the compose file and Caddyfile move
+# with the images. The installer keeps every secret and setting in .env.
+cmd_upgrade() {
+    target=${1:-}
+    have curl || die "curl is required"
+    [ -n "$target" ] || target=$(resolve_latest)
+    [ -n "$target" ] || die "could not resolve the newest release; pass one: opendesk-ctl upgrade v1.2.3"
+    current=$(env_get OPENDESK_VERSION)
+    say "Upgrading $DIR from $current to $target"
+    if [ "${OPENDESK_SKIP_BACKUP:-0}" != 1 ]; then
+        cmd_backup
+    fi
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    curl -fsSL "$RELEASES/download/$target/install.sh" -o "$tmp/install.sh" || die "no installer published for $target"
+    curl -fsSL "$RELEASES/download/$target/install.sh.sha256" -o "$tmp/install.sh.sha256" || die "no checksum published for $target"
+    want=$(cut -d' ' -f1 "$tmp/install.sh.sha256")
+    [ "$(sha256 "$tmp/install.sh")" = "$want" ] || die "the $target installer does not match its published checksum"
+    sh "$tmp/install.sh" --dir "$DIR" --version "$target" --yes
+}
+
+usage() {
+    sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+main() {
+    cmd=${1:-help}
+    [ $# -gt 0 ] && shift
+    case "$cmd" in
+        help|-h|--help) usage; return 0 ;;
+    esac
+    have docker || die "docker is not installed"
+    find_dir
+    case "$cmd" in
+        status) cmd_status ;;
+        logs) cmd_logs "$@" ;;
+        backup) cmd_backup "$@" ;;
+        restore) cmd_restore "$@" ;;
+        upgrade) cmd_upgrade "$@" ;;
+        restart) compose restart ;;
+        stop) compose stop ;;
+        start) compose up -d ;;
+        *) die "unknown command $cmd (try --help)" ;;
+    esac
+}
+
+main "$@"

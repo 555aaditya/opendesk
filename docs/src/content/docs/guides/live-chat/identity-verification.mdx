@@ -1,0 +1,116 @@
+---
+title: Identity verification
+description: Sign your users' ids with HMAC-SHA256 so the chat widget can trust who they are.
+---
+
+import { Tabs, TabItem, Aside, Steps } from '@astrojs/starlight/components';
+
+When a signed-in user opens the widget, you can tell opendesk who they are. Without verification, anyone could claim to be any user. With it, opendesk accepts the identity only when it comes with a signature that only your server can produce.
+
+The signature is:
+
+```
+user_hash = hex( HMAC-SHA256( key = widget_secret, message = user_id ) )
+```
+
+A session that sends a valid `user_hash` for its `user_id` is marked **verified**, and its conversations attach to the contact with that external id.
+
+<Steps>
+
+1. **Get the widget secret.** In **Settings → Chat widget**, rotate the widget secret. It is shown once, so store it in your server's secrets. Rotating it needs the `admin` role. Rotating again invalidates every hash signed with the old secret.
+
+2. **Compute the hash on your server** for the signed-in user, with one of the examples below.
+
+3. **Pass `user_id` and `user_hash` to the widget**, together with the optional `email` and `name`, as shown by the embed snippet in settings. The widget sends them when it starts a session (`POST /v1/widget/session`).
+
+</Steps>
+
+<Aside type="danger" title="Keep the secret on the server">
+Never put the widget secret in browser code, a mobile app or a public repository. Compute the hash on your server and send only the result to the page.
+</Aside>
+
+## Examples
+
+<Tabs syncKey="lang">
+<TabItem label="Node">
+
+```js
+import { createHmac } from 'node:crypto';
+
+export function userHash(userId) {
+  return createHmac('sha256', process.env.OPENDESK_WIDGET_SECRET)
+    .update(String(userId))
+    .digest('hex');
+}
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import hashlib
+import hmac
+import os
+
+def user_hash(user_id: str) -> str:
+    secret = os.environ["OPENDESK_WIDGET_SECRET"].encode()
+    return hmac.new(secret, str(user_id).encode(), hashlib.sha256).hexdigest()
+```
+
+</TabItem>
+<TabItem label="Go">
+
+```go
+package widget
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+)
+
+func UserHash(userID string) string {
+	mac := hmac.New(sha256.New, []byte(os.Getenv("OPENDESK_WIDGET_SECRET")))
+	mac.Write([]byte(userID))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+```
+
+</TabItem>
+<TabItem label="PHP">
+
+```php
+<?php
+function user_hash(string $userId): string {
+    return hash_hmac('sha256', $userId, getenv('OPENDESK_WIDGET_SECRET'));
+}
+```
+
+</TabItem>
+<TabItem label="Ruby">
+
+```ruby
+require "openssl"
+
+def user_hash(user_id)
+  OpenSSL::HMAC.hexdigest("SHA256", ENV.fetch("OPENDESK_WIDGET_SECRET"), user_id.to_s)
+end
+```
+
+</TabItem>
+</Tabs>
+
+## Check your hash
+
+For the secret `test-secret` and user id `42`, every example above must return the same 64-character lowercase hex string. Compare your output across languages, or with:
+
+```sh
+printf '42' | openssl dgst -sha256 -hmac 'test-secret'
+```
+
+## Tips
+
+- Use a stable id that never changes for the user, such as your database primary key, not an email address.
+- Send the id as a string. The hash is computed over its exact bytes.
+- When a user signs out of your product, clear the widget session so the next visitor on the same browser does not see their conversations.

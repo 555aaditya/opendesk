@@ -1,0 +1,264 @@
+package email
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/opendesk/opendesk/internal/db"
+	"github.com/opendesk/opendesk/internal/events"
+)
+
+// Inbound and outbound kinds.
+const (
+	InboundForwarding = "forwarding"
+	InboundIMAP       = "imap"
+	KindGoogle        = "google"
+	KindMicrosoft     = "microsoft"
+	OutboundSMTP      = "smtp"
+	OutboundSystem    = "system"
+)
+
+// TLS modes for IMAP and SMTP.
+const (
+	TLSImplicit = "tls"
+	TLSStart    = "starttls"
+	TLSNone     = "none"
+)
+
+// MailboxConfig holds the non-secret connection settings (contracts/api.md Mailbox.config).
+type MailboxConfig struct {
+	IMAPHost     string `json:"imap_host,omitempty"`
+	IMAPPort     int    `json:"imap_port,omitempty"`
+	IMAPUsername string `json:"imap_username,omitempty"`
+	IMAPTLS      string `json:"imap_tls,omitempty" enum:"tls,starttls,none"`
+	SMTPHost     string `json:"smtp_host,omitempty"`
+	SMTPPort     int    `json:"smtp_port,omitempty"`
+	SMTPUsername string `json:"smtp_username,omitempty"`
+	SMTPTLS      string `json:"smtp_tls,omitempty" enum:"tls,starttls,none"`
+	OAuthEmail   string `json:"oauth_email,omitempty"`
+}
+
+// Mailbox is the API shape. Credentials are never part of it.
+type Mailbox struct {
+	ID                uuid.UUID     `json:"id"`
+	Name              string        `json:"name"`
+	Email             string        `json:"email"`
+	DisplayName       string        `json:"display_name"`
+	InboundKind       string        `json:"inbound_kind" enum:"forwarding,imap,google,microsoft"`
+	OutboundKind      string        `json:"outbound_kind" enum:"smtp,google,microsoft,system"`
+	ForwardingAddress string        `json:"forwarding_address"`
+	Config            MailboxConfig `json:"config"`
+	TeamID            *uuid.UUID    `json:"team_id"`
+	SignatureHTML     string        `json:"signature_html"`
+	AutoReplyEnabled  bool          `json:"auto_reply_enabled"`
+	AutoReplySubject  string        `json:"auto_reply_subject"`
+	AutoReplyHTML     string        `json:"auto_reply_html"`
+	Status            string        `json:"status" enum:"active,error,disabled"`
+	LastError         string        `json:"last_error"`
+	LastSyncedAt      *time.Time    `json:"last_synced_at"`
+	CreatedAt         time.Time     `json:"created_at"`
+}
+
+// mailboxRow is the stored mailbox, including fields the API never returns.
+type mailboxRow struct {
+	Mailbox
+	WorkspaceID     uuid.UUID
+	ForwardingToken string
+	CredentialsEnc  []byte
+	UIDValidity     int64
+	LastUID         int64
+	SyncFailures    int
+}
+
+// credentials is the sealed secret blob in mailboxes.credentials_enc.
+type credentials struct {
+	Password     string `json:"password,omitempty"`
+	SMTPPassword string `json:"smtp_password,omitempty"`
+
+	// OAuth. For Google one access token covers IMAP and the Gmail API. Microsoft
+	// tokens are per resource: AccessToken is for outlook.office.com (IMAP) and
+	// GraphAccessToken for graph.microsoft.com (sendMail).
+	RefreshToken     string    `json:"refresh_token,omitempty"`
+	AccessToken      string    `json:"access_token,omitempty"`
+	Expiry           time.Time `json:"expiry,omitempty"`
+	GraphAccessToken string    `json:"graph_access_token,omitempty"`
+	GraphExpiry      time.Time `json:"graph_expiry,omitempty"`
+}
+
+func (c credentials) smtpPassword() string {
+	if c.SMTPPassword != "" {
+		return c.SMTPPassword
+	}
+	return c.Password
+}
+
+const mailboxColumns = `id, workspace_id, name, email, display_name, inbound_kind, forwarding_token, outbound_kind,
+	config, credentials_enc, team_id, signature_html, auto_reply_enabled, auto_reply_subject, auto_reply_html,
+	status, last_error, last_synced_at, imap_uid_validity, imap_last_uid, sync_failures, created_at`
+
+func scanMailbox(row pgx.Row) (*mailboxRow, error) {
+	var m mailboxRow
+	err := row.Scan(&m.ID, &m.WorkspaceID, &m.Name, &m.Email, &m.DisplayName, &m.InboundKind, &m.ForwardingToken,
+		&m.OutboundKind, &m.Config, &m.CredentialsEnc, &m.TeamID, &m.SignatureHTML, &m.AutoReplyEnabled,
+		&m.AutoReplySubject, &m.AutoReplyHTML, &m.Status, &m.LastError, &m.LastSyncedAt, &m.UIDValidity, &m.LastUID,
+		&m.SyncFailures, &m.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// loadMailbox loads one mailbox scoped to the workspace.
+func loadMailbox(ctx context.Context, q db.Querier, wid, id uuid.UUID) (*mailboxRow, error) {
+	return scanMailbox(q.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailboxes WHERE workspace_id = $1 AND id = $2`, wid, id))
+}
+
+// loadMailboxForUpdate locks the row; used when rotating OAuth tokens.
+func loadMailboxForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (*mailboxRow, error) {
+	return scanMailbox(tx.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailboxes WHERE id = $1 FOR UPDATE`, id))
+}
+
+// loadMailboxByToken finds the mailbox that owns a forwarding token.
+func loadMailboxByToken(ctx context.Context, q db.Querier, token string) (*mailboxRow, error) {
+	return scanMailbox(q.QueryRow(ctx, `SELECT `+mailboxColumns+` FROM mailboxes WHERE forwarding_token = $1`, token))
+}
+
+func (s *service) forwardingAddress(token string) string {
+	return token + "@" + s.inboundDomain()
+}
+
+func (s *service) inboundDomain() string {
+	return strings.ToLower(strings.TrimSpace(s.d.Cfg.InboundDomain))
+}
+
+// api returns the public shape. Non-admin readers do not see connection settings.
+func (s *service) api(m *mailboxRow, withConfig bool) Mailbox {
+	out := m.Mailbox
+	out.ForwardingAddress = s.forwardingAddress(m.ForwardingToken)
+	if !withConfig {
+		out.Config = MailboxConfig{}
+	}
+	return out
+}
+
+func (s *service) openCreds(m *mailboxRow) (credentials, error) {
+	var c credentials
+	if err := s.d.Box.OpenJSON(m.CredentialsEnc, &c); err != nil {
+		return c, errors.New("mailbox credentials could not be opened")
+	}
+	return c, nil
+}
+
+func (s *service) sealCreds(c credentials) ([]byte, error) {
+	return s.d.Box.SealJSON(c)
+}
+
+// publishMailbox publishes mailbox.created / mailbox.updated with the reloaded row.
+func (s *service) publishMailbox(ctx context.Context, tx pgx.Tx, wid, id uuid.UUID, typ string) error {
+	m, err := loadMailbox(ctx, tx, wid, id)
+	if err != nil {
+		return err
+	}
+	_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: typ, Data: map[string]any{"mailbox": s.api(m, true)}})
+	return err
+}
+
+// newForwardingToken makes "<workspace-slug-prefix>-<random>", lowercase, no '+'.
+func newForwardingToken(slug string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(slug) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+				b.WriteByte('-')
+			}
+		}
+		if b.Len() >= 20 {
+			break
+		}
+	}
+	prefix := strings.Trim(b.String(), "-")
+	if prefix == "" {
+		prefix = "desk"
+	}
+	return prefix + "-" + crypto.RandomString(8)
+}
+
+// emailDomain returns the domain of an address, or "" when it has none.
+func emailDomain(addr string) string {
+	if i := strings.LastIndexByte(addr, '@'); i >= 0 {
+		return strings.ToLower(addr[i+1:])
+	}
+	return ""
+}
+
+// setSyncError records a failed sync with a safe message and schedules the next try
+// with exponential backoff. It publishes mailbox.updated when the visible state changed.
+func (s *service) setSyncError(ctx context.Context, m *mailboxRow, msg string) error {
+	failures := m.SyncFailures + 1
+	backoff := time.Minute << min(failures-1, 6) // 1m .. 64m
+	if backoff > time.Hour {
+		backoff = time.Hour
+	}
+	msg = truncate(msg, 300)
+	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		var prevStatus, prevErr string
+		err := tx.QueryRow(ctx, `UPDATE mailboxes m SET status = CASE WHEN m.status = 'disabled' THEN m.status ELSE 'error' END,
+			last_error = $3, sync_failures = $4, next_sync_at = now() + $5::interval, updated_at = now()
+			FROM (SELECT status, last_error FROM mailboxes WHERE id = $2 FOR UPDATE) old
+			WHERE m.workspace_id = $1 AND m.id = $2 RETURNING old.status, old.last_error`,
+			m.WorkspaceID, m.ID, msg, failures, fmt.Sprintf("%d seconds", int(backoff.Seconds()))).Scan(&prevStatus, &prevErr)
+		if err != nil {
+			return err
+		}
+		if prevStatus != "error" || prevErr != msg {
+			return s.publishMailbox(ctx, tx, m.WorkspaceID, m.ID, "mailbox.updated")
+		}
+		return nil
+	})
+}
+
+// setSyncOK records a successful sync; it publishes mailbox.updated only when the
+// mailbox leaves the error state.
+func (s *service) setSyncOK(ctx context.Context, m *mailboxRow, validity, lastUID int64) error {
+	return s.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+		var prevStatus string
+		err := tx.QueryRow(ctx, `UPDATE mailboxes m SET status = CASE WHEN m.status = 'error' THEN 'active' ELSE m.status END,
+			last_error = '', sync_failures = 0, next_sync_at = NULL, last_synced_at = now(),
+			imap_uid_validity = $3, imap_last_uid = $4, updated_at = now()
+			FROM (SELECT status FROM mailboxes WHERE id = $2 FOR UPDATE) old
+			WHERE m.workspace_id = $1 AND m.id = $2 RETURNING old.status`, m.WorkspaceID, m.ID, validity, lastUID).Scan(&prevStatus)
+		if err != nil {
+			return err
+		}
+		if prevStatus == "error" {
+			return s.publishMailbox(ctx, tx, m.WorkspaceID, m.ID, "mailbox.updated")
+		}
+		return nil
+	})
+}
+
+// saveProgress persists the UID cursor mid-pass so a failure later in the batch
+// does not re-fetch what was already ingested.
+func (s *service) saveProgress(ctx context.Context, m *mailboxRow, validity, lastUID int64) error {
+	_, err := s.d.DB.Pool.Exec(ctx, `UPDATE mailboxes SET imap_uid_validity = $3, imap_last_uid = $4 WHERE workspace_id = $1 AND id = $2`,
+		m.WorkspaceID, m.ID, validity, lastUID)
+	return err
+}
+
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}

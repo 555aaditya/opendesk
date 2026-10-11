@@ -1,0 +1,48 @@
+---
+import { render } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import Icon from '../../components/Icon.astro';
+import CTA from '../../components/CTA.astro';
+import { getPublishedPosts, formatDate, type Post } from '../../lib/blog';
+import { SITE } from '../../lib/site';
+
+export async function getStaticPaths() {
+  const posts = await getPublishedPosts();
+  return posts.map((post) => ({ params: { id: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props as { post: Post };
+const { Content } = await render(post);
+const url = new URL(`/blog/${post.id}/`, SITE.url).toString();
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: post.data.title,
+  description: post.data.description,
+  datePublished: post.data.pubDate.toISOString(),
+  dateModified: (post.data.updatedDate ?? post.data.pubDate).toISOString(),
+  author: { '@type': 'Organization', name: post.data.author },
+  publisher: { '@id': `${SITE.url}/#org` },
+  mainEntityOfPage: url,
+  image: `${SITE.url}/og.png`,
+};
+---
+<Layout title={post.data.title} description={post.data.description} ogType="article" jsonLd={jsonLd}>
+  <article>
+    <header class="border-b border-line">
+      <div class="container-page max-w-[800px] pt-14 pb-12 md:pt-20 md:pb-14">
+        <a href="/blog/" class="inline-flex items-center gap-1.5 text-[13.5px] text-muted hover:text-fg"><Icon name="arrowRight" size={13} class="rotate-180" />Blog</a>
+        <h1 class="display mt-8 text-[38px] sm:text-[52px] text-fg">{post.data.title}</h1>
+        <p class="lede mt-5 text-[18px] leading-[1.55]">{post.data.description}</p>
+        <div class="mt-8 flex items-center gap-3 text-[13.5px] text-subtle">
+          <span class="text-fg">{post.data.author}</span><span>·</span>
+          <time datetime={post.data.pubDate.toISOString()}>{formatDate(post.data.pubDate)}</time>
+        </div>
+      </div>
+    </header>
+    <div class="container-page max-w-[800px] py-12 md:py-16">
+      <div class="prose-od"><Content /></div>
+    </div>
+  </article>
+  <CTA />
+</Layout>

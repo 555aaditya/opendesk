@@ -1,0 +1,40 @@
+---
+title: Quickstart (self-host)
+description: Install opendesk on your own server with one command.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Self-hosted opendesk is free forever and runs the same code as the hosted service. One command installs it with Docker, generates every secret and serves it over HTTPS.
+
+<Steps>
+
+1. **Get a server.** Any Linux machine (amd64 or arm64) with Docker works. See [Requirements](/self-hosting/requirements/).
+
+2. **Point a domain at it.** Create a DNS `A` (and `AAAA`) record such as `desk.example.com` for the server, and open ports 80 and 443.
+
+3. **Run the installer.**
+
+   ```sh
+   curl -fsSL https://opendesk.sh/install.sh | sh
+   ```
+
+   It asks for your domain and an email address for the TLS certificate. To answer up front:
+
+   ```sh
+   curl -fsSL https://opendesk.sh/install.sh | sh -s -- --domain desk.example.com --email you@example.com
+   ```
+
+4. **Open your domain** and create the first account. Then create a workspace and [connect a mailbox](/guides/mailboxes/).
+
+</Steps>
+
+<Aside type="caution" title="Back up your .env">
+The installer writes `/opt/opendesk/.env` with fresh secrets. It holds the only copy of `CREDENTIALS_KEY`, which encrypts mailbox credentials. Losing it makes every stored mailbox credential unreadable.
+</Aside>
+
+## Next steps
+
+- Read the [install script](/self-hosting/install-script/) reference for every flag.
+- Set up [system email](/self-hosting/email/) so password resets and invites are delivered.
+- Configure [Google and Microsoft OAuth](/self-hosting/oauth-apps/) if you want one-click mailbox connections or social sign-in.

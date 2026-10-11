@@ -5,16 +5,23 @@ The gateway is stateless apart from Presence and holds **no database connection*
 
 ## Connect
 
-```
-wss://gateway.opendesk.sh/socket/websocket?vsn=2.0.0&token=<jwt>
-```
-Self-hosted single-domain: `wss://desk.example.com/socket/websocket` (Caddy routes `/socket`).
+Two sockets. `GATEWAY_URL` is `wss://gateway.opendesk.sh/socket` (self-hosted
+single-domain: `wss://desk.example.com/socket`, Caddy routes `/socket*`); the `phoenix`
+client appends `/websocket`.
+
+| socket | `new Socket(...)` URL | wire path | tokens | Origin | topics |
+| --- | --- | --- | --- | --- | --- |
+| agents | `GATEWAY_URL` | `/socket/websocket?vsn=2.0.0&token=<jwt>` | `ws` only | must be in `CHECK_ORIGINS` (non-browser clients send none and are allowed) | `workspace:`, `user:`, `ticket:` |
+| widget | `GATEWAY_URL + "/widget"` | `/socket/widget/websocket?vsn=2.0.0&token=<jwt>` | `widget_ws` only | any (the widget is embedded on customer sites) | `contact:<wid>:<sub>` only |
 
 1. Client gets a token: agents `POST /v1/realtime/token` (purpose `ws`), widget
-   `POST /v1/widget/session` (purpose `widget_ws`). Tokens live 5 minutes; they only
+   `POST /v1/widget/session` (purpose `widget_ws`; its response also carries
+   `gateway_url` = `GATEWAY_URL + "/widget"`, i.e. `wss://gateway.opendesk.sh/socket/widget`,
+   which the widget passes to `new Socket(gateway_url, ...)`). Tokens live 5 minutes; they only
    need to be valid at connect. On reconnect the client fetches a fresh one.
-2. Gateway verifies HS256 with `AUTH_SECRET`, checks `purpose`, `exp`, and the
-   browser `Origin` against `CHECK_ORIGINS` (comma-separated; non-browser clients send none).
+2. Gateway verifies HS256 with `AUTH_SECRET`, checks `exp` and that the `purpose` is the
+   one that socket accepts; the agents' socket also checks the browser `Origin` against
+   `CHECK_ORIGINS` (comma-separated). A token on the wrong socket is refused (HTTP 403).
 3. Socket id `user_socket:<sub>` so `od.control.disconnect` can kill it.
 
 ## Channels
@@ -24,7 +31,7 @@ Self-hosted single-domain: `wss://desk.example.com/socket/websocket` (Caddy rout
 | `workspace:<wid>`             | `ws` token with that `wid`                     | `"event"` with every envelope for that workspace (visibility `agents` or `public`) |
 | `user:<uid>`                  | `ws` token, `kind=user`, `sub == uid`          | `"event"` envelopes whose topics include `user:<uid>` |
 | `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, same `wid`            | Presence (`presence_state`, `presence_diff`) and `"typing"` |
-| `contact:<wid>:<contact_id>`  | `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, and `"typing"` from agents |
+| `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, and `"typing"` from agents |
 
 Join replies `{"ok": {"server_time": "..."}}`. Unauthorized joins reply `{"error": {"reason": "forbidden"}}`.
 

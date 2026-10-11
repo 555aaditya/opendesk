@@ -1,0 +1,285 @@
+@import '@fontsource-variable/geist/wght.css';
+@import '@fontsource-variable/geist-mono/wght.css';
+@import 'tailwindcss';
+
+/* Class-based dark mode. The head script sets .dark from the stored choice or the system. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Monochrome tokens from brand/tokens.css, mapped to roles so every component
+ * (including the product mocks) flips with the theme. Status colours exist only
+ * as tiny semantic dots, never as brand colour.
+ */
+:root {
+  --ink: #0a0a0a;
+  --coal: #171717;
+  --charcoal: #262626;
+  --graphite: #525252;
+  --smoke: #8a8a8a;
+  --ash: #e4e4e4;
+  --mist: #f4f4f4;
+  --paper: #ffffff;
+
+  --bg: var(--paper);
+  --fg: var(--ink);
+  --muted: var(--graphite);
+  --subtle: var(--smoke);
+  --line: var(--ash);
+  --line-soft: #efefef;
+  --surface: var(--mist);
+  --surface-2: #fafafa;
+  --raised: var(--paper);
+  --inverse: var(--ink);
+  --inverse-fg: var(--paper);
+  --grid: rgba(10, 10, 10, 0.06);
+  --shadow: 0 1px 0 rgba(10, 10, 10, 0.04), 0 24px 48px -24px rgba(10, 10, 10, 0.18);
+
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: var(--ink);
+  --fg: var(--paper);
+  --muted: #a3a3a3;
+  --subtle: #737373;
+  --line: var(--charcoal);
+  --line-soft: #1e1e1e;
+  --surface: var(--coal);
+  --surface-2: #0f0f0f;
+  --raised: var(--coal);
+  --inverse: var(--paper);
+  --inverse-fg: var(--ink);
+  --grid: rgba(255, 255, 255, 0.06);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.03), 0 24px 48px -24px rgba(0, 0, 0, 0.8);
+
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-raised: var(--raised);
+  --color-inverse: var(--inverse);
+  --color-inverse-fg: var(--inverse-fg);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+  body {
+    background: var(--bg);
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  /* Grid items never grow past their track because of a long unbreakable line. */
+  .grid > * { min-width: 0; }
+  ::selection {
+    background: var(--fg);
+    color: var(--bg);
+  }
+  :focus-visible {
+    outline: 2px solid var(--fg);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
+}
+
+@layer components {
+  .container-page {
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: 16px;
+  }
+  @media (min-width: 640px) {
+    .container-page { padding-inline: 24px; }
+  }
+  @media (min-width: 1024px) {
+    .container-page { padding-inline: 32px; }
+  }
+
+  .display {
+    font-weight: 600;
+    letter-spacing: -0.045em;
+    line-height: 1.02;
+    text-wrap: balance;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--subtle);
+  }
+  .lede {
+    color: var(--muted);
+    text-wrap: pretty;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 40px;
+    padding-inline: 16px;
+    border-radius: 999px;
+    font-size: 14.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease, transform 150ms ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--inverse); color: var(--inverse-fg); }
+  .btn-primary:hover { background: color-mix(in oklab, var(--inverse) 86%, var(--bg)); }
+  .btn-ghost { border: 1px solid var(--line); color: var(--fg); background: var(--bg); }
+  .btn-ghost:hover { background: var(--surface); }
+  .btn-lg { height: 46px; padding-inline: 22px; font-size: 15.5px; }
+
+  /* Faint engineering grid used behind heroes. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .bg-dots {
+    background-image: radial-gradient(var(--grid) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+  .fade-mask {
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+
+  .card {
+    background: var(--raised);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding-inline: 4px;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    background: var(--bg);
+  }
+
+  /* Long-form text: legal pages, blog, changelog. */
+  .prose-od {
+    color: var(--muted);
+    font-size: 16.5px;
+    line-height: 1.75;
+  }
+  .prose-od > * + * { margin-top: 1.1em; }
+  .prose-od h2 {
+    margin-top: 2.4em;
+    color: var(--fg);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.3;
+    scroll-margin-top: 96px;
+  }
+  .prose-od h3 {
+    margin-top: 1.8em;
+    color: var(--fg);
+    font-size: 17.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    scroll-margin-top: 96px;
+  }
+  .prose-od strong { color: var(--fg); font-weight: 600; }
+  .prose-od a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  .prose-od a:hover { text-decoration-color: var(--fg); }
+  .prose-od ul { list-style: none; padding-left: 0; }
+  .prose-od ul > li { position: relative; padding-left: 1.3em; }
+  .prose-od ul > li + li { margin-top: 0.45em; }
+  .prose-od ul > li::before { content: ''; position: absolute; left: 0.2em; top: 0.72em; width: 6px; height: 6px; border-radius: 2px; background: var(--subtle); }
+  .prose-od ol { list-style: decimal; padding-left: 1.3em; }
+  .prose-od ol > li + li { margin-top: 0.45em; }
+  .prose-od code { font-family: var(--font-mono); font-size: 0.88em; color: var(--fg); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0.1em 0.35em; }
+  .prose-od pre { font-family: var(--font-mono); font-size: 13.5px; line-height: 1.65; background: var(--surface) !important; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; overflow-x: auto; }
+  .prose-od pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+  .prose-od table { width: 100%; border-collapse: collapse; font-size: 14.5px; display: block; overflow-x: auto; }
+  .prose-od th { text-align: left; color: var(--fg); font-weight: 600; }
+  .prose-od th, .prose-od td { padding: 10px 14px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .prose-od hr { border: 0; border-top: 1px solid var(--line); margin-block: 2.4em; }
+  .prose-od blockquote { border-left: 2px solid var(--fg); padding-left: 1em; color: var(--fg); }
+}
+
+/* Scroll reveal. Without JS nothing is hidden. */
+.js .reveal { opacity: 0; transform: translateY(14px); transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.8, 0.2, 1); transition-delay: var(--d, 0ms); }
+.js .reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .js .reveal { opacity: 1; transform: none; }
+}
+
+/* Loops in a scene only run while it is on screen. */
+[data-live]:not(.is-live) *,
+[data-live]:not(.is-live) *::before,
+[data-live]:not(.is-live) *::after {
+  animation-play-state: paused !important;
+}
+
+/* Shiki output. Light colours are inline; dark swaps to the --shiki-dark vars. */
+.od-code pre, .prose-od pre.astro-code {
+  margin: 0;
+  padding: 18px 20px 20px;
+  font-family: var(--font-mono);
+  font-size: 12.75px;
+  line-height: 1.7;
+  overflow-x: auto;
+  background: transparent !important;
+}
+.dark .astro-code,
+.dark .astro-code span {
+  color: var(--shiki-dark) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+}
+
+/* Above-the-fold entrance: plays on load, no JS needed, and never hides content for long. */
+.rise { animation: rise 800ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { .rise { animation: none; } }

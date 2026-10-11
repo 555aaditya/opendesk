@@ -1,0 +1,13 @@
+{
+  "actions": {
+    "cancel": "取消",
+    "save": "保存",
+    "close": "关闭",
+    "retry": "重试",
+    "apply": "应用",
+    "copy": "复制",
+    "back": "返回",
+    "continue": "继续"
+  },
+  "credits_other": "{{count}} 积分"
+}

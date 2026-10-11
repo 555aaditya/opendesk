@@ -1,0 +1,96 @@
+# Cloudflare Pages projects
+
+Three direct-upload Pages projects, created by Terraform
+(`deploy/terraform/modules/cloudflare`) with their custom domains. They are **not**
+connected to git: `deploy.yml` builds each one in GitHub Actions and uploads the
+output with `wrangler pages deploy`. Cloudflare never builds anything, so the build
+runs with the same Node, pnpm and lockfile as CI.
+
+| Project | Source | Build (in the source dir) | Output | Domain |
+| --- | --- | --- | --- | --- |
+| `opendesk-site` | `site/` (Astro) | `pnpm install --frozen-lockfile && pnpm build` | `site/dist` | `opendesk.sh` |
+| `opendesk-docs` | `docs/` (Starlight) | `pnpm install --frozen-lockfile && pnpm build` | `docs/dist` | `docs.opendesk.sh` |
+| `opendesk-app` | `web/` (Vite) | `pnpm install --frozen-lockfile && pnpm build` | `web/dist` | `app.opendesk.sh` |
+
+The files in this directory are copied into the app and docs build outputs before
+upload, unless that build already ships its own.
+
+## opendesk-site
+
+The site owns its headers (`site/public/_headers`, with the CSP hashes filled in
+by `site/scripts/postbuild.mjs`) and publishes the self-host installer itself:
+`site/scripts/prebuild.mjs` copies `deploy/install/install.sh` and its checksum
+into `public/`. Once a release exists, `deploy.yml` replaces both in `dist/` with
+that release's copies, so `opendesk.sh/install.sh` and the newest release's
+`install.sh.sha256` always agree:
+
+```sh
+(cd site && pnpm install --frozen-lockfile && pnpm build)
+gh release download --pattern install.sh --pattern install.sh.sha256 --dir site/dist --clobber
+(cd site/dist && sha256sum -c install.sh.sha256)
+wrangler pages deploy site/dist --project-name opendesk-site --branch main
+```
+
+## opendesk-docs
+
+```sh
+(cd docs && pnpm install --frozen-lockfile && pnpm build)
+[ -f docs/dist/_headers ] || cp deploy/cloudflare/pages/docs/_headers docs/dist/
+wrangler pages deploy docs/dist --project-name opendesk-docs --branch main
+```
+
+## opendesk-app
+
+The web app, the help center and the widget (`/widget/v1.js`) in one build.
+
+```sh
+(cd web && pnpm install --frozen-lockfile && pnpm build)
+cp deploy/cloudflare/pages/app/_headers deploy/cloudflare/pages/app/_redirects web/dist/
+node deploy/cloudflare/pages/app/write-config.mjs web/dist
+wrangler pages deploy web/dist --project-name opendesk-app --branch main
+```
+
+Runtime config: the self-hosted binary answers `/config.js` itself. On Pages,
+`write-config.mjs` writes the same file (`window.__OPENDESK__ = {apiUrl, gatewayUrl,
+posthogKey?, posthogHost?, turnstileSiteKey?, selfHosted: false}`) from these env vars:
+
+| Env | Default |
+| --- | --- |
+| `APP_API_URL` | `https://api.opendesk.sh` |
+| `APP_GATEWAY_URL` | `wss://gateway.opendesk.sh/socket` |
+| `WEB_POSTHOG_KEY` | unset (no analytics) |
+| `WEB_POSTHOG_HOST` | unset |
+| `TURNSTILE_SITE_KEY` | unset |
+
+Test it with `node --test deploy/cloudflare/pages/app/write-config.test.mjs`.
+
+Headers (`app/_headers`) match what the Go binary sends for the same files:
+
+- every path: CSP (`connect-src` the API, the gateway, PostHog and Turnstile;
+  `frame-ancestors 'none'`), `X-Frame-Options: DENY`, nosniff, HSTS, referrer policy
+- `/assets/*`: `public, max-age=31536000, immutable` (content-hashed)
+- `/widget/*`: `Access-Control-Allow-Origin: *`, `max-age=300`, no `X-Frame-Options`
+- `/config.js`: `no-store`
+- HTML: Pages' default `max-age=0, must-revalidate`
+
+SPA fallback needs no rule: an output with no top-level `404.html` makes Pages serve
+`index.html` for every path that is not a file.
+
+## Previews
+
+Because the projects are direct upload, a preview is just another branch:
+
+```sh
+wrangler pages deploy web/dist --project-name opendesk-app --branch pr-123
+# → https://pr-123.opendesk-app.pages.dev
+```
+
+A preview of the app talks to production unless `APP_API_URL` and `APP_GATEWAY_URL`
+point elsewhere when `write-config.mjs` runs, and the API only accepts its own
+`CORS_ORIGINS`, so previews of the app are for the UI, not for signing in.
+
+## Credentials
+
+`deploy.yml` uses a Cloudflare API token scoped to the account with
+**Cloudflare Pages: Edit** and **Workers Scripts: Edit** (for the email worker), stored
+as the `CLOUDFLARE_API_TOKEN` secret, plus `CLOUDFLARE_ACCOUNT_ID` as a variable.

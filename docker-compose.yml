@@ -1,0 +1,334 @@
+# opendesk, self-hosted on one machine and one domain.
+#
+#   curl -fsSL https://opendesk.sh/install.sh | sh     # the installer writes .env and runs this
+#
+# or, from a checkout, to try it or run what you built:
+#
+#   make selfhost-env          # writes .env with fresh secrets (never overwrites one)
+#   docker compose up -d --build
+#   open https://localhost     # Caddy's local CA; your browser will ask once
+#
+#   caddy      :80/:443  automatic HTTPS. /socket* -> realtime, everything else -> opendesk
+#   opendesk   API, workers, web app (SERVE_WEB) and an embedded NATS on the internal network
+#   realtime   the Phoenix gateway, joined to opendesk's NATS with NATS_TOKEN
+#   postgres   17 with pgvector, data in the postgres-data volume
+#
+# Optional profiles (COMPOSE_PROFILES in .env, or --profile on the command line):
+#   minio         S3-compatible attachment storage instead of the opendesk-data volume
+#   smtp-inbound  publish the built-in SMTP receiver so mail can be pointed at this host
+#   ollama        local models for the AI features, nothing leaves the machine
+#
+# Every app service has both image: and build:. `docker compose pull && docker
+# compose up -d` runs the published release pinned by OPENDESK_VERSION and
+# compiles nothing; `docker compose up --build` builds this checkout instead.
+#
+# Every setting lives in .env next to this file (deploy/self-host/.env.template
+# documents each one). The secrets are required: compose refuses to start
+# without them rather than starting with guessable ones.
+
+name: opendesk
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-hardening: &hardening
+  restart: unless-stopped
+  logging: *logging
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  opendesk:
+    <<: *hardening
+    image: ${OPENDESK_IMAGE:-ghcr.io/opendesk/opendesk}:${OPENDESK_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: deploy/docker/opendesk.Dockerfile
+      args:
+        VERSION: ${OPENDESK_VERSION:-dev}
+    environment:
+      OPENDESK_ENV: production
+      OPENDESK_ROLE: all
+      SERVE_WEB: "true"
+      HTTP_ADDR: ":8080"
+      DATA_DIR: /data
+      API_URL: ${OPENDESK_URL:-https://localhost}
+      APP_URL: ${OPENDESK_URL:-https://localhost}
+      GATEWAY_URL: ${OPENDESK_GATEWAY_URL:-wss://localhost/socket}
+      CORS_ORIGINS: ${OPENDESK_URL:-https://localhost}
+      SITE_URL: ${OPENDESK_URL:-https://localhost}
+      # Caddy is the only way in, and it replaces X-Forwarded-For with the peer.
+      TRUST_PROXY: "true"
+      SIGNUP_ENABLED: ${SIGNUP_ENABLED:-true}
+      DATABASE_URL: postgres://opendesk:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/opendesk?sslmode=disable
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (make selfhost-env or the installer generates it)}
+      CREDENTIALS_KEY: ${CREDENTIALS_KEY:?set CREDENTIALS_KEY in .env (32 bytes hex). Losing it makes stored mailbox credentials unreadable}
+      # Embedded NATS, reachable by the gateway on the internal network only.
+      NATS_LISTEN: 0.0.0.0:4222
+      NATS_TOKEN: ${NATS_TOKEN:?set NATS_TOKEN in .env}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-auto}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+      MAIL_DRIVER: ${MAIL_DRIVER:-log}
+      MAIL_FROM: ${MAIL_FROM:-opendesk <notifications@localhost>}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS: ${SMTP_TLS:-starttls}
+      SES_REGION: ${SES_REGION:-us-east-1}
+      INBOUND_DOMAIN: ${INBOUND_DOMAIN:-in.localhost}
+      INBOUND_SECRET: ${INBOUND_SECRET:?set INBOUND_SECRET in .env}
+      INBOUND_SMTP_ADDR: ${INBOUND_SMTP_ADDR:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT: ${MICROSOFT_TENANT:-common}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_NAME: ${OIDC_NAME:-SSO}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+      # AI (optional; contracts/ai.md). Empty provider = detected from the keys,
+      # and no key at all turns the AI features off. Self-hosted never bills.
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_FAST_MODEL: ${AI_FAST_MODEL:-}
+      EMBEDDINGS_DRIVER: ${EMBEDDINGS_DRIVER:-}
+      VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
+      EMBEDDINGS_MODEL: ${EMBEDDINGS_MODEL:-}
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+      WEB_POSTHOG_KEY: ${WEB_POSTHOG_KEY:-}
+      WEB_POSTHOG_HOST: ${WEB_POSTHOG_HOST:-}
+    volumes:
+      - ${OPENDESK_DATA:-opendesk-data}:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  realtime:
+    <<: *hardening
+    image: ${REALTIME_IMAGE:-ghcr.io/opendesk/realtime}:${OPENDESK_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: deploy/docker/realtime.Dockerfile
+      args:
+        VERSION: ${OPENDESK_VERSION:-dev}
+    environment:
+      PORT: "4000"
+      PHX_HOST: ${OPENDESK_DOMAIN:-localhost}
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE:?set SECRET_KEY_BASE in .env}
+      NATS_URL: nats://opendesk:4222
+      NATS_TOKEN: ${NATS_TOKEN:?set NATS_TOKEN in .env}
+      CHECK_ORIGINS: ${CHECK_ORIGINS:-${OPENDESK_URL:-https://localhost}}
+      # Caddy is the one proxy in front.
+      TRUSTED_PROXY_HOPS: "1"
+      POSTHOG_KEY: ${POSTHOG_KEY:-}
+      POSTHOG_HOST: ${POSTHOG_HOST:-https://us.i.posthog.com}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    networks: [internal]
+    depends_on:
+      opendesk:
+        condition: service_healthy
+
+  postgres:
+    <<: *hardening
+    # Postgres 17 with pgvector, for semantic search (contracts/ai.md).
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: opendesk
+      POSTGRES_DB: opendesk
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - ${OPENDESK_PG_DATA:-postgres-data}:/var/lib/postgresql/data
+    networks: [internal]
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opendesk -d opendesk"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+  caddy:
+    <<: *hardening
+    image: caddy:2.11-alpine
+    environment:
+      OPENDESK_DOMAIN: ${OPENDESK_DOMAIN:-localhost}
+      # Global options, e.g. "email you@example.com" for the ACME account.
+      CADDY_GLOBAL_OPTIONS: ${CADDY_GLOBAL_OPTIONS:-}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ${OPENDESK_CADDYFILE:-./deploy/caddy/Caddyfile}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    networks: [internal, edge]
+    depends_on:
+      opendesk:
+        condition: service_started
+
+  # ── profile: minio (alias: s3) ──────────────────────────────────────────
+  # S3-compatible attachment storage on this machine. MinIO stopped publishing
+  # container images, so this runs RustFS, which speaks the same S3 API and
+  # reads the MINIO_* variables. Set in .env:
+  #   COMPOSE_PROFILES=minio  STORAGE_DRIVER=s3  S3_ENDPOINT=http://s3:9000
+  #   S3_FORCE_PATH_STYLE=true  S3_BUCKET=opendesk  S3_REGION=us-east-1
+  #   S3_ACCESS_KEY_ID=...  S3_SECRET_ACCESS_KEY=...
+  # Attachment downloads are presigned URLs, so browsers must reach S3_ENDPOINT
+  # too; deploy/README.md shows how to publish it through Caddy.
+  s3:
+    <<: *hardening
+    profiles: [minio, s3]
+    image: ${S3_IMAGE:-rustfs/rustfs:1.0.1}
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-opendesk}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      RUSTFS_CONSOLE_ENABLE: "false"
+    # An empty key would fall back to the image's built-in credential, so it
+    # refuses to start instead.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - '[ -n "$$RUSTFS_SECRET_KEY" ] || { echo "set S3_SECRET_ACCESS_KEY in .env for the minio profile" >&2; exit 1; }; exec /entrypoint.sh rustfs /data'
+    volumes:
+      - ${OPENDESK_S3_DATA:-s3-data}:/data
+    networks: [internal]
+
+  # Creates the bucket once. curl signs the request itself (--aws-sigv4), so
+  # no S3 client image is needed.
+  s3-init:
+    profiles: [minio, s3]
+    image: curlimages/curl:8.22.0
+    restart: "no"
+    logging: *logging
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-opendesk}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
+      S3_BUCKET: ${S3_BUCKET:-opendesk}
+      S3_REGION: ${S3_REGION:-us-east-1}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        for i in $$(seq 1 30); do
+        code=$$(curl -s -o /dev/null -w '%{http_code}' --aws-sigv4 "aws:amz:$$S3_REGION:s3"
+        --user "$$S3_ACCESS_KEY_ID:$$S3_SECRET_ACCESS_KEY" -X PUT "http://s3:9000/$$S3_BUCKET");
+        case "$$code" in 200|409) echo "bucket $$S3_BUCKET ready"; exit 0;; esac;
+        sleep 2; done; echo "could not create bucket (last status $$code)"; exit 1
+    networks: [internal]
+    depends_on:
+      s3:
+        condition: service_started
+
+  # ── profile: smtp-inbound ───────────────────────────────────────────────
+  # Publishes the built-in SMTP receiver (INBOUND_SMTP_ADDR=:2525 in .env) on
+  # the host, so an MX record for INBOUND_DOMAIN can point at this machine.
+  # A plain TCP relay keeps opendesk itself unpublished.
+  smtp-inbound:
+    <<: *hardening
+    profiles: [smtp-inbound]
+    image: haproxy:3.2-alpine
+    ports:
+      - "${INBOUND_SMTP_PORT:-25}:2525"
+    configs:
+      - source: smtp-relay
+        target: /usr/local/etc/haproxy/haproxy.cfg
+    networks: [internal, edge]
+    depends_on:
+      opendesk:
+        condition: service_healthy
+
+  # ── profile: ollama ─────────────────────────────────────────────────────
+  # Fully local AI through Ollama's OpenAI-compatible API. Set in .env:
+  #   COMPOSE_PROFILES=ollama  AI_PROVIDER=openai  OPENAI_BASE_URL=http://ollama:11434/v1
+  #   OPENAI_API_KEY=ollama  AI_MODEL=llama3.1:8b  AI_FAST_MODEL=llama3.1:8b
+  #   EMBEDDINGS_DRIVER=openai  EMBEDDINGS_MODEL=nomic-embed-text
+  # ollama-init pulls AI_MODEL, AI_FAST_MODEL and EMBEDDINGS_MODEL once into
+  # the ollama-data volume. CPU works for the small models; a GPU needs the
+  # host's NVIDIA container toolkit and a deploy.resources block (deploy/README.md).
+  ollama:
+    <<: *hardening
+    profiles: [ollama]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.40.3}
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}
+    volumes:
+      - ${OPENDESK_OLLAMA_DATA:-ollama-data}:/root/.ollama
+    networks: [internal]
+
+  ollama-init:
+    profiles: [ollama]
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.40.3}
+    restart: "no"
+    logging: *logging
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      MODELS: ${AI_MODEL:-llama3.1:8b} ${AI_FAST_MODEL:-} ${EMBEDDINGS_MODEL:-nomic-embed-text}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        for i in $$(seq 1 30); do ollama list >/dev/null 2>&1 && break; sleep 2; done;
+        for m in $$(echo $$MODELS | tr ' ' '\n' | sort -u); do echo "pulling $$m"; ollama pull "$$m" || exit 1; done
+    networks: [internal]
+    depends_on:
+      ollama:
+        condition: service_started
+
+configs:
+  smtp-relay:
+    content: |
+      global
+        log stdout format raw local0
+      defaults
+        mode tcp
+        log global
+        timeout connect 5s
+        timeout client 5m
+        timeout server 5m
+      frontend smtp
+        bind :2525
+        default_backend opendesk
+      backend opendesk
+        server opendesk opendesk:2525 check
+
+networks:
+  # Postgres, NATS and the app ports live here and are never published.
+  internal:
+  # Only Caddy (and the optional SMTP relay) face the host.
+  edge:
+
+volumes:
+  opendesk-data:
+  postgres-data:
+  caddy-data:
+  caddy-config:
+  s3-data:
+  ollama-data:

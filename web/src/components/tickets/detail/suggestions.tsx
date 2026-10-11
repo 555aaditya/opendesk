@@ -1,0 +1,156 @@
+// Composer suggestions: "@" mentions (notes) and "/" saved replies. TipTap's
+// Suggestion utility drives the matching; a tiny store feeds one React popup.
+
+import { Extension, type Editor, type Range } from "@tiptap/core";
+import Mention from "@tiptap/extension-mention";
+import Suggestion, { type SuggestionKeyDownProps, type SuggestionOptions, type SuggestionProps } from "@tiptap/suggestion";
+import { PluginKey } from "@tiptap/pm/state";
+import { create } from "zustand";
+import { createPortal } from "react-dom";
+import { useEffect, useRef } from "react";
+import type { Member, SavedReply } from "@/lib/api/types";
+import { Avatar } from "@/components/ui/avatar";
+import { cn } from "@/lib/cn";
+import { MessageSquareText } from "lucide-react";
+
+export type SuggestItem =
+  | { kind: "mention"; id: string; label: string; sub?: string; avatar?: string }
+  | { kind: "reply"; id: string; label: string; sub?: string; html: string };
+
+type SuggestState = {
+  open: boolean;
+  kind: "mention" | "reply";
+  items: SuggestItem[];
+  index: number;
+  rect: DOMRect | null;
+  pick: ((item: SuggestItem) => void) | null;
+};
+
+export const useSuggest = create<SuggestState>(() => ({ open: false, kind: "mention", items: [], index: 0, rect: null, pick: null }));
+
+function renderer(kind: "mention" | "reply"): SuggestionOptions<SuggestItem>["render"] {
+  return () => ({
+    onStart: (p: SuggestionProps<SuggestItem>) => {
+      useSuggest.setState({ open: true, kind, items: p.items, index: 0, rect: p.clientRect?.() ?? null, pick: (i) => p.command(i) });
+    },
+    onUpdate: (p: SuggestionProps<SuggestItem>) => {
+      useSuggest.setState((s) => ({ items: p.items, index: Math.min(s.index, Math.max(0, p.items.length - 1)), rect: p.clientRect?.() ?? s.rect, pick: (i) => p.command(i) }));
+    },
+    onKeyDown: ({ event }: SuggestionKeyDownProps) => {
+      const s = useSuggest.getState();
+      if (!s.open) return false;
+      if (event.key === "Escape") {
+        useSuggest.setState({ open: false });
+        return true;
+      }
+      if (!s.items.length) return false;
+      if (event.key === "ArrowDown") {
+        useSuggest.setState({ index: (s.index + 1) % s.items.length });
+        return true;
+      }
+      if (event.key === "ArrowUp") {
+        useSuggest.setState({ index: (s.index - 1 + s.items.length) % s.items.length });
+        return true;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        s.pick?.(s.items[s.index]);
+        return true;
+      }
+      return false;
+    },
+    onExit: () => useSuggest.setState({ open: false, pick: null }),
+  });
+}
+
+export function mentionExtension(getMembers: () => Member[], enabled: () => boolean = () => true) {
+  return Mention.configure({
+    HTMLAttributes: { class: "mention" },
+    renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
+    suggestion: {
+      char: "@",
+      allow: () => enabled(),
+      items: ({ query }): SuggestItem[] =>
+        getMembers()
+          .filter((m) => m.role !== "viewer")
+          .filter((m) => !query || m.user.name.toLowerCase().includes(query.toLowerCase()) || m.user.email.toLowerCase().startsWith(query.toLowerCase()))
+          .slice(0, 6)
+          .map((m) => ({ kind: "mention", id: m.user.id, label: m.user.name, sub: m.user.email, avatar: m.user.avatar_url })),
+      render: renderer("mention"),
+    },
+  });
+}
+
+const replyKey = new PluginKey("saved-replies");
+
+export function savedReplyExtension(getReplies: () => SavedReply[]) {
+  return Extension.create({
+    name: "savedReplies",
+    addProseMirrorPlugins() {
+      return [
+        Suggestion<SuggestItem>({
+          editor: this.editor,
+          pluginKey: replyKey,
+          char: "/",
+          allowSpaces: false,
+          items: ({ query }) =>
+            getReplies()
+              .filter((r) => !query || r.shortcut.toLowerCase().includes(query.toLowerCase()) || r.title.toLowerCase().includes(query.toLowerCase()))
+              .slice(0, 8)
+              .map((r) => ({ kind: "reply", id: r.id, label: r.title, sub: r.shortcut ? `/${r.shortcut.replace(/^\//, "")}` : undefined, html: r.body_html })),
+          command: ({ editor, range, props }: { editor: Editor; range: Range; props: SuggestItem }) => {
+            if (props.kind !== "reply") return;
+            editor.chain().focus().deleteRange(range).insertContent(props.html).run();
+          },
+          render: renderer("reply"),
+        }),
+      ];
+    },
+  });
+}
+
+/** The floating list; mount once next to the editor. */
+export function SuggestionPopup() {
+  const { open, items, index, rect, pick, kind } = useSuggest();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector(`[data-i="${index}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [index]);
+  if (!open || !rect) return null;
+  const below = rect.bottom + 260 < window.innerHeight;
+  return createPortal(
+    <div
+      ref={ref}
+      role="listbox"
+      aria-label={kind === "mention" ? "Mention a teammate" : "Saved replies"}
+      data-floating
+      style={{ position: "fixed", left: Math.min(rect.left, window.innerWidth - 300), top: below ? rect.bottom + 6 : undefined, bottom: below ? undefined : window.innerHeight - rect.top + 6 }}
+      className="z-[80] max-h-[240px] w-[280px] overflow-y-auto rounded-lg border border-line bg-raised p-1 shadow-pop animate-pop-in"
+    >
+      <div className="label-caps px-2 pb-1 pt-1.5">{kind === "mention" ? "Mention" : "Saved replies"}</div>
+      {items.length === 0 ? (
+        <div className="px-2 py-3 text-xs text-fg-3">{kind === "mention" ? "No teammates match" : "No saved replies match"}</div>
+      ) : (
+        items.map((it, i) => (
+          <button
+            key={it.id}
+            type="button"
+            data-i={i}
+            role="option"
+            aria-selected={i === index}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              pick?.(it);
+            }}
+            onMouseEnter={() => useSuggest.setState({ index: i })}
+            className={cn("flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[12.5px]", i === index && "bg-hover")}
+          >
+            {it.kind === "mention" ? <Avatar name={it.label} src={it.avatar} size="xs" /> : <MessageSquareText className="size-3.5 text-fg-3" />}
+            <span className="min-w-0 flex-1 truncate">{it.label}</span>
+            {it.sub && <span className="mono shrink-0 truncate text-[11px] text-fg-4">{it.sub}</span>}
+          </button>
+        ))
+      )}
+    </div>,
+    document.body,
+  );
+}

@@ -1,0 +1,55 @@
+---
+title: API keys and webhooks
+description: Create API keys and webhook endpoints, inspect deliveries and send test events.
+---
+
+Both are settings: an `admin` user, or an API key with `settings:read` and `settings:write`. Creating, changing and deleting either is audit-logged.
+
+| method | path | |
+| --- | --- | --- |
+| `GET`, `POST` | `/v1/api-keys` | List or create API keys |
+| `GET`, `PATCH`, `DELETE` | `/v1/api-keys/{id}` | |
+| `GET`, `POST` | `/v1/webhooks` | List or create webhooks |
+| `GET`, `PATCH`, `DELETE` | `/v1/webhooks/{id}` | |
+| `GET` | `/v1/webhooks/{id}/deliveries` | Recent deliveries |
+| `POST` | `/v1/webhooks/{id}/test` | Send a `webhook.test` event |
+
+## API keys
+
+```ts
+type ApiKey = {
+  id: string; name: string; prefix: string; scopes: string[];
+  last_used_at: string | null; expires_at: string | null; created_at: string; created_by: UserRef | null;
+};
+```
+
+```sh
+curl https://api.opendesk.sh/v1/api-keys \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "OD-Workspace: $WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "CRM sync", "scopes": ["tickets:read", "contacts:read", "contacts:write"], "expires_at": "2027-01-01T00:00:00Z" }'
+```
+
+The response is the key plus `secret`, shown only this once. See [scopes](/api/authentication/#scopes).
+
+## Webhooks
+
+```ts
+type Webhook = { id: string; url: string; description: string; events: string[]; enabled: boolean; created_at: string };
+type WebhookDelivery = {
+  id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed";
+  attempts: number; response_code: number | null; duration_ms: number | null; created_at: string;
+};
+```
+
+```sh
+curl https://api.opendesk.sh/v1/webhooks \
+  -H "Authorization: Bearer od_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{ "url": "https://example.com/hooks/opendesk", "description": "Sync to warehouse", "events": ["ticket.created", "message.created"], "enabled": true }'
+```
+
+The response includes the signing `secret`, shown once. `events` lists event types, or `["*"]` for all. The URL must be HTTPS and must not point at a private, loopback or link-local address.
+
+See [Webhooks](/api/webhooks/) for payloads, signatures and retries.

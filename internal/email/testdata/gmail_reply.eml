@@ -1,0 +1,32 @@
+From: Carla Customer <{{FROM}}>
+To: {{TO}}
+Subject: Re: Printer is on fire [#{{N}}]
+Date: Sat, 10 Oct 2026 10:00:00 +0000
+Message-ID: <CAGmail{{ID}}@mail.gmail.com>
+In-Reply-To: {{IRT}}
+References: <first{{ID}}@mail.customer.test> {{IRT}}
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="000000000000gmailboundary"
+
+--000000000000gmailboundary
+Content-Type: text/plain; charset="UTF-8"
+
+Thanks, unplugging it worked.
+
+On Sat, Oct 10, 2026 at 9:30 AM Acme Support <support@acme.test>
+wrote:
+
+> Please unplug it right away.
+>
+--000000000000gmailboundary
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr">Thanks, unplugging it <b>worked</b>.<div><br></div><div>Ca=
+rla</div></div><br><div class=3D"gmail_quote gmail_quote_container"><div di=
+r=3D"ltr" class=3D"gmail_attr">On Sat, Oct 10, 2026 at 9:30 AM Acme Support=
+ &lt;support@acme.test&gt; wrote:<br></div><blockquote class=3D"gmail_quote=
+" style=3D"margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);=
+padding-left:1ex"><p>Please unplug it right away.</p></blockquote></div>
+
+--000000000000gmailboundary--

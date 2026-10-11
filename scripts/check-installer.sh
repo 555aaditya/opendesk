@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#
+# Checks the one-command installer served at https://opendesk.sh/install.sh,
+# against the exact bytes `curl -fsSL https://opendesk.sh/install.sh | sh` runs:
+#
+#   * it parses as POSIX sh in dash (what /bin/sh is on Debian and Ubuntu)
+#   * shellcheck -s sh has nothing to say about it, or about opendesk-ctl
+#   * --help and --print-env work with no terminal and no Docker
+#   * a real --no-start install writes a .env docker compose accepts, and a
+#     second run keeps every secret (idempotency is the data-loss guard)
+#   * a release file that does not match SHA256SUMS stops the install
+#   * install.sh.sha256 matches install.sh
+#
+# Run by `make installer-check` and the Installer job in CI.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+SCRIPT=deploy/install/install.sh
+SUMFILE=deploy/install/install.sh.sha256
+
+fail() { printf '\n\033[31m✗\033[0m %s\n' "$*" >&2; exit 1; }
+pass() { printf '\033[32m✓\033[0m %s\n' "$*"; }
+
+[[ -f $SCRIPT ]] || fail "$SCRIPT is missing"
+
+if command -v dash >/dev/null 2>&1; then
+  dash -n "$SCRIPT" || fail "the installer is not valid POSIX sh (dash -n)"
+  dash -n deploy/self-host/opendesk-ctl || fail "opendesk-ctl is not valid POSIX sh"
+  pass "parses as POSIX sh (dash)"
+else
+  sh -n "$SCRIPT" || fail "the installer does not parse"
+  pass "parses (dash not installed; the POSIX check was approximate)"
+fi
+
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck -s sh "$SCRIPT" deploy/self-host/opendesk-ctl deploy/self-host/gen-env.sh \
+    deploy/install/stage-assets.sh deploy/install/gen-sha256.sh ||
+    fail "shellcheck found problems"
+  pass "shellcheck clean ($(shellcheck --version | awk '/^version:/ {print $2}'))"
+else
+  echo "· shellcheck not installed; skipped"
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd deploy/install && sha256sum -c --status install.sh.sha256) ||
+    fail "$SUMFILE does not match install.sh; run: make installer-sha"
+else
+  (cd deploy/install && shasum -a 256 -c --status install.sh.sha256) ||
+    fail "$SUMFILE does not match install.sh; run: make installer-sha"
+fi
+pass "install.sh.sha256 matches"
+
+sh "$SCRIPT" --help >/dev/null </dev/null || fail "--help failed"
+pass "--help works"
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+sh deploy/install/stage-assets.sh "$work/assets" >/dev/null
+export OPENDESK_ASSETS_URL="file://$work/assets"
+
+sh "$SCRIPT" --print-env --no-color --domain desk.example.com --email ops@example.com \
+  --version v0.0.0-test --dir "$work/none" >"$work/env" 2>/dev/null </dev/null || fail "--print-env failed"
+for key in OPENDESK_VERSION OPENDESK_DOMAIN OPENDESK_URL OPENDESK_GATEWAY_URL AUTH_SECRET \
+  CREDENTIALS_KEY SECRET_KEY_BASE NATS_TOKEN INBOUND_SECRET POSTGRES_PASSWORD; do
+  value=$(sed -n "s/^${key}=//p" "$work/env" | tail -1)
+  [[ -n $value ]] || fail "--print-env left $key empty"
+done
+grep -qx 'OPENDESK_URL=https://desk.example.com' "$work/env" || fail "OPENDESK_URL was not derived from --domain"
+grep -qx 'CADDY_GLOBAL_OPTIONS=email ops@example.com' "$work/env" || fail "--email did not reach CADDY_GLOBAL_OPTIONS"
+[[ ! -e $work/none ]] || fail "--print-env created the install directory"
+pass "--print-env renders every secret and writes nothing"
+
+sh "$SCRIPT" --yes --no-start --no-color --domain localhost --version v0.0.0-test --dir "$work/inst" >/dev/null </dev/null ||
+  fail "a --no-start install failed"
+for f in .env docker-compose.yml Caddyfile opendesk-ctl .opendesk-install; do
+  [[ -f $work/inst/$f ]] || fail "the install did not write $f"
+done
+mode=$(stat -c '%a' "$work/inst/.env" 2>/dev/null || stat -f '%Lp' "$work/inst/.env")
+[[ $mode == 600 ]] || fail ".env is mode $mode, not 600"
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  (cd "$work/inst" && docker compose config -q) || fail "docker compose rejects the installed files"
+  (cd "$work/inst" && COMPOSE_PROFILES=minio,smtp-inbound S3_SECRET_ACCESS_KEY=x docker compose config -q) ||
+    fail "docker compose rejects the installed files with every profile"
+  pass "docker compose accepts the install, with and without profiles"
+fi
+before=$(grep -E '^(AUTH_SECRET|CREDENTIALS_KEY|SECRET_KEY_BASE|NATS_TOKEN|INBOUND_SECRET|POSTGRES_PASSWORD)=' "$work/inst/.env")
+echo "MY_SETTING=kept" >>"$work/inst/.env"
+sed -i.orig 's/^SIGNUP_ENABLED=.*/SIGNUP_ENABLED=false/' "$work/inst/.env"
+sh "$SCRIPT" --yes --no-start --no-color --version v0.0.0-test2 --dir "$work/inst" >/dev/null </dev/null ||
+  fail "a second install failed"
+after=$(grep -E '^(AUTH_SECRET|CREDENTIALS_KEY|SECRET_KEY_BASE|NATS_TOKEN|INBOUND_SECRET|POSTGRES_PASSWORD)=' "$work/inst/.env")
+[[ $before == "$after" ]] || fail "a second run changed a secret"
+grep -qx 'MY_SETTING=kept' "$work/inst/.env" || fail "a second run dropped a setting it does not own"
+grep -qx 'SIGNUP_ENABLED=false' "$work/inst/.env" || fail "a second run reset an operator's setting"
+grep -qx 'OPENDESK_DOMAIN=localhost' "$work/inst/.env" || fail "a second run forgot the domain"
+grep -qx 'OPENDESK_VERSION=v0.0.0-test2' "$work/inst/.env" || fail "--version did not move the pin"
+pass "a second run keeps secrets and settings and moves the version pin"
+
+# AI answers: --ollama adds the profile next to the operator's own, and a
+# later Anthropic key removes it again without leaving the local model behind.
+sed -i.orig 's/^COMPOSE_PROFILES=.*/COMPOSE_PROFILES=smtp-inbound/' "$work/inst/.env"
+sh "$SCRIPT" --yes --no-start --no-color --ollama --version v0.0.0-test2 --dir "$work/inst" >/dev/null </dev/null ||
+  fail "an --ollama install failed"
+grep -qx 'COMPOSE_PROFILES=smtp-inbound,ollama' "$work/inst/.env" || fail "--ollama did not add the profile next to the existing one"
+grep -qx 'OPENAI_BASE_URL=http://ollama:11434/v1' "$work/inst/.env" || fail "--ollama did not point the provider at the container"
+grep -qx 'EMBEDDINGS_DRIVER=openai' "$work/inst/.env" || fail "--ollama did not enable local embeddings"
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  (cd "$work/inst" && docker compose config -q) || fail "docker compose rejects the --ollama install"
+fi
+OPENDESK_AI_KEY=sk-ant-test sh "$SCRIPT" --yes --no-start --no-color --version v0.0.0-test2 --dir "$work/inst" >/dev/null </dev/null ||
+  fail "an install with OPENDESK_AI_KEY failed"
+grep -qx 'COMPOSE_PROFILES=smtp-inbound' "$work/inst/.env" || fail "switching to Anthropic did not remove the ollama profile"
+grep -qx 'AI_PROVIDER=anthropic' "$work/inst/.env" || fail "OPENDESK_AI_KEY did not select Anthropic"
+grep -qx 'ANTHROPIC_API_KEY=sk-ant-test' "$work/inst/.env" || fail "OPENDESK_AI_KEY was not written"
+grep -qx 'AI_MODEL=' "$work/inst/.env" || fail "switching provider left the previous model behind"
+sh "$SCRIPT" --yes --no-start --no-color --ai-url http://10.0.0.5:11434/v1 --ai-model qwen3 --version v0.0.0-test2 --dir "$work/inst" >/dev/null </dev/null ||
+  fail "an install with --ai-url failed"
+grep -qx 'AI_PROVIDER=openai' "$work/inst/.env" && grep -qx 'OPENAI_BASE_URL=http://10.0.0.5:11434/v1' "$work/inst/.env" &&
+  grep -qx 'AI_MODEL=qwen3' "$work/inst/.env" && grep -qx 'ANTHROPIC_API_KEY=' "$work/inst/.env" ||
+  fail "--ai-url did not configure an OpenAI-compatible provider"
+after=$(grep -E '^(AUTH_SECRET|CREDENTIALS_KEY|SECRET_KEY_BASE|NATS_TOKEN|INBOUND_SECRET|POSTGRES_PASSWORD)=' "$work/inst/.env")
+[[ $before == "$after" ]] || fail "an AI change touched a secret"
+pass "AI answers (--ollama, an Anthropic key, --ai-url) set the provider and merge compose profiles"
+
+mkdir -p "$work/other" && touch "$work/other/something"
+if sh "$SCRIPT" --yes --no-start --no-color --domain localhost --version v0.0.0-test --dir "$work/other" >/dev/null 2>&1 </dev/null; then
+  fail "the installer took over a non-empty directory it did not create"
+fi
+pass "refuses a non-empty directory it did not create"
+
+echo "# tampered" >>"$work/assets/docker-compose.yml"
+if sh "$SCRIPT" --yes --no-start --no-color --domain localhost --version v0.0.0-test --dir "$work/tampered" >/dev/null 2>&1 </dev/null; then
+  fail "the installer accepted a docker-compose.yml that does not match SHA256SUMS"
+fi
+[[ ! -e $work/tampered/.env ]] || fail "a failed checksum still wrote files"
+pass "refuses release files that do not match SHA256SUMS"
+
+echo "installer checks passed"

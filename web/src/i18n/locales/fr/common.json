@@ -1,0 +1,15 @@
+{
+  "actions": {
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "apply": "Appliquer",
+    "copy": "Copier",
+    "back": "Retour",
+    "continue": "Continuer"
+  },
+  "credits_one": "{{count}} crédit",
+  "credits_many": "{{count}} de crédits",
+  "credits_other": "{{count}} crédits"
+}
