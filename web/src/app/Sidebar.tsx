@@ -328,7 +328,7 @@ export function WorkspaceGlyph({ name, small }: { name: string; small?: boolean 
       aria-hidden
       className={cn(
         "flex shrink-0 items-center justify-center bg-inverse font-semibold tracking-tight text-inverse-fg",
-        small ? "size-4 rounded-[4px] text-[9px] !text-inverse-fg" : "size-6 rounded-md text-[10.5px]",
+        small ? "size-4 rounded-sm text-[9px] !text-inverse-fg" : "size-6 rounded-md text-[10.5px]",
       )}
     >
       {name.trim().charAt(0).toUpperCase() || "?"}
@@ -359,7 +359,7 @@ export function ThemeSwitch() {
               setTheme(o.v);
             }}
             className={cn(
-              "flex h-[22px] w-7 items-center justify-center rounded-[5px] text-fg-3 transition-[color,background-color,box-shadow] hover:text-fg [&_svg]:size-3.5",
+              "flex h-[22px] w-7 items-center justify-center rounded-sm text-fg-3 transition-[color,background-color,box-shadow] hover:text-fg [&_svg]:size-3.5",
               pref === o.v && "bg-surface text-fg shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/0.06)]",
             )}
           >

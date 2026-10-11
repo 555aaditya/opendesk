@@ -18,8 +18,8 @@ export function Toaster() {
             "flex w-[340px] items-center gap-2.5 rounded-lg border border-line bg-raised px-3 py-2.5 text-[12.5px] text-fg shadow-float",
           title: "font-medium",
           description: "text-fg-3 text-xs",
-          actionButton: "ml-auto h-6 rounded-[6px] bg-inverse px-2 text-xs font-medium text-inverse-fg",
-          cancelButton: "h-6 rounded-[6px] px-2 text-xs text-fg-3 hover:bg-hover",
+          actionButton: "ml-auto h-6 rounded-md bg-inverse px-2 text-xs font-medium text-inverse-fg",
+          cancelButton: "h-6 rounded-md px-2 text-xs text-fg-3 hover:bg-hover",
           icon: "[&_svg]:size-3.5",
         },
       }}

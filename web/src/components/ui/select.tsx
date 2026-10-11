@@ -52,7 +52,7 @@ export function Select<V extends string>({
               <S.Item
                 key={o.value}
                 value={o.value}
-                className="relative flex h-7 cursor-default select-none items-center gap-2 rounded-[6px] pl-2 pr-7 text-[12.5px] text-fg outline-none data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0"
+                className="relative flex h-7 cursor-default select-none items-center gap-2 rounded-md pl-2 pr-7 text-[12.5px] text-fg outline-none data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0"
               >
                 {o.icon}
                 <S.ItemText>{o.label}</S.ItemText>

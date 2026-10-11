@@ -44,7 +44,7 @@ export function BulkBar({ ids, onClear, spamView }: { ids: string[]; onClear: ()
             placeholder="Assign to"
             value={null}
             items={[
-              { value: "__none", label: "Unassigned", icon: <span className="size-4 rounded-full border border-dashed border-line-strong" /> },
+              { value: "__none", label: "Unassigned", icon: <span className="size-4 rounded-[3px] border border-dashed border-line-strong" /> },
               ...(members ?? [])
                 .filter((m) => m.role !== "viewer")
                 .map((m) => ({ value: m.user.id, label: m.user.name, icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> })),

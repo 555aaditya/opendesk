@@ -22,7 +22,7 @@ export function Badge({
   }[tone];
   const dotCls = { ok: "bg-ok", warn: "bg-warn", danger: "bg-danger", neutral: "bg-fg-4", solid: "bg-inverse-fg", outline: "bg-fg-4" }[tone];
   return (
-    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-[5px] px-1.5 text-[11px] font-medium", toneCls, className)}>
+    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 text-[11px] font-medium", toneCls, className)}>
       {(dot || tone === "ok" || tone === "warn" || tone === "danger") && <span className={cn("size-1.5 rounded-full", dotCls)} />}
       {children}
     </span>
@@ -36,7 +36,7 @@ export function Dot({ tone, className, pulse }: { tone: "ok" | "warn" | "danger"
 
 export function TagChip({ name, onRemove, className }: { name: string; onRemove?: () => void; className?: string }) {
   return (
-    <span className={cn("inline-flex h-[18px] max-w-[140px] shrink-0 items-center gap-1 rounded-[5px] border border-line bg-surface pl-1.5 text-[11px] text-fg-2", onRemove ? "pr-0.5" : "pr-1.5", className)}>
+    <span className={cn("inline-flex h-[18px] max-w-[140px] shrink-0 items-center gap-1 rounded-sm border border-line bg-surface pl-1.5 text-[11px] text-fg-2", onRemove ? "pr-0.5" : "pr-1.5", className)}>
       <span className="size-1 shrink-0 rounded-full bg-fg-4" />
       <span className="truncate">{name}</span>
       {onRemove && (
@@ -47,7 +47,7 @@ export function TagChip({ name, onRemove, className }: { name: string; onRemove?
             e.stopPropagation();
             onRemove();
           }}
-          className="flex size-3.5 items-center justify-center rounded-[3px] text-fg-4 hover:bg-hover hover:text-fg"
+          className="flex size-3.5 items-center justify-center rounded-xs text-fg-4 hover:bg-hover hover:text-fg"
         >
           <svg viewBox="0 0 8 8" className="size-2" aria-hidden>
             <path d="M1.5 1.5l5 5M6.5 1.5l-5 5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />

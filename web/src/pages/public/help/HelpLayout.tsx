@@ -29,7 +29,7 @@ export default function HelpLayout() {
       <header className="sticky top-0 z-10 border-b border-line bg-surface/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[760px] items-center gap-4 px-5">
           <Link to="/help/$slug" params={{ slug }} className="flex min-w-0 items-center gap-2.5">
-            <span className="flex size-6 shrink-0 items-center justify-center rounded-[7px] bg-inverse text-[11.5px] font-semibold text-inverse-fg">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-inverse text-[11.5px] font-semibold text-inverse-fg">
               {title.trim().charAt(0).toUpperCase()}
             </span>
             <bdi className="truncate text-[14px] font-semibold tracking-[-0.015em]">{title}</bdi>

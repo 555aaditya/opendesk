@@ -28,7 +28,7 @@ export function AgentTable({ rows }: { rows: ReportsOverview["by_agent"] }) {
               <span className="flex items-center gap-3">
                 <span className="mono w-8 shrink-0 text-right text-xs tabular-nums">{r.solved}</span>
                 <span className="h-1.5 flex-1">
-                  <span className="block h-full rounded-r-[3px] bg-fg-2" style={{ width: `${(r.solved / max) * 100}%` }} />
+                  <span className="block h-full rounded-r-xs bg-fg-2" style={{ width: `${(r.solved / max) * 100}%` }} />
                 </span>
               </span>
             </td>

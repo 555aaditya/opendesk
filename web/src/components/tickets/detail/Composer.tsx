@@ -52,7 +52,7 @@ function EmailChips({ label, values, onChange }: { label: string; values: string
       <span className="w-7 shrink-0 text-xs text-fg-3">{label}</span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
         {values.map((v) => (
-          <span key={v} className="mono inline-flex h-5 items-center gap-1 rounded-[5px] bg-hover pl-1.5 pr-0.5 text-[11.5px]" data-ph-mask>
+          <span key={v} className="mono inline-flex h-5 items-center gap-1 rounded-sm bg-hover pl-1.5 pr-0.5 text-[11.5px]" data-ph-mask>
             {v}
             <button type="button" aria-label={`Remove ${v}`} onClick={() => onChange(values.filter((x) => x !== v))} className="flex size-4 items-center justify-center rounded text-fg-4 hover:text-fg">
               <X className="size-3" />
@@ -284,7 +284,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
             }
           }}
           className={cn(
-            "relative rounded-[10px] border shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow,background-color] duration-150 focus-within:border-fg-4 focus-within:shadow-[0_0_0_3px_var(--focus)]",
+            "relative rounded-lg border shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow,background-color] duration-150 focus-within:border-fg-4 focus-within:shadow-[0_0_0_3px_var(--focus)]",
             note ? "border-dashed border-note-line bg-note" : "border-line bg-surface",
           )}
         >
@@ -378,7 +378,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
             <div className="flex flex-wrap gap-1.5 px-3 pb-2.5">
               {uploads.map((u) => (
                 <span key={u.key} className={cn("flex h-8 max-w-[220px] items-center gap-2 rounded-md border bg-surface pl-1 pr-1", u.status === "error" ? "border-[color-mix(in_srgb,var(--danger)_40%,var(--line))]" : "border-line")}>
-                  {u.preview ? <img src={u.preview} alt="" className="size-6 rounded-[4px] object-cover" /> : <span className="flex size-6 items-center justify-center rounded-[4px] bg-hover"><Paperclip className="size-3 text-fg-3" /></span>}
+                  {u.preview ? <img src={u.preview} alt="" className="size-6 rounded-sm object-cover" /> : <span className="flex size-6 items-center justify-center rounded-sm bg-hover"><Paperclip className="size-3 text-fg-3" /></span>}
                   <span className="min-w-0">
                     <span className="block truncate text-[11.5px]">{u.file.name}</span>
                     <span className="mono block text-[10px] text-fg-4">{u.status === "uploading" ? "Uploading" : u.status === "error" ? "Failed" : bytes(u.file.size)}</span>
@@ -395,7 +395,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
             </div>
           )}
           {dragging && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-[10px] border-2 border-dashed border-fg-3 bg-surface/90 text-[13px] font-medium text-fg-2">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg border-2 border-dashed border-fg-3 bg-surface/90 text-[13px] font-medium text-fg-2">
               Drop files to attach
             </div>
           )}

@@ -228,7 +228,7 @@ export default function TicketDetail({
             <>
               <TicketNumber n={t.number} className="shrink-0" />
               <SubjectEditor value={t.subject} disabled={!canEdit} onSave={(subject) => update.mutate({ id: t.id, patch: { subject } })} />
-              {t.spam && <span className="shrink-0 rounded-[5px] bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-2">Spam</span>}
+              {t.spam && <span className="shrink-0 rounded-sm bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-2">Spam</span>}
             </>
           ) : (
             <Skeleton className="h-3 w-64" />

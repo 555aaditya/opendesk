@@ -232,6 +232,16 @@ export default function InboxPage() {
                 action={
                   folder?.id === "unassigned" || folder?.id === "open" ? (
                     <Button onClick={() => shell.newTicket()}>New ticket</Button>
+                  ) : folder?.id === "mine" || folder?.id === "pending" ? (
+                    <Button
+                      onClick={() =>
+                        void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } })
+                      }
+                    >
+                      Go to Unassigned
+                    </Button>
+                  ) : !folder ? (
+                    <Button onClick={() => void navigate({ to: "/settings/views" })}>Edit views</Button>
                   ) : undefined
                 }
               />

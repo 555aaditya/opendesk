@@ -146,7 +146,7 @@ export function TicketProperties({ t, assignOpen, onAssignOpenChange }: { t: Tic
             value={t.assignee?.id ?? "__none"}
             placeholder="Assign to"
             items={[
-              { value: "__none", label: "Unassigned", icon: <span className="size-4 rounded-full border border-dashed border-line-strong" /> },
+              { value: "__none", label: "Unassigned", icon: <span className="size-4 rounded-[3px] border border-dashed border-line-strong" /> },
               ...(members ?? [])
                 .filter((m) => m.role !== "viewer")
                 .map((m) => ({ value: m.user.id, label: m.user.name, keywords: [m.user.email], icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> })),
@@ -154,7 +154,7 @@ export function TicketProperties({ t, assignOpen, onAssignOpenChange }: { t: Tic
             onSelect={(v) => patch({ assignee_id: v === "__none" ? null : v })}
             trigger={
               <PropButton disabled={!canEdit} placeholder={!t.assignee}>
-                {t.assignee ? <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="xs" /> : <span className="size-4 rounded-full border border-dashed border-line-strong" />}
+                {t.assignee ? <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="xs" /> : <span className="size-4 rounded-[3px] border border-dashed border-line-strong" />}
                 <span className="truncate">{t.assignee?.name ?? "Unassigned"}</span>
               </PropButton>
             }
@@ -190,7 +190,7 @@ export function TicketProperties({ t, assignOpen, onAssignOpenChange }: { t: Tic
                 onChange={(v) => patch({ tags: v })}
                 onCreate={(name) => patch({ tags: [...tagNames, name] })}
                 trigger={
-                  <button type="button" className="inline-flex h-[18px] items-center rounded-[5px] border border-dashed border-line-strong px-1.5 text-[11px] text-fg-3 hover:border-fg-4 hover:text-fg">
+                  <button type="button" className="inline-flex h-[18px] items-center rounded-sm border border-dashed border-line-strong px-1.5 text-[11px] text-fg-3 hover:border-fg-4 hover:text-fg">
                     {t.tags.length ? "Add" : "Add tag"}
                   </button>
                 }

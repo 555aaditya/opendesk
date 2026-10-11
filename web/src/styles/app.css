@@ -122,11 +122,13 @@
   --shadow-pop: var(--shadow-pop);
   --shadow-float: var(--shadow-float);
 
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-2xl: 18px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius: 4px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 8px;
+  --radius-2xl: 12px;
 
   --text-2xs: 11px;
   --text-2xs--line-height: 16px;
@@ -148,6 +150,12 @@
   --animate-slide-in-right: slide-in-right 220ms var(--ease-out-soft);
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+  --animate-module-snap: module-snap 220ms var(--ease-out-expo) both;
+}
+
+@keyframes module-snap {
+  from { opacity: 0; transform: scale(0.82); }
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes pop-in {

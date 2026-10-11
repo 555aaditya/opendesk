@@ -22,7 +22,15 @@ export function initials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const sizes = { xs: "size-4 text-[7.5px]", sm: "size-5 text-[8.5px]", md: "size-6 text-[9.5px]", lg: "size-8 text-[11px]", xl: "size-10 text-[13px]", "2xl": "size-14 text-[17px]" };
+// Rounded squares, echoing the square modules of the mark. Only presence dots stay round.
+const sizes = {
+  xs: "size-4 rounded-[3px] text-[7.5px]",
+  sm: "size-5 rounded-sm text-[8.5px]",
+  md: "size-6 rounded-sm text-[9.5px]",
+  lg: "size-8 rounded-md text-[11px]",
+  xl: "size-10 rounded-lg text-[13px]",
+  "2xl": "size-14 rounded-xl text-[17px]",
+};
 
 export function Avatar({
   name,
@@ -42,7 +50,7 @@ export function Avatar({
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden rounded-full font-semibold tracking-[-0.02em]",
+        "relative inline-flex shrink-0 select-none items-center justify-center overflow-hidden font-semibold tracking-[-0.02em]",
         sizes[size],
         !src || broken ? shade : "bg-hover",
         ring && "ring-2 ring-surface",
@@ -84,7 +92,7 @@ export function AvatarStack({
         </span>
       ))}
       {extra > 0 && (
-        <span className="relative inline-flex size-5 items-center justify-center rounded-full bg-hover text-[9px] font-medium text-fg-2 ring-2 ring-surface">
+        <span className="relative inline-flex size-5 items-center justify-center rounded-sm bg-hover text-[9px] font-medium text-fg-2 ring-2 ring-surface">
           +{extra}
         </span>
       )}

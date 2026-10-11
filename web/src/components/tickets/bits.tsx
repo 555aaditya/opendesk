@@ -105,7 +105,7 @@ export function SlaBadge({ ticket, className }: { ticket: Pick<Ticket, "sla" | "
     <Tooltip content={`${s.kind} ${s.left < 0 ? "overdue" : "due"}`}>
       <span
         className={cn(
-          "mono inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[10.5px] tabular-nums",
+          "mono inline-flex h-[18px] shrink-0 items-center gap-1 rounded-sm px-1.5 text-[10.5px] tabular-nums",
           s.tone === "danger" ? "bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] text-danger-fg" : s.tone === "warn" ? "border border-line text-fg-2" : "text-fg-3",
           className,
         )}

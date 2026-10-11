@@ -56,7 +56,7 @@ export function WidgetPreview({
       {enabled ? (
         <>
           <div
-            className="absolute bottom-[84px] right-5 flex h-[440px] w-[320px] flex-col overflow-hidden rounded-[14px] text-[12.5px]"
+            className="absolute bottom-[84px] right-5 flex h-[440px] w-[320px] flex-col overflow-hidden rounded-xl text-[12.5px]"
             style={{ background: c.panel, color: c.fg, boxShadow: `0 0 0 1px ${c.line}, 0 16px 40px -12px rgb(0 0 0 / ${dark ? 0.7 : 0.25})` }}
           >
             <div className="flex items-center gap-2.5 px-3.5 py-3" style={{ borderBottom: `1px solid ${c.line}` }}>
@@ -74,28 +74,28 @@ export function WidgetPreview({
             </div>
 
             <div className="flex flex-1 flex-col gap-2.5 overflow-hidden px-3.5 py-3.5">
-              <div className="max-w-[85%] self-start rounded-[12px] rounded-bl-[4px] px-3 py-2 leading-[18px]" style={{ background: c.bubble }}>
+              <div className="max-w-[85%] self-start rounded-xl rounded-bl-sm px-3 py-2 leading-[18px]" style={{ background: c.bubble }}>
                 {greeting.trim() || "Hi there. How can we help?"}
               </div>
               {requireEmail ? (
-                <div className="mt-1 flex flex-col gap-2 rounded-[12px] p-3" style={{ border: `1px solid ${c.line}` }}>
+                <div className="mt-1 flex flex-col gap-2 rounded-xl p-3" style={{ border: `1px solid ${c.line}` }}>
                   <div className="text-[12px] font-medium">Where can we reach you?</div>
                   <div className="text-[11.5px]" style={{ color: c.fg2 }}>
                     We'll reply here, and by email if you leave.
                   </div>
-                  <div className="flex h-8 items-center rounded-[8px] px-2.5 text-[12px]" style={{ border: `1px solid ${c.line}`, color: c.fg2 }}>
+                  <div className="flex h-8 items-center rounded-lg px-2.5 text-[12px]" style={{ border: `1px solid ${c.line}`, color: c.fg2 }}>
                     you@company.com
                   </div>
-                  <div className="flex h-8 items-center justify-center rounded-[8px] text-[12px] font-medium" style={{ background: accent, color: onAccent }}>
+                  <div className="flex h-8 items-center justify-center rounded-lg text-[12px] font-medium" style={{ background: accent, color: onAccent }}>
                     Start chat
                   </div>
                 </div>
               ) : (
                 <>
-                  <div className="max-w-[85%] self-end rounded-[12px] rounded-br-[4px] px-3 py-2 leading-[18px]" style={{ background: accent, color: onAccent }}>
+                  <div className="max-w-[85%] self-end rounded-xl rounded-br-sm px-3 py-2 leading-[18px]" style={{ background: accent, color: onAccent }}>
                     Can I export a notebook as PDF?
                   </div>
-                  <div className="max-w-[85%] self-start rounded-[12px] rounded-bl-[4px] px-3 py-2 leading-[18px]" style={{ background: c.bubble }}>
+                  <div className="max-w-[85%] self-start rounded-xl rounded-bl-sm px-3 py-2 leading-[18px]" style={{ background: c.bubble }}>
                     Yes. Open the notebook, then File, Export, PDF. Want me to send the guide?
                   </div>
                   <div className="flex items-center gap-1.5 self-start pl-1 text-[11px]" style={{ color: c.fg2 }}>
@@ -110,7 +110,7 @@ export function WidgetPreview({
               )}
             </div>
 
-            <div className="m-2.5 flex items-center gap-2 rounded-[10px] px-3 py-2" style={{ border: `1px solid ${c.line}` }}>
+            <div className="m-2.5 flex items-center gap-2 rounded-lg px-3 py-2" style={{ border: `1px solid ${c.line}` }}>
               <span className="flex-1" style={{ color: c.fg2 }}>
                 Write a message
               </span>

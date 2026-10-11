@@ -14,6 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { StatusIcon } from "../bits";
 import { useMergeTicket } from "../useTicketActions";
+import { EmptyState } from "@/components/ui/empty";
 
 export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; open: boolean; onOpenChange: (o: boolean) => void }) {
   const [term, setTerm] = useState("");
@@ -76,7 +77,7 @@ export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; op
             <Spinner className="text-fg-4" />
           </div>
         ) : !list.length ? (
-          <p className="py-8 text-center text-[12.5px] text-fg-3">No tickets found</p>
+          <EmptyState compact lit={2} title="No tickets found" description="Search by subject, number or contact." />
         ) : (
           list.map((t) => (
             <button

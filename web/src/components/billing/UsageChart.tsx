@@ -31,7 +31,7 @@ export function UsageLegend({ series }: { series: Key[] }) {
     <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1">
       {series.map((k) => (
         <span key={k} className="flex items-center gap-1.5 text-xs text-fg-2">
-          <span className="size-2 rounded-[2px]" style={{ background: shadeOf(series, k) }} />
+          <span className="size-2 rounded-xs" style={{ background: shadeOf(series, k) }} />
           {t(`features.${k}`)}
         </span>
       ))}
@@ -145,7 +145,7 @@ export function UsageChart({ days, series }: { days: StackedDay[]; series: Key[]
           </div>
           {[...h.stacks].reverse().map((s) => (
             <div key={s.key} className="flex items-center gap-2 py-px">
-              <span className="size-2 rounded-[2px]" style={{ background: shadeOf(series, s.key) }} />
+              <span className="size-2 rounded-xs" style={{ background: shadeOf(series, s.key) }} />
               <span className="flex-1 text-xs text-fg-2">{t(`features.${s.key}`)}</span>
               <span className="mono text-xs tabular-nums text-fg">{fmt.num(s.credits)}</span>
             </div>

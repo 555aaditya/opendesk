@@ -149,7 +149,7 @@ function ActivityLine({ a }: { a: Activity }) {
   const { icon, text, tone } = describe(a, teams, members);
   return (
     <div className="flex items-center gap-2.5 py-1 pl-[18px] text-[12px] text-fg-3">
-      <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border bg-surface [&_svg]:size-3 ${tone === "danger" ? "border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] text-danger-fg" : "border-line text-fg-3"}`}>
+      <span className={`flex size-5 shrink-0 items-center justify-center rounded-sm border bg-surface [&_svg]:size-3 ${tone === "danger" ? "border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] text-danger-fg" : "border-line text-fg-3"}`}>
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{text}</span>
@@ -181,7 +181,7 @@ export function TypingIndicator({ ticketId, contactName }: { ticketId: string; c
   const who = customer ? (contactName ?? "The customer") : agents.map((a) => a.name.split(" ")[0]).join(", ");
   return (
     <div aria-live="polite" className="flex items-center gap-2 py-1 pl-[18px] text-[12px] text-fg-3">
-      <span className="flex size-5 items-center justify-center rounded-full border border-line bg-surface">
+      <span className="flex size-5 items-center justify-center rounded-sm border border-line bg-surface">
         <TypingDots />
       </span>
       {who} {agents.length > 1 && !customer ? "are" : "is"} typing
@@ -239,7 +239,7 @@ export function Timeline({
             {[0, 1].map((i) => (
               <div key={i} className="rounded-lg border border-line p-4">
                 <div className="flex items-center gap-2.5">
-                  <Skeleton className="size-6 rounded-full" />
+                  <Skeleton className="size-6 rounded-sm" />
                   <Skeleton className="h-2.5 w-32" />
                 </div>
                 <div className="mt-4 flex flex-col gap-2 pl-[34px]">

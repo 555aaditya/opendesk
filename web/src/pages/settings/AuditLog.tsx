@@ -135,7 +135,7 @@ function Actor({ e }: { e: Entry }) {
   if (e.actor.type === "api_key")
     return (
       <span className="flex items-center gap-2">
-        <span className="flex size-5 items-center justify-center rounded-full bg-hover text-fg-3">
+        <span className="flex size-5 items-center justify-center rounded-sm bg-hover text-fg-3">
           <KeyRound className="size-3" />
         </span>
         <span className="font-medium text-fg">API key</span>
@@ -144,7 +144,7 @@ function Actor({ e }: { e: Entry }) {
     );
   return (
     <span className="flex items-center gap-2">
-      <span className="flex size-5 items-center justify-center rounded-full bg-hover text-fg-3">
+      <span className="flex size-5 items-center justify-center rounded-sm bg-hover text-fg-3">
         <Bot className="size-3" />
       </span>
       <span className="font-medium text-fg">{e.actor.type === "user" ? "Someone" : "System"}</span>
@@ -267,7 +267,7 @@ export default function AuditLog() {
         <div className="rounded-lg border border-line">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex h-11 items-center gap-3 border-b border-line-soft px-4 last:border-0">
-              <div className="skeleton size-5 rounded-full" />
+              <div className="skeleton size-5 rounded-sm" />
               <div className="skeleton h-2.5" style={{ width: `${30 + ((i * 17) % 35)}%` }} />
               <div className="skeleton ml-auto h-2.5 w-10" />
             </div>

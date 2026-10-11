@@ -25,7 +25,7 @@ export function ChannelBars({ data }: { data: ReportsOverview["by_channel"] }) {
                 </div>
                 <div className="h-2.5 w-full">
                   <div
-                    className="h-full rounded-r-[4px] bg-fg-2 transition-opacity group-hover:opacity-80"
+                    className="h-full rounded-r-sm bg-fg-2 transition-opacity group-hover:opacity-80"
                     style={{ width: `${Math.max(n ? 1.5 : 0, (n / max) * 100)}%` }}
                   />
                 </div>

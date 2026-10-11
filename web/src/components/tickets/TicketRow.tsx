@@ -6,7 +6,7 @@ import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { ChannelIcon, PriorityIcon, SlaBadge, StatusIcon, statusLabel } from "./bits";
+import { PriorityIcon, SlaBadge, StatusIcon, statusLabel } from "./bits";
 import { useTicketViewers } from "./presence";
 
 export type RowProps = {
@@ -133,8 +133,9 @@ export const TicketRow = memo(function TicketRow({ ticket: t, active, focused, s
           <StatusIcon status={t.status} />
         </span>
       </Tooltip>
-      <span className="flex w-[22px] shrink-0 justify-center">
-        <PriorityIcon priority={t.priority} className={t.priority === "normal" || t.priority === "low" ? "opacity-60" : ""} />
+      {/* Only priorities that change triage get an icon; the slot keeps columns aligned. */}
+      <span className="flex w-4 shrink-0 justify-center">
+        {(t.priority === "urgent" || t.priority === "high") && <PriorityIcon priority={t.priority} />}
       </span>
       <span className={cn("w-[168px] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
         {contactName}
@@ -155,16 +156,13 @@ export const TicketRow = memo(function TicketRow({ ticket: t, active, focused, s
       </span>
       <Viewers ticketId={t.id} />
       <SlaBadge ticket={t} />
-      <ChannelIcon channel={t.channel} className="hidden xl:block" />
       <span className="flex w-5 shrink-0 justify-center">
-        {t.assignee ? (
+        {t.assignee && (
           <Tooltip content={t.assignee.name}>
             <span className="flex">
               <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="sm" />
             </span>
           </Tooltip>
-        ) : (
-          <span className="size-5 rounded-full border border-dashed border-line-strong" aria-label="Unassigned" />
         )}
       </span>
       <span className="mono w-10 shrink-0 text-right text-[11px] text-fg-3 tabular-nums" title={fullDate(t.last_message_at)}>

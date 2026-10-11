@@ -77,7 +77,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, React.InputHTMLAttribu
             type="button"
             onClick={() => setShow((s) => !s)}
             aria-label={show ? "Hide password" : "Show password"}
-            className="flex size-6 items-center justify-center rounded-[5px] text-fg-4 hover:bg-hover hover:text-fg"
+            className="flex size-6 items-center justify-center rounded-sm text-fg-4 hover:bg-hover hover:text-fg"
           >
             {show ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
           </button>

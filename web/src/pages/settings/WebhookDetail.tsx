@@ -132,7 +132,7 @@ export default function WebhookDetail() {
                   aria-checked={filter === f}
                   onClick={() => setFilter(f)}
                   className={cn(
-                    "h-6 rounded-[6px] px-2 text-xs font-medium text-fg-3 hover:text-fg",
+                    "h-6 rounded-sm px-2 text-xs font-medium text-fg-3 hover:text-fg",
                     filter === f && "bg-surface text-fg shadow-[0_0_0_1px_var(--line)]",
                   )}
                 >

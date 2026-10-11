@@ -26,7 +26,7 @@ export function CopyButton({ value, label = "Copy", className }: { value: string
             setTimeout(() => setDone(false), 1400);
           }
         }}
-        className={cn("flex size-6 shrink-0 items-center justify-center rounded-[6px] text-fg-3 transition-colors hover:bg-hover hover:text-fg", className)}
+        className={cn("flex size-6 shrink-0 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg", className)}
       >
         {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
       </button>

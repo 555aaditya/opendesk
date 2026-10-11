@@ -234,7 +234,7 @@ function Invitations() {
         const expired = Date.parse(inv.expires_at) < Date.now();
         return (
           <ListRow key={inv.id}>
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-dashed border-line-strong text-fg-4">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-dashed border-line-strong text-fg-4">
               <UserPlus className="size-3.5" />
             </span>
             <div className="min-w-0 flex-1">
@@ -338,7 +338,7 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
               onClick={() => document.getElementById(id)?.focus()}
             >
               {emails.map((e) => (
-                <span key={e} className="mono inline-flex h-6 items-center gap-1 rounded-[5px] border border-line bg-hover pl-2 pr-0.5 text-xs">
+                <span key={e} className="mono inline-flex h-6 items-center gap-1 rounded-sm border border-line bg-hover pl-2 pr-0.5 text-xs">
                   {e}
                   <button
                     type="button"

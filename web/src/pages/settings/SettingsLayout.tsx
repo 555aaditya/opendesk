@@ -150,7 +150,7 @@ export default function SettingsLayout() {
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <div key={current ?? path} className="animate-rise-in">
+        <div key={current ?? path} className="flex min-h-full flex-col animate-rise-in">
           <Outlet />
         </div>
       </div>

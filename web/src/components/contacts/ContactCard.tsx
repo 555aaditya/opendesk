@@ -23,7 +23,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
     return (
       <div className="flex flex-col gap-3" aria-busy="true">
         <div className="flex items-center gap-2.5">
-          <Skeleton className="size-8 rounded-full" />
+          <Skeleton className="size-8 rounded-md" />
           <div className="flex flex-1 flex-col gap-1.5">
             <Skeleton className="h-2.5 w-1/2" />
             <Skeleton className="h-2 w-2/3" />

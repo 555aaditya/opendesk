@@ -239,7 +239,7 @@ export function AddMailboxWizard({
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium">
                         {m.title}
-                        {m.tag && <span className="rounded-[4px] bg-hover px-1.5 py-px text-[10.5px] font-medium text-fg-3">{m.tag}</span>}
+                        {m.tag && <span className="rounded-sm bg-hover px-1.5 py-px text-[10.5px] font-medium text-fg-3">{m.tag}</span>}
                       </span>
                       <span className="mt-0.5 block text-xs leading-[18px] text-fg-3">{m.body}</span>
                     </span>

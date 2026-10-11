@@ -20,7 +20,7 @@ export const buttonVariants = cva(
         link: "h-auto px-0 text-fg underline-offset-4 hover:underline active:scale-100",
       },
       size: {
-        xs: "h-6 gap-1 rounded-[6px] px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        xs: "h-6 gap-1 rounded-md px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
         sm: "h-7 gap-1.5 rounded-md px-2.5 text-[12.5px] [&_svg:not([class*='size-'])]:size-3.5",
         md: "h-8 gap-1.5 rounded-md px-3 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-10 gap-2 rounded-lg px-4 text-[13.5px] [&_svg:not([class*='size-'])]:size-4",

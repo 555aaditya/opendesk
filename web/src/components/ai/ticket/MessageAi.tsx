@@ -118,7 +118,7 @@ export function AiAuthorLabel({ m }: { m: Message }) {
   if (!isAiMessage(m)) return null;
   return (
     <Tooltip content={t("message.aiHint")}>
-      <span className="inline-flex h-4 shrink-0 items-center gap-1 rounded-[4px] border border-line px-1 text-[10px] font-medium text-fg-3">
+      <span className="inline-flex h-4 shrink-0 items-center gap-1 rounded-sm border border-line px-1 text-[10px] font-medium text-fg-3">
         <AiIcon className="size-2.5" />
         {t("message.aiLabel")}
       </span>

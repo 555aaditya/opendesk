@@ -69,7 +69,7 @@ export const ValueButton = forwardRef<HTMLButtonElement, ValueButtonProps>(funct
       aria-invalid={invalid || undefined}
       {...rest}
       className={cn(
-        "inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-[7px] border border-line bg-surface px-2 text-[12.5px] text-fg outline-none transition-colors hover:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--focus)] disabled:opacity-60 data-[state=open]:border-fg-3 aria-[invalid=true]:border-danger [&_svg]:size-3.5 [&_svg]:shrink-0",
+        "inline-flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-[12.5px] text-fg outline-none transition-colors hover:border-line-strong focus-visible:shadow-[0_0_0_3px_var(--focus)] disabled:opacity-60 data-[state=open]:border-fg-3 aria-[invalid=true]:border-danger [&_svg]:size-3.5 [&_svg]:shrink-0",
         className,
       )}
     >

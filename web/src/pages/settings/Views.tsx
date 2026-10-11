@@ -339,7 +339,7 @@ function FilterRow({ label, children, onClear }: { label: string; children: Reac
         aria-label={`Clear ${label.toLowerCase()}`}
         onClick={onClear}
         disabled={!onClear}
-        className="flex size-6 shrink-0 items-center justify-center rounded-[6px] text-fg-4 hover:bg-hover hover:text-fg disabled:invisible"
+        className="flex size-6 shrink-0 items-center justify-center rounded-sm text-fg-4 hover:bg-hover hover:text-fg disabled:invisible"
       >
         <X className="size-3.5" />
       </button>

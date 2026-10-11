@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useDeferredValue, useEffect, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
+import { EmptyState } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { StatusIcon } from "@/components/tickets/bits";
@@ -101,7 +102,7 @@ export function CommandPalette() {
                   type="button"
                   onClick={() => setAiMode(false)}
                   aria-label={t("palette.exit")}
-                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-line bg-sunken px-1.5 text-[12px] font-medium text-fg-2 hover:text-fg"
+                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-sm border border-line bg-sunken px-1.5 text-[12px] font-medium text-fg-2 hover:text-fg"
                 >
                   <AiIcon className="size-3" />
                   {t("palette.mode")}
@@ -148,8 +149,12 @@ export function CommandPalette() {
                 </Command.Group>
               )}
               {!(ai.enabled && query.trim().length > 2) && (
-                <Command.Empty className="py-10 text-center text-[13px] text-fg-3">
-                  {deferred.length > 1 && search.isFetching ? "Searching" : "No results"}
+                <Command.Empty>
+                  {deferred.length > 1 && search.isFetching ? (
+                    <p className="py-10 text-center text-[13px] text-fg-3">Searching</p>
+                  ) : (
+                    <EmptyState compact lit={2} title="No results" description="Try another word, a ticket number or an email." />
+                  )}
                 </Command.Empty>
               )}
 
@@ -363,7 +368,7 @@ function AiResults({
   if (query.length < 2)
     return (
       <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-        <span className="flex size-8 items-center justify-center rounded-full border border-line text-fg-3">
+        <span className="flex size-8 items-center justify-center rounded-md border border-line text-fg-3">
           <AiIcon className="size-4" />
         </span>
         <p className="text-[13px] text-fg-3">{t("palette.start")}</p>
@@ -375,7 +380,7 @@ function AiResults({
         <div className="px-1.5 pb-1.5 pt-2 text-[11.5px] font-medium text-fg-3">{t("palette.searching")}</div>
         {[0, 1, 2].map((i) => (
           <div key={i} className="flex h-9 items-center gap-2.5 px-2.5">
-            <span className="skeleton size-4 rounded-full" />
+            <span className="skeleton size-4 rounded-[3px]" />
             <span className="skeleton h-2.5" style={{ width: `${62 - i * 14}%` }} />
           </div>
         ))}

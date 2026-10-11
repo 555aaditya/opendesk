@@ -147,7 +147,7 @@ export default function WidgetSettings() {
                     {draft.allowed_origins.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {draft.allowed_origins.map((o) => (
-                          <span key={o} className="mono inline-flex h-6 items-center gap-1 rounded-[6px] border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2">
+                          <span key={o} className="mono inline-flex h-6 items-center gap-1 rounded-sm border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2">
                             {o}
                             <button
                               type="button"

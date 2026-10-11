@@ -108,7 +108,7 @@ export function SettingsPage({
   return (
     <div className="w-full pb-24">
       <div className="border-b border-line">
-        <div className={cn("flex flex-wrap items-start gap-4 px-5 pb-5 pt-6 md:px-8 md:pt-7", wide ? "max-w-[1120px]" : "max-w-[880px]")}>
+        <div className={cn("mx-auto flex flex-wrap items-start gap-4 px-5 pb-5 pt-6 md:px-8 md:pt-7", wide ? "max-w-[1120px]" : "max-w-[880px]")}>
           <div className="min-w-0 flex-1 basis-60">
             {back && <div className="mb-2">{back}</div>}
             <h1 className="text-[17px] font-semibold leading-6 tracking-[-0.025em]">{title}</h1>
@@ -117,7 +117,7 @@ export function SettingsPage({
           {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
         </div>
       </div>
-      <div className={cn("flex flex-col gap-9 px-5 pt-7 md:px-8", wide ? "max-w-[1120px]" : "max-w-[880px]")}>{children}</div>
+      <div className={cn("mx-auto flex flex-col gap-9 px-5 pt-7 md:px-8", wide ? "max-w-[1120px]" : "max-w-[880px]")}>{children}</div>
     </div>
   );
 }
@@ -154,7 +154,7 @@ export function Section({
       )}
       <div
         className={cn(
-          "overflow-hidden rounded-[10px] border border-line bg-surface shadow-xs",
+          "overflow-hidden rounded-lg border border-line bg-surface shadow-xs",
           !flush && "px-4 py-0.5",
           danger && "border-[color-mix(in_srgb,var(--danger)_28%,var(--line))]",
         )}
@@ -240,7 +240,7 @@ export function ListRow({
 /** Shown in place of a settings page to roles that can't manage it. */
 export function NoAccess({ what = "these settings" }: { what?: string }) {
   return (
-    <div className="rounded-[10px] border border-dashed border-line px-6 py-12 text-center">
+    <div className="rounded-lg border border-dashed border-line px-6 py-12 text-center">
       <p className="text-[13px] font-medium">Admins only</p>
       <p className="mt-1 text-[12.5px] text-fg-3">Ask a workspace admin if you need to change {what}.</p>
     </div>

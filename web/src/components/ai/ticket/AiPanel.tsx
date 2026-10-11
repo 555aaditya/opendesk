@@ -247,7 +247,7 @@ function TriageCard({ t: ticket }: { t: Ticket }) {
             ))}
             {(result.suggested_tags ?? []).map((x) => (
               <Tooltip key={`new-${x}`} content={t("triage.newTag")}>
-                <span className="rounded-[4px] border border-dashed border-line-strong px-1 text-[11.5px] text-fg-3">+ {x}</span>
+                <span className="rounded-sm border border-dashed border-line-strong px-1 text-[11.5px] text-fg-3">+ {x}</span>
               </Tooltip>
             ))}
           </dd>
@@ -410,7 +410,7 @@ function AskBox({ t: ticket }: { t: Ticket }) {
             type="submit"
             aria-label={t("ask.send")}
             disabled={!question.trim() || busy}
-            className="flex size-6 shrink-0 items-center justify-center rounded-[5px] bg-inverse text-inverse-fg transition-opacity disabled:opacity-25"
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-inverse text-inverse-fg transition-opacity disabled:opacity-25"
           >
             <ArrowUp className="size-3.5" />
           </button>
