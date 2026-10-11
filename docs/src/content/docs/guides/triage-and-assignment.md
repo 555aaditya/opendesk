@@ -35,9 +35,39 @@ Admins can cap how many open and pending tickets an agent holds at once (1 to 10
 
 ## Triage by Ollie
 
-When AI is on, Ollie can triage every new ticket: it records the sentiment, language and category, and can raise the priority and add labels. Choose which of priority and labels Ollie may change.
+When AI is on, Ollie can triage every new ticket. In one call it decides:
 
-Turn on **Assign after triage** to route each ticket once Ollie has triaged it. It uses the ticket's assignment mode, or load balancing when the mode is off. The activity shows the assignment by Ollie, via triage.
+| Decision | What Ollie may do with it |
+| --- | --- |
+| Priority (low, normal, high, urgent) | Raise the priority. Ollie never lowers it |
+| Severity (Sev 1 to Sev 4) | Set the severity, or raise it. Ollie never lowers it |
+| Labels | Add a label, and a label from your exclusive **Type** group when you have one |
+| Team | Set the team of a ticket that has none |
+| Category, sentiment, language | Always recorded on the ticket |
+| Spam | Only ever suggested, never applied |
+
+Choose which of priority, severity, labels and team Ollie may change. By default it may change priority, severity and labels.
+
+### Severity
+
+Severity is the business impact of a ticket, separate from how soon it needs an answer:
+
+| Severity | Meaning |
+| --- | --- |
+| Sev 1 | Critical: the product is down or data is at risk for many customers |
+| Sev 2 | Major: a key feature is broken for a customer, with no workaround |
+| Sev 3 | Minor: something is wrong but there is a workaround |
+| Sev 4 | Low: a question, cosmetic issue or request with no impact |
+
+A ticket can have no severity. Filter, sort, build views and write automations on it like priority.
+
+### Confidence and suggestions
+
+Ollie decides using Jev, TypeSafe's decision model, when your instance has a TypeSafe key. Jev gives each decision a confidence. Ollie applies a decision only when its confidence is at or above the workspace **confidence threshold** (0.5 to 0.99, default 0.7). Below it, the decision appears as a suggestion in the ticket sidebar: accept it with one click, or dismiss it. Setting the field yourself also clears the suggestion.
+
+Changes Ollie makes show on the timeline as Ollie, for example "Ollie set severity to Sev 2", with the confidence in the details. Without a TypeSafe key, Ollie triages with the configured AI model, which has no calibrated confidence: its decisions apply as before, without a threshold. **Settings, Triage** shows which engine is in use.
+
+Turn on **Assign after triage** to route each ticket once Ollie has triaged it. It uses the assignment mode of the team Ollie picked, or of the ticket, or load balancing when the mode is off. The activity shows the assignment by Ollie, via triage.
 
 ## Business hours
 

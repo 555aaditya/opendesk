@@ -19,18 +19,22 @@ type Automation = {
   id: string;
   name: string;
   trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
-  conditions: { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag"
-                     | `field.${string}` | `contact.field.${string}`;
+  conditions: { field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag"
+                     | "sentiment" | "ai_decide" | `field.${string}` | `contact.field.${string}`;
                 op: "contains" | "not_contains" | "equals" | "not_equals" | FieldOp;
-                value: string }[];
-  actions: { type: "set_status" | "set_priority" | "assign_user" | "assign_team" | "add_tag" | "remove_tag"
-                 | "send_reply" | "add_note" | "mark_spam" | "set_field";
+                value: string;
+                question?: string /* ai_decide only: 3..300 characters of plain text */ }[];
+  actions: { type: "set_status" | "set_priority" | "set_severity" | "assign_user" | "assign_team" | "add_tag" | "remove_tag"
+                 | "send_reply" | "add_note" | "mark_spam" | "ai_triage" | "set_field";
                  value: string;
                  field?: string /* set_field: the ticket field key */ }[];
   enabled: boolean;
   position: number;
   run_count: number;
 };
+// severity: equals / not_equals with sev1..sev4 or "none". set_severity: sev1..sev4, or "" to clear.
+// ai_decide: gt / lt with value a probability 0.01..0.99; at most 3 per automation; all of one
+// trigger run are asked in one call (1 credit). It does not hold when no decision engine answers.
 
 type SlaPolicy = {
   id: string;

@@ -15,7 +15,7 @@ A **view** is a saved set of ticket filters. It appears in the inbox sidebar wit
 
 Views can filter by:
 
-- status and priority (one or more of each)
+- status, priority and severity (one or more of each; severity can include "none")
 - assignee: `me`, unassigned, or a specific member
 - team, mailbox, tag and channel
 - a text query

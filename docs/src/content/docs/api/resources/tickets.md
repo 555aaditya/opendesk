@@ -28,6 +28,7 @@ type Ticket = {
   subject: string;
   status: "open" | "pending" | "on_hold" | "solved" | "closed";
   priority: "low" | "normal" | "high" | "urgent";
+  severity: "sev1" | "sev2" | "sev3" | "sev4" | null; // business impact, sev1 the most severe
   channel: "email" | "chat" | "api" | "portal";
   mailbox_id: string | null;
   contact: ContactRef | null;
@@ -62,6 +63,7 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
 | --- | --- |
 | `status` | comma-separated statuses |
 | `priority` | comma-separated priorities |
+| `severity` | comma-separated `sev1` to `sev4`, and `none` for tickets without one |
 | `assignee` | `me`, `none` or a user id |
 | `team_id`, `mailbox_id`, `contact_id`, `view_id` | ids |
 | `tag` | a label name |
@@ -69,7 +71,7 @@ curl "https://api.opendesk.sh/v1/tickets?status=open,pending&assignee=none&sort=
 | `channel` | `email`, `chat`, `api`, `portal` |
 | `q` | text search |
 | `spam` | `true` or `false` |
-| `sort` | `last_message_at`, `created_at`, `priority`, `due`, `field.<key>` |
+| `sort` | `last_message_at`, `created_at`, `priority`, `severity` (sev1 first, none last), `due`, `field.<key>` |
 | `order` | `asc` or `desc` |
 
 Plus [`limit` and `cursor`](/api/pagination/).
@@ -112,7 +114,7 @@ curl https://api.opendesk.sh/v1/tickets \
 | `mailbox_id` | the mailbox to send from, for email tickets |
 | `body_html` | the first message |
 | `kind` | `reply` or `note` |
-| `priority`, `assignee_id`, `team_id`, `tags`, `fields`, `status` | optional |
+| `priority`, `severity`, `assignee_id`, `team_id`, `tags`, `fields`, `status` | optional |
 
 An `email` ticket created with a `reply` sends that reply to the contact from the mailbox.
 
@@ -133,7 +135,7 @@ curl -X PATCH https://api.opendesk.sh/v1/tickets/1042 \
   -d '{ "status": "solved", "tags": ["billing", "refund"] }'
 ```
 
-Fields: `subject`, `status`, `priority`, `assignee_id`, `team_id`, `snoozed_until`, `spam`, `tags` (replaces the set), `add_tags`, `remove_tags`, `fields` (merged, `null` clears), `custom`. See [Labels and custom fields](/api/resources/labels-fields/) for the label rules and value types. Solving a ticket while a required field is empty answers `422 field_required`.
+Fields: `subject`, `status`, `priority`, `severity` (`null` clears), `assignee_id`, `team_id`, `snoozed_until`, `spam`, `tags` (replaces the set), `add_tags`, `remove_tags`, `fields` (merged, `null` clears), `custom`. See [Labels and custom fields](/api/resources/labels-fields/) for the label rules and value types. Solving a ticket while a required field is empty answers `422 field_required`. Changing `priority`, `severity`, `team_id`, `spam` or labels removes Ollie's pending suggestion for that field (see [Decisions](/api/resources/ai/#decisions)).
 
 ## Bulk update
 
@@ -161,7 +163,7 @@ curl https://api.opendesk.sh/v1/tickets/1042/merge \
 
 | Type | Data |
 | --- | --- |
-| `status_changed`, `priority_changed`, `assigned` | `{ from, to }` |
+| `status_changed`, `priority_changed`, `severity_changed`, `assigned` | `{ from, to }` |
 | `team_changed` | |
 | `tagged`, `untagged` | `{ tag }` |
 | `sla_breached` | `{ kind }` |

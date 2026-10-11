@@ -156,6 +156,10 @@ AI features are on when a provider is configured. See [AI features](/guides/ai/)
 | `EMBEDDINGS_DRIVER` | detected | `voyage`, `openai` or `none`. When empty: `voyage` if `VOYAGE_API_KEY` is set, else `openai` with the `openai` provider, else `none` (search falls back to Postgres full-text search). |
 | `VOYAGE_API_KEY` | | Voyage AI key for embeddings. |
 | `EMBEDDINGS_MODEL` | | Embeddings model. |
+| `DECISIONS_PROVIDER` | detected | Engine for typed decisions (triage, the chat answer bot's relevance check, `ai_decide` automation conditions): `typesafe` (Jev by TypeSafe), `llm` (the AI provider's fast model) or `none`. When empty: `typesafe` if `TYPESAFE_API_KEY` is set, else `llm` if an AI provider is configured, else `none`. |
+| `TYPESAFE_API_KEY` | | TypeSafe API key for Jev. Without it, decisions use the LLM path and every feature keeps working. |
+| `TYPESAFE_API_URL` | `https://api.typesafe.ai` | TypeSafe API base URL. For the Vercel AI Gateway use `https://ai-gateway.vercel.sh/typesafe` with `TYPESAFE_MODEL=typesafe-ai/jev`. |
+| `TYPESAFE_MODEL` | `jev-latest` | Jev model or alias. Pin a version such as `jev-1.13.0` to keep answers stable across releases. |
 
 Semantic search needs the Postgres `vector` extension (pgvector). Without it, opendesk uses full-text search.
 

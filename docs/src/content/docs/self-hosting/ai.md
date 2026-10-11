@@ -64,9 +64,29 @@ Set `EMBEDDINGS_MODEL` to choose the model. Changing the embeddings model reinde
 
 Embeddings are stored in Postgres and need the `vector` extension (pgvector). Neon has it, and so does the `pgvector/pgvector:pg17` image. On a Postgres without it, opendesk keeps working and semantic search uses full-text search instead.
 
+## Decisions with Jev
+
+Triage, the chat answer bot's relevance check and `ai_decide` automation conditions are typed decisions: a choice, a score on ordered levels, or the probability of yes. Ollie makes them using Jev, TypeSafe's decision model, when a TypeSafe key is set. Jev returns calibrated probabilities and a confidence for each answer, so triage applies only what it is sure of and leaves the rest as suggestions.
+
+```sh
+TYPESAFE_API_KEY=...
+# optional
+TYPESAFE_MODEL=jev-latest          # or a pinned version such as jev-1.13.0
+```
+
+Through the Vercel AI Gateway:
+
+```sh
+TYPESAFE_API_KEY=<AI Gateway key>
+TYPESAFE_API_URL=https://ai-gateway.vercel.sh/typesafe
+TYPESAFE_MODEL=typesafe-ai/jev
+```
+
+`DECISIONS_PROVIDER` picks the engine: `typesafe`, `llm` or `none`. When empty it is `typesafe` with a TypeSafe key, else `llm` when an AI provider is configured, else `none`. On `llm`, the AI provider's fast model answers the same questions as structured output, without a calibrated confidence. Without a TypeSafe key every feature keeps working; nothing depends on Jev. Triage also runs with Jev alone, without an AI provider.
+
 ## Privacy
 
-- Customer content is sent only to the provider you configure.
+- Customer content is sent only to the providers you configure (the AI provider, and TypeSafe when its key is set).
 - Each request carries only the data that feature needs.
 - Prompts and completions are never logged. Usage records store counts only.
 

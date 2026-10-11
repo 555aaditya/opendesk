@@ -13,6 +13,7 @@ A ticket has:
 - a **subject** and a **channel**: `email`, `chat`, `api` or `portal`
 - a **status**: `open`, `pending`, `on_hold`, `solved` or `closed`
 - a **priority**: `low`, `normal`, `high` or `urgent`
+- an optional **severity**: Sev 1 (critical) to Sev 4 (low impact), shown as a compact chip such as `S2`
 - an optional **assignee**, **team**, **mailbox** and **tags**
 - the **contact** who wrote in, and their company when known
 - an **SLA** with first response and resolution due times, when a policy applies (see [SLA policies](/guides/sla-policies/))
@@ -36,7 +37,7 @@ A ticket's timeline holds its messages and activity:
 
 - **Replies** go to the customer. On email tickets they are sent from the ticket's mailbox, with your signature, so the customer sees your support address. Each reply shows its delivery status: pending, sent, failed or bounced.
 - **Notes** are internal. Customers never see them, over email or in the chat widget.
-- **Activity** records status, priority, assignment, team, tag, SLA, merge and CSAT changes, with who made them.
+- **Activity** records status, priority, severity, assignment, team, tag, SLA, merge and CSAT changes, with who made them.
 
 You can set the status in the same step as sending a reply, for example "send and mark pending". Attachments upload once and are linked to the message when it is sent.
 
@@ -50,11 +51,11 @@ The inbox updates in real time. When a teammate replies, changes a status or ass
 
 ## Views and search
 
-The sidebar shows counts for unassigned, mine, open, pending, on hold, solved and spam, plus your [views](/guides/saved-replies-and-views/). Views filter by status, priority, assignee, team, mailbox, tag, channel and text. Global search finds tickets, contacts and articles at once.
+The sidebar shows counts for unassigned, mine, open, pending, on hold, solved and spam, plus your [views](/guides/saved-replies-and-views/). Views filter by status, priority, severity, assignee, team, mailbox, tag, channel and text. Global search finds tickets, contacts and articles at once.
 
 ## Bulk actions
 
-Select several tickets to change their status, priority, assignee, team or tags in one step, or to delete them.
+Select several tickets to change their status, priority, severity, assignee, team or tags in one step, or to delete them.
 
 ## Contacts and companies
 

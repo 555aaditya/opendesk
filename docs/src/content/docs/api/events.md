@@ -68,7 +68,7 @@ Every state change that someone else should see is written as an event, in the s
 
 `chat.typing` is not stored, has no `seq` and never reaches webhooks. The gateway sends typing indicators directly to the ticket and contact topics. See [Realtime](/api/realtime/#presence-and-typing-on-a-ticket).
 
-AI summaries and triage results arrive as `ticket.updated` with `custom` in `changes`. Chat widget AI answers arrive as a normal `message.created`.
+AI summaries and triage results arrive as `ticket.updated` with `custom` in `changes` (Ollie's decisions in `custom.ai_decisions`, pending suggestions in `custom.ai_suggestions`); fields triage applied are listed too, such as `priority`, `severity` and `tags`. Chat widget AI answers arrive as a normal `message.created`.
 
 ## Retention
 

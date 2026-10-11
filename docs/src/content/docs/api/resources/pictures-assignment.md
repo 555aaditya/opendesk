@@ -61,9 +61,11 @@ type Assignment = {
 
 type TriageSettings = {
   auto_triage: boolean;
-  fields: ("priority" | "labels")[];
+  fields: ("priority" | "severity" | "labels" | "team")[]; // default priority, severity, labels
   assign_after_triage: boolean;
-  available: boolean; // AI is configured and on for the workspace
+  threshold: number; // 0.5..0.99, default 0.7: confidence at or above it applies a decision, below it leaves a suggestion
+  engine: { provider: "typesafe" | "llm" | "none"; model: string; connected: boolean };
+  available: boolean; // triage can run: AI or a decision engine is configured, and AI is on for the workspace
 };
 
 type BusinessHours = {
@@ -146,8 +148,10 @@ curl -X PATCH https://api.opendesk.sh/v1/triage \
   -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H "OD-Workspace: $WORKSPACE_ID" \
   -H "Content-Type: application/json" \
-  -d '{ "auto_triage": true, "fields": ["priority"], "assign_after_triage": true }'
+  -d '{ "auto_triage": true, "fields": ["priority", "severity"], "threshold": 0.8, "assign_after_triage": true }'
 ```
+
+`engine.provider` is `typesafe` when Ollie decides using Jev by TypeSafe, `llm` when the configured AI model decides (no confidence gate), or `none`.
 
 ## Set business hours
 

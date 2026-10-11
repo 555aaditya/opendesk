@@ -79,4 +79,4 @@ An approved change goes through the regular API with the user's permissions. Tic
 { "tips": [{ "key": "sla_due_soon", "text": "3 tickets breach SLA within the hour.", "prompt": "Which tickets breach SLA in the next hour?", "severity": "high", "count": 3 }] }
 ```
 
-Tips are computed from counts without the model and cost nothing. Keys: `sla_breached`, `sla_due_soon`, `unassigned_old`, `mine_waiting`.
+Tips are computed from counts without the model and cost nothing. Keys: `sla_breached`, `sla_due_soon`, `sla_at_risk` (open tickets due within 4 hours whose stored triage `sla_risk` is 0.6 or more), `unassigned_old`, `mine_waiting`.

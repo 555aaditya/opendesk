@@ -33,7 +33,7 @@ Ollie works with your own role: a viewer can ask questions but not make changes,
 
 ## Who did it
 
-Everything the AI does in opendesk is shown as Ollie: changes you approved in the assistant, auto-triage, widget answers and AI automation actions. A ticket's timeline reads "Ollie set priority to High" with Ollie's mark, and the audit log records the change as made by the AI on your behalf.
+Everything the AI does in opendesk is shown as Ollie: changes you approved in the assistant, auto-triage, widget answers and AI automation actions. A ticket's timeline reads "Ollie set priority to High" with Ollie's mark, and the audit log records the change as made by the AI on your behalf. Ollie makes triage decisions using Jev, TypeSafe's decision model, when the instance has a TypeSafe key. They still show as Ollie, with the confidence in the details, such as "92% sure, via Jev".
 
 ## Tips
 
