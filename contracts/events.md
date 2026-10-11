@@ -52,14 +52,15 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 | `message.created`        | agents (note) / public (reply on chat ticket) / agents (reply on email ticket) | `contact:<wid>:<cid>` when public | `{ "ticket_id": "...", "message": Message }` |
 | `message.updated`        | agents     | —                                     | `{ "ticket_id": "...", "message": Message }` (delivery status) |
 | `activity.created`       | agents     | —                                     | `{ "ticket_id": "...", "activity": Activity }` |
-| `contact.created` / `contact.updated` / `contact.deleted` | agents | — | `{ "contact": Contact }` / `{ "contact_id" }` |
+| `contact.created` / `contact.updated` / `contact.deleted` | agents | — | `{ "contact": Contact }` / `{ "contact_id" }`. `contact.updated` also when a picture is uploaded, removed or found automatically |
 | `company.created` / `company.updated` / `company.deleted` | agents | — | `{ "company": Company }` / `{ "company_id" }` |
 | `tag.created` / `tag.updated` / `tag.deleted` | agents | — | `{ "tag": Tag }` / `{ "tag_id" }` |
 | `tag.merged`             | agents     | —                                     | `{ "tag_id": "<removed>", "into": Tag }` (records that carried it are updated without per-record events; refetch lists) |
 | `tag_group.created` / `tag_group.updated` / `tag_group.deleted` | agents | — | `{ "tag_group": TagGroup }` / `{ "tag_group_id" }` |
 | `custom_field.created` / `custom_field.updated` / `custom_field.deleted` | agents | — | `{ "custom_field": CustomField }` / `{ "custom_field_id", "entity", "key" }` |
 | `mailbox.created` / `mailbox.updated` / `mailbox.deleted` | agents | — | `{ "mailbox": Mailbox }` / `{ "mailbox_id" }` |
-| `member.added` / `member.updated` / `member.removed` | agents | `user:<uid>` | `{ "member": Member }` / `{ "user_id" }` |
+| `member.added` / `member.updated` / `member.removed` | agents | `user:<uid>` | `{ "member": Member }` / `{ "user_id" }`. `member.updated` also on availability and picture changes (in every workspace of that user) |
+| `workspace.updated`      | agents     | —                                     | `{ "workspace": Workspace }` (name, settings, logo and brand images) |
 | `notification.created`   | agents     | `user:<uid>`                          | `{ "notification": Notification }` |
 | `billing.updated`        | agents     | —                                     | `Billing` (`contracts/billing.md`): plan, status, seats, limits, usage, credits, prices. Sent on subscription changes, seat syncs and credit purchases |
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `team.*`, `webhook.*` | agents | — | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |

@@ -24,30 +24,40 @@ it exists, and this file is the contract the parts are built against.
   applied to `/v1/auth/*`, `/v1/me/password`, `/v1/me/passkeys/register/*`, `/v1/realtime/token`, inbound, Stripe, widget and public routes.
 - Rate limits: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` headers.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
-  (mailboxes, members, api keys, webhooks, automations, sla, widget settings, labels, label groups, custom fields) need `admin`.
+  (mailboxes, members, api keys, webhooks, automations, sla, business hours, assignment, triage, widget settings, labels, label groups, custom fields, workspace images) need `admin`.
 - API key scopes: `tickets:read`, `tickets:write`, `contacts:read`, `contacts:write`,
   `kb:read`, `kb:write`, `settings:read`, `settings:write`, `realtime`.
 
 ## Resource shapes
 
 ```ts
-type User = { id: string; email: string; name: string; avatar_url: string; email_verified: boolean; totp_enabled: boolean; created_at: string };
-type UserRef = { id: string; name: string; email: string; avatar_url: string };
-type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; created_at: string };
-type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean; auto_assign?: "none" | "round_robin"; locale?: string /* BCP 47 default for customer-facing pages (help center, CSAT, widget); "" = the visitor's browser */;
+// Pictures (see "Profile pictures and logos"). avatar_url is null when there is no picture: show initials.
+type AvatarSource = "upload" | "oauth" | "gravatar" | "domain" | "widget";
+type User = { id: string; email: string; name: string; avatar_url: string | null; avatar_source: AvatarSource | null; email_verified: boolean; totp_enabled: boolean; created_at: string };
+type UserRef = { id: string; name: string; email: string; avatar_url: string | null };
+type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; avatar_url: string | null /* workspace logo */; avatar_source: "upload" | null;
+  images: { help_center_logo: string | null; help_center_favicon: string | null; widget_avatar: string | null; widget_launcher: string | null }; created_at: string };
+type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean;
+  auto_assign?: AssignMode /* the workspace default; see "Assignment" */; locale?: string /* BCP 47 default for customer-facing pages (help center, CSAT, widget); "" = the visitor's browser */;
+  gravatar?: boolean /* default false: look up contact pictures on Gravatar (sends a hash of the contact's email to Gravatar) */;
+  domain_logos?: boolean /* default true: fetch company logos from the company's website */;
   label_creation?: "anyone" | "admins" /* default "anyone": applying an unknown label name creates it; "admins": only admins (and keys with settings:write) may, others get 422 unknown_label */;
   status_labels?: Partial<Record<TicketStatus, DisplayOverride>>; priority_labels?: Partial<Record<Priority, DisplayOverride>> /* display only; the API values never change */ };
 type DisplayOverride = { label?: string /* 1..40, no < > */; color?: LabelColor };
 type Membership = { workspace: Workspace; role: Role };
 type Role = "owner" | "admin" | "agent" | "viewer";
-type Member = { user: UserRef; role: Role; created_at: string };
+type Member = { user: UserRef & { avatar_source: AvatarSource | null }; role: Role;
+  availability: Availability /* what the member set */; presence: Availability /* availability, or "away" when auto-away applies */;
+  max_open_tickets: number | null /* auto-assignment cap on open + pending tickets; null = no cap */; open_tickets: number;
+  last_seen_at: string | null; created_at: string };
+type Availability = "online" | "away" | "offline";
 type Invitation = { id: string; email: string; role: Role; expires_at: string; created_at: string; invited_by: UserRef | null };
 type Team = { id: string; name: string; member_ids: string[]; created_at: string };
 
-type Contact = { id: string; email: string | null; name: string; phone: string; avatar_url: string; company: CompanyRef | null; external_id: string | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; blocked: boolean; ticket_count: number; created_at: string; updated_at: string };
-type ContactRef = { id: string; email: string | null; name: string; avatar_url: string };
-type Company = { id: string; name: string; domain: string; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; contact_count: number; created_at: string; updated_at: string };
-type CompanyRef = { id: string; name: string; domain: string };
+type Contact = { id: string; email: string | null; name: string; phone: string; avatar_url: string | null; avatar_source: AvatarSource | null; company: CompanyRef | null; external_id: string | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; blocked: boolean; ticket_count: number; created_at: string; updated_at: string };
+type ContactRef = { id: string; email: string | null; name: string; avatar_url: string | null };
+type Company = { id: string; name: string; domain: string; avatar_url: string | null /* logo */; avatar_source: "upload" | "domain" | null; notes: string; custom: Record<string, unknown>; tags: TagRef[]; fields: FieldValues; contact_count: number; created_at: string; updated_at: string };
+type CompanyRef = { id: string; name: string; domain: string; avatar_url: string | null };
 
 type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 type Priority = "low" | "normal" | "high" | "urgent";
@@ -72,7 +82,7 @@ type Message = {
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
-// activity types: status_changed{from,to} priority_changed{from,to} assigned{from,to} team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
+// activity types: status_changed{from,to} priority_changed{from,to} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
 // AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,via} ai_answered{message_id,article_ids} ai_handoff (actor "ai" or "contact")
 
@@ -103,7 +113,20 @@ type FieldOp = "eq" | "ne" | "contains" | "not_contains" | "gt" | "gte" | "lt" |
 type SavedReply = { id: string; title: string; shortcut: string; body_html: string; created_at: string; updated_at: string };
 type View = { id: string; name: string; shared: boolean; filters: TicketFilters; position: number };
 type TicketFilters = { status?: TicketStatus[]; priority?: Priority[]; assignee?: "me" | "none" | string; team_id?: string; mailbox_id?: string; tag?: string; channel?: Channel; q?: string; fields?: FieldFilter[] /* max 20, ANDed */ };
-type SlaPolicy = { id: string; name: string; priority: Priority | null; first_response_minutes: number; resolution_minutes: number; enabled: boolean; position: number };
+type SlaPolicy = { id: string; name: string; priority: Priority | null; first_response_minutes: number; resolution_minutes: number;
+  business_hours: boolean /* count only open business hours (default false) */; enabled: boolean; position: number };
+
+// Triage, assignment and setup (see "Triage, assignment and onboarding").
+type AssignMode = "none" | "round_robin" | "load_balanced";
+type AssignmentRule = { target_type: "mailbox" | "team"; target_id: string; mode: AssignMode };
+type Assignment = { mode: AssignMode /* = settings.auto_assign */; rules: AssignmentRule[]; auto_away_minutes: number /* 0 = off */ };
+type TriageField = "priority" | "labels";
+type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean; available: boolean /* AI is configured and on for the workspace */ };
+type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+type BusinessHours = { enabled: boolean; timezone: string /* the workspace timezone */; schedule: Record<Weekday, { start: string; end: string }[]> /* "HH:MM", 24h */; holidays: { date: string /* YYYY-MM-DD */; name: string }[] };
+type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_jev";
+type OnboardingStep = { id: OnboardingStepId; title: string; description: string; done: boolean; href: string /* app path */; requires: "admin" | "agent" };
+type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
 type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
 type Condition = {
   field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment" | `field.${string}` | `contact.field.${string}`;
@@ -155,7 +178,10 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | POST | `/v1/auth/totp/enable` | `{code}` → `{recovery_codes: string[]}` |
 | POST | `/v1/auth/totp/disable` | `{code}` → 204 |
 | GET | `/v1/me` | → `{user: User, memberships: Membership[]}` |
-| PATCH | `/v1/me` | `{name?, avatar_url?}` → `User` |
+| PATCH | `/v1/me` | `{name?, avatar_url?}` → `User`. `avatar_url` is a picture to copy: an https URL fetched and processed server-side (asynchronously; `member.updated` follows), `""` removes the picture |
+| PUT | `/v1/me/avatar` | multipart `file` (PNG, JPEG, GIF or WebP, at most 5 MB) → `User` with `avatar_source: "upload"`. Audit `user.avatar_updated` |
+| DELETE | `/v1/me/avatar` | → `User` with no picture; the next Google or GitHub sign-in brings the provider picture back. Audit `user.avatar_removed` |
+| POST | `/v1/me/heartbeat` | → 204. Marks the user seen (auto-away). The app sends it every 5 minutes while a tab is visible |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
 | GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | paginated `[{id, user_agent, ip, created_at, last_used_at, current}]` / revoke |
 | GET | `/v1/me/passkeys` | paginated `Passkey[]`, newest first. `Passkey = {id, name, created_at, last_used_at: string \| null, backed_up: bool}` |
@@ -174,6 +200,11 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | POST | `/v1/workspace/transfer` | owner + MFA, `{user_id}` |
 | POST | `/v1/workspace/widget-secret/rotate` | admin → `{secret}` (shown once) |
 | GET | `/v1/members` · PATCH/DELETE `/v1/members/{user_id}` | `{role}` |
+| PATCH | `/v1/members/{user_id}/availability` | `{availability?: Availability, max_open_tickets?: number \| null /* 1..1000, null clears */}` → `Member`. `user_id` may be `me`. Members set their own `availability`; admins set anyone's and `max_open_tickets` (viewers cannot be assigned, so theirs is refused). Publishes `member.updated` |
+| PUT/DELETE | `/v1/workspace/images/{slot}` | admin. `slot`: `logo` (the workspace `avatar_url`), `help_center_logo`, `help_center_favicon`, `widget_avatar`, `widget_launcher`. PUT multipart `file` (image, 5 MB) → `Workspace`; DELETE → `Workspace`. Audit `workspace.image_updated` / `workspace.image_removed`; publishes `workspace.updated` |
+| GET | `/v1/images/{id}?s=256\|64` | public. The processed PNG behind every `avatar_url` (`s` defaults to 256). Ids are unguessable and immutable: `Cache-Control: public, max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` |
+| GET | `/v1/onboarding` | members → `Onboarding`, computed from the workspace's real state (below) |
+| POST | `/v1/onboarding/dismiss` | → 204. Hides the checklist for this member; `GET` still answers, with `dismissed: true` |
 | GET/POST | `/v1/invitations` · DELETE `/v1/invitations/{id}` | `{email, role}` |
 | POST | `/v1/invitations/accept` | `{token}` → `Membership` (no workspace header) |
 | GET | `/v1/invitations/lookup?token=` | → `{workspace_name, email, role}` public |
@@ -226,6 +257,8 @@ Core notes:
 | CRUD | `/v1/contacts`, `/v1/contacts/{id}` | list supports `q`, `company_id`, `tag`, `field.<key>`. Write bodies also take `tags?: string[]` (replaces), `add_tags?`, `remove_tags?` (names, as for tickets) and `fields?` (merged; null clears) |
 | GET | `/v1/contacts/{id}/tickets` | list |
 | CRUD | `/v1/companies`, `/v1/companies/{id}` | list supports `q`, `tag`, `field.<key>`; write bodies take `tags?`, `add_tags?`, `remove_tags?`, `fields?` as contacts |
+| PUT/DELETE | `/v1/contacts/{id}/avatar`, `/v1/companies/{id}/avatar` | agent (`contacts:write`). PUT multipart `file` (image, 5 MB) → `Contact` / `Company` with `avatar_source: "upload"`, which automatic sources never replace. DELETE removes it and looks up the automatic sources again. Audit `contact.avatar_updated` / `company.avatar_updated` (and `_removed`); publishes `contact.updated` / `company.updated` |
+| POST | `/v1/contacts/{id}/avatar/refresh`, `/v1/companies/{id}/avatar/refresh` | agent → 202. Looks the automatic sources up again now (no effect on an upload) |
 | GET | `/v1/tags` | `?q=&group_id=<uuid\|none>&archived=true\|false\|any` (default `any`) `&applies_to=tickets\|contacts\|companies` → `{data: Tag[], next_cursor: null}` (all of them, ordered by group position, then position, then name) |
 | POST | `/v1/tags` | admin. `{name, color?, description?, group_id?, applies_to?, position?}` → 201 `Tag`. `color` defaults to a palette colour picked from the name, `applies_to` to all three, `position` to the end. `409 conflict` on a name taken (case-insensitive) |
 | GET | `/v1/tags/{id}` | → `Tag` |
@@ -243,7 +276,10 @@ Core notes:
 | POST | `/v1/custom-fields/reorder` | admin. `{entity, ids: string[]}` → `{data: CustomField[]}` (that entity's fields) |
 | CRUD | `/v1/saved-replies` | |
 | CRUD | `/v1/views` | `{name, filters, shared}` |
-| CRUD | `/v1/sla-policies` | |
+| CRUD | `/v1/sla-policies` | body takes `business_hours?: boolean` |
+| GET/PUT | `/v1/business-hours` | GET members → `BusinessHours`; PUT admin, full `BusinessHours` (`timezone` sets `settings.timezone`) → `BusinessHours`. Audit `business_hours.updated` |
+| GET/PATCH | `/v1/assignment` | GET members → `Assignment`; PATCH admin `{mode?, rules? /* replaces */, auto_away_minutes?}` → `Assignment`. Audit `assignment.updated` |
+| GET/PATCH | `/v1/triage` | GET members → `TriageSettings`; PATCH admin `{auto_triage?, fields?, assign_after_triage?}` → `TriageSettings` (stored in `settings.ai`, contracts/ai.md). Audit `triage.updated` |
 | CRUD | `/v1/automations` | |
 | CRUD | `/v1/kb/collections`, `/v1/kb/articles` | articles list supports `collection_id`, `status`, `q` |
 | GET | `/v1/search?q=` | → `{tickets: Ticket[], contacts: Contact[], articles: KbArticle[]}` (5 each) |
@@ -297,10 +333,64 @@ Automations: conditions take `field.<key>` (ticket field) and `contact.field.<ke
 written as a string (`"12.5"`, `"true"`, `"2026-10-11"`, comma separated option ids; `""` clears); it is validated when the
 automation is saved and skipped at run time if the field was archived or deleted since.
 
+#### Profile pictures and logos
+
+- Every `avatar_url` points at `GET /v1/images/{id}` on this API: pictures from any source are fetched and processed
+  server-side and never hot-linked. Processing decodes PNG, JPEG, GIF (first frame) or WebP only (by content, not name or
+  header), refuses anything else (SVG, HTML, ICO with bitmap entries), caps input at 5 MB and 4096 px a side (16 Mpx), applies
+  EXIF orientation, crops people to a square (logos are fitted, not cropped), resizes to 256 and 64 px and re-encodes PNG
+  without metadata. Uploads answer `413 too_large`, `422 unsupported_image` or `422 image_too_large`.
+- Sources, highest first. Agents: `upload` > `oauth` (the Google or GitHub picture at sign-in; Microsoft and OIDC sign-ins
+  carry none). Contacts: `upload` > `widget` (verified widget sessions) > `gravatar` (only with `settings.gravatar`, looked up
+  as `sha256(lowercased email)` with `d=404`). Companies: `upload` > `domain` (with `settings.domain_logos`: the domain's
+  `apple-touch-icon`, manifest icons, `<link rel=icon>` and `/favicon.ico` PNG entries; or the logo provider the instance
+  configures). A workspace logo is `upload` only.
+- Fetches use https only, refuse private, loopback and link-local targets (re-checked on each redirect, at most 3), take at
+  most 10 seconds, read at most 5 MB and accept only image content types (HTML for the domain's home page, at most 512 KB).
+- Automatic pictures are refreshed every 30 days. A miss (404, nothing usable, an error) is remembered and retried after
+  1, 2, 4, 8, 16, then every 30 days. New contacts and companies are looked up within minutes; turning `gravatar` on looks up
+  every contact without a picture, turning it off removes Gravatar pictures.
+
+#### Assignment
+
+- Mode per ticket: the rule for its team, else the rule for its mailbox, else `settings.auto_assign`. Modes: `none`,
+  `round_robin` (the next eligible agent after the last one picked in that pool), `load_balanced` (the eligible agent with the
+  fewest open and pending assigned tickets; ties go round robin).
+- Pool: the members of the ticket's team, else of its mailbox's team, else every owner, admin and agent. Viewers are never
+  assigned. Eligible: `presence` is `online` and `open_tickets < max_open_tickets` (when set). With nobody eligible the ticket
+  stays unassigned.
+- It runs in the ticket trigger after automations, on `ticket_created` and on `customer_replied`, for tickets that are
+  unassigned, not spam and not solved or closed. The `assigned` activity has actor `system` and `via` the mode.
+- `presence` is `away` when `availability` is `online` but `auto_away_minutes` > 0 and the member was not seen (sign-in,
+  token refresh, `POST /v1/me/heartbeat`) for that long. `auto_away_minutes`: 0 or 10..1440, default 0.
+- Rules: at most 200, one per target, targets must be the workspace's mailboxes and teams (deleting one deletes its rule).
+
+#### Triage
+
+`/v1/triage` is the one place to set up Jev's triage: `auto_triage` (`settings.ai.auto_triage`), `fields`
+(`settings.ai.triage_fields`, default both: `priority` lets triage raise priority, `labels` lets it add labels; sentiment,
+language and category are always recorded) and `assign_after_triage` (`settings.ai.assign_after_triage`, default false):
+after Jev triages a new ticket, it is assigned by the resolved mode, or `load_balanced` when that mode is `none`, with actor
+`ai` and `via: "triage"`.
+
+#### Business hours
+
+`BusinessHours` lives in `settings.business_hours`. Up to 3 ranges per day, `start < end`, on the quarter hour (`24:00` ends a
+day); up to 100 holidays (closed all day). An SLA policy with `business_hours: true` counts its minutes only while the
+workspace is open, in its timezone; with business hours off or an empty week it counts every minute. Due dates are computed
+when the policy is applied (ticket created, priority changed).
+
+#### Onboarding
+
+Steps, in order, and when each is done: `connect_mailbox` a mailbox exists; `invite_teammate` another member or a pending
+invitation; `upload_photo` the caller has a picture; `install_widget` a widget session was ever opened; `publish_article` a
+published article; `setup_triage` auto-assignment is not `none` anywhere or auto-triage is on; `create_label` a label other
+than the seeded ones; `try_jev` any Jev feature was used in the workspace. Titles are English copy the app may override.
+
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/public/help/{workspace_slug}` | `{title, collections: KbCollection[], featured: KbArticle[], locale}` published only |
+| GET | `/v1/public/help/{workspace_slug}` | `{title, collections: KbCollection[], featured: KbArticle[], locale, logo_url: string \| null, favicon_url: string \| null}` published only |
 | GET | `/v1/public/help/{workspace_slug}/collections/{slug}` | `{collection, articles}` |
 | GET | `/v1/public/help/{workspace_slug}/articles/{slug}` | `KbArticle`, increments views |
 | GET | `/v1/public/help/{workspace_slug}/search?q=` | `KbArticle[]` |
@@ -309,8 +399,8 @@ automation is saved and skipped at run time if the field was archived or deleted
 ### Widget (owner: backend-helpdesk; `Authorization: Visitor <token>` except session)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/widget/config?key=<widget_key>` | `{workspace_name, brand_color, greeting, help_center_url, require_email, locale}` |
-| POST | `/v1/widget/session` | `{key, visitor_token?, email?, name?, user_id?, user_hash?}` → `{visitor_token, contact: ContactRef, ws_token, gateway_url}`; `user_hash` = hex HMAC-SHA256(widget_secret, user_id) marks the session verified |
+| GET | `/v1/widget/config?key=<widget_key>` | `{workspace_name, brand_color, greeting, help_center_url, require_email, locale, avatar_url: string \| null /* widget_avatar, else the workspace logo */, launcher_icon_url: string \| null}` |
+| POST | `/v1/widget/session` | `{key, visitor_token?, email?, name?, user_id?, user_hash?, avatar_url?}` → `{visitor_token, contact: ContactRef, ws_token, gateway_url}`; `user_hash` = hex HMAC-SHA256(widget_secret, user_id) marks the session verified. `avatar_url` (https) is used only on a verified session: it is fetched server-side as the contact's picture (`avatar_source: "widget"`) unless an agent uploaded one |
 | GET | `/v1/widget/conversations` | visitor's chat tickets `{id, subject, status, last_message_preview, last_message_at, ai_handoff}` (`ai_handoff`: the visitor asked for a person, contracts/ai.md) |
 | POST | `/v1/widget/conversations` | `{body}` → conversation + first message |
 | GET | `/v1/widget/conversations/{id}/messages` | public messages only (no notes) |

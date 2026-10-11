@@ -26,6 +26,8 @@ customer by itself except the widget answer bot (opt-in, labelled as AI, with a 
 interface AISettings {
   enabled: boolean                 // master switch, default true when the instance has AI
   auto_triage: boolean             // run triage on new tickets, default false
+  triage_fields: ("priority" | "labels")[] // what triage may change, default both (set through /v1/triage)
+  assign_after_triage: boolean     // assign a ticket after auto-triage, attributed to ai (contracts/api.md "Triage"), default false
   auto_summarize: boolean          // keep a summary on tickets with 5+ messages, default false
   widget_answers: boolean          // answer bot in the chat widget, default false
   tone: string                     // "friendly" | "professional" | "concise" | free text up to 200 chars
