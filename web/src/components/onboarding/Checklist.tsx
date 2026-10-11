@@ -26,7 +26,7 @@ export const STEP_ICONS: Record<OnboardingStepId, LucideIcon> = {
   publish_article: BookOpen,
   setup_triage: Shuffle,
   create_label: Tag,
-  try_jev: Sparkles,
+  try_ollie: Sparkles,
 };
 
 /** Done and total from the steps themselves, so an optimistic flip moves the bar at once. */
@@ -143,7 +143,7 @@ function StepRow({ step, focus, blocked, onStep }: { step: OnboardingStep; focus
   const { t } = useTranslation("setup");
   const reduce = useReducedMotion();
   const Icon = STEP_ICONS[step.id] ?? Sparkles;
-  const ai = step.id === "try_jev";
+  const ai = step.id === "try_ollie";
   const interactive = !step.done && !blocked;
   const go = () => (onStep ? onStep(step) : router.history.push(step.href));
 

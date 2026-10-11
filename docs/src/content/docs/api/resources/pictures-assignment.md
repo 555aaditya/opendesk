@@ -14,7 +14,7 @@ description: Profile pictures and logos, agent availability, assignment rules, t
 | `POST` | `/v1/contacts/{id}/avatar/refresh`, `/v1/companies/{id}/avatar/refresh` | Look the automatic sources up again (202) |
 | `GET` | `/v1/images/{id}?s=256\|64` | The processed picture behind every `avatar_url` (public) |
 | `GET`, `PATCH` | `/v1/assignment` | Workspace mode, per mailbox and team rules, auto-away |
-| `GET`, `PATCH` | `/v1/triage` | Jev's triage settings |
+| `GET`, `PATCH` | `/v1/triage` | Ollie's triage settings |
 | `GET`, `PUT` | `/v1/business-hours` | Opening hours, holidays and timezone |
 | `GET` | `/v1/onboarding` | The setup checklist for the current workspace |
 | `POST` | `/v1/onboarding/dismiss` | Hide the checklist for yourself (204) |
@@ -169,7 +169,7 @@ SLA policies with `business_hours: true` count only open minutes.
 
 ## Onboarding
 
-Each step is computed from the workspace's real state, so it is done as soon as the thing exists. Step ids are `connect_mailbox`, `invite_teammate`, `upload_photo`, `install_widget`, `publish_article`, `setup_triage`, `create_label` and `try_jev`.
+Each step is computed from the workspace's real state, so it is done as soon as the thing exists. Step ids are `connect_mailbox`, `invite_teammate`, `upload_photo`, `install_widget`, `publish_article`, `setup_triage`, `create_label` and `try_ollie`.
 
 ## Events
 

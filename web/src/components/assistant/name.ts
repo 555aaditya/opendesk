@@ -4,7 +4,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { q } from "@/lib/queries";
 
-export const ASSISTANT_NAME = "Jev";
+export const ASSISTANT_NAME = "Ollie";
 
 export function useAssistantName(): string {
   const { data } = useQuery(q.aiConfig());

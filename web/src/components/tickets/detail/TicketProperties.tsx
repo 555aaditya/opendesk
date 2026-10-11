@@ -17,7 +17,7 @@ import { ContactCard } from "@/components/contacts/ContactCard";
 import { TicketAiPanel } from "@/components/ai/ticket/AiPanel";
 import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, slaState, StatusIcon, statusOrder } from "../bits";
 import { LabelPicker } from "./LabelPicker";
-import { SetByJev, useAISet } from "../jev";
+import { SetByOllie, useAISet } from "../ollie";
 import { FieldsSection } from "./FieldsSection";
 import { useDisplay, type FieldPatch, type TicketWithFields } from "../fields";
 import { useUpdateTicket } from "../useTicketActions";
@@ -150,7 +150,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               <PropButton disabled={!canEdit}>
                 <StatusIcon status={t.status} />
                 {display.status(t.status)}
-                {aiSet.status && <SetByJev />}
+                {aiSet.status && <SetByOllie />}
               </PropButton>
             }
           />
@@ -166,7 +166,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               <PropButton disabled={!canEdit}>
                 <PriorityIcon priority={t.priority} />
                 {display.priority(t.priority)}
-                {aiSet.priority && <SetByJev />}
+                {aiSet.priority && <SetByOllie />}
               </PropButton>
             }
           />
@@ -211,7 +211,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
             {t.tags.map((tag) => (
               <span key={tag.id} className="relative animate-pop-in motion-reduce:animate-none">
                 <TagChip name={tag.name} color={tag.color} onRemove={canEdit ? () => patch({ tags: tagNames.filter((n) => n !== tag.name) }) : undefined} />
-                {aiSet.tags.has(tag.name) && <SetByJev className="absolute -right-1 -top-1 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+                {aiSet.tags.has(tag.name) && <SetByOllie className="absolute -right-1 -top-1 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
               </span>
             ))}
             {canEdit && (

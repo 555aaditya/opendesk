@@ -8,7 +8,7 @@ import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import { assistantApi, type AssistantSession } from "./api";
-import { jev, sessionsKey, useJev } from "./store";
+import { ollie, sessionsKey, useOllie } from "./store";
 
 function when(iso: string) {
   const d = new Date(iso);
@@ -29,7 +29,7 @@ function Row({ s, active }: { s: AssistantSession; active: boolean }) {
   const rename = useMutation({
     mutationFn: (v: string) => assistantApi.rename(s.id, v),
     onSuccess: (r) => {
-      if (useJev.getState().sessionId === s.id) useJev.setState({ title: r.title });
+      if (useOllie.getState().sessionId === s.id) useOllie.setState({ title: r.title });
       void qc.invalidateQueries({ queryKey: sessionsKey });
     },
     onError: (e) => toast.error(e),
@@ -39,7 +39,7 @@ function Row({ s, active }: { s: AssistantSession; active: boolean }) {
       t("deleteConfirm"),
       async () => {
         await assistantApi.remove(s.id);
-        if (useJev.getState().sessionId === s.id) jev.newChat();
+        if (useOllie.getState().sessionId === s.id) ollie.newChat();
         void qc.invalidateQueries({ queryKey: sessionsKey });
       },
       { title: t("deleteTitle"), confirmLabel: t("delete"), danger: true },
@@ -73,7 +73,7 @@ function Row({ s, active }: { s: AssistantSession; active: boolean }) {
           className="h-6 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-1.5 text-[12.5px] text-fg outline-none"
         />
       ) : (
-        <button type="button" onClick={() => void jev.load(s.id)} className="min-w-0 flex-1 truncate text-left text-[12.5px] text-fg-2 after:absolute after:inset-0 group-hover:text-fg" data-ph-mask>
+        <button type="button" onClick={() => void ollie.load(s.id)} className="min-w-0 flex-1 truncate text-left text-[12.5px] text-fg-2 after:absolute after:inset-0 group-hover:text-fg" data-ph-mask>
           {s.title || t("untitled")}
         </button>
       )}
@@ -96,7 +96,7 @@ function Row({ s, active }: { s: AssistantSession; active: boolean }) {
 
 export function SessionList() {
   const { t } = useTranslation("assistant");
-  const active = useJev((s) => s.sessionId);
+  const active = useOllie((s) => s.sessionId);
   const { data, isLoading } = useQuery({ queryKey: sessionsKey, queryFn: assistantApi.sessions, staleTime: 30_000 });
   const rows = data?.data ?? [];
   return (

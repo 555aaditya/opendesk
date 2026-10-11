@@ -36,7 +36,7 @@ Same code, same API.
 | Draft a reply | `draft_reply` | 3 |
 | Widget AI answer from the knowledge base | `answer` | 3 |
 | Draft a KB article from tickets | `kb_draft` | 5 |
-| Jev, the assistant (each model turn of a run) | `assistant` | 2 |
+| Ollie, the assistant (each model turn of a run) | `assistant` | 2 |
 
 Go API (`internal/plan`, `d.Plan`):
 - `d.Plan.Entitlements(ctx, q, wid)`, `d.Plan.CheckMailbox`, `d.Plan.CheckMember` (return

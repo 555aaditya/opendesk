@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ChannelIcon, channelLabel, PriorityIcon, SlaPill, slaState, StatusIcon } from "./bits";
 import { useDisplay } from "./fields";
-import { SetByJev, useAssistantName } from "./jev";
+import { SetByOllie, useAssistantName } from "./ollie";
 import { useTicketViewers } from "./presence";
 import { rowMotion } from "./motion";
 
@@ -90,7 +90,7 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
   const { t: tr } = useTranslation("inbox");
   const reduced = useReducedMotion();
   const display = useDisplay();
-  const jev = useAssistantName();
+  const ollie = useAssistantName();
   const unread = awaitingReply(t);
   const contactName = t.contact?.name || t.contact?.email || tr("row.unknown");
   const subject = t.subject || tr("row.noSubject");
@@ -138,10 +138,10 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
 
   // Every row shows its priority in the same slot, so the column lines up.
   const prioritySlot = (
-    <Tooltip content={aiSet ? `${tr("row.priority", { priority: display.priority(t.priority) })} · ${tr("jev.setBy", { name: jev })}` : tr("row.priority", { priority: display.priority(t.priority) })}>
+    <Tooltip content={aiSet ? `${tr("row.priority", { priority: display.priority(t.priority) })} · ${tr("ollie.setBy", { name: ollie })}` : tr("row.priority", { priority: display.priority(t.priority) })}>
       <span className="relative flex size-4 shrink-0 items-center justify-center">
         <PriorityIcon priority={t.priority} />
-        {aiSet && <SetByJev className="absolute -right-1.5 -top-1.5 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+        {aiSet && <SetByOllie className="absolute -right-1.5 -top-1.5 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
       </span>
     </Tooltip>
   );

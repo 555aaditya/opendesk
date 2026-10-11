@@ -1,4 +1,4 @@
-// Settings > Triage: whether the AI teammate (Jev by default) reads each new
+// Settings > Triage: whether the AI teammate (Ollie by default) reads each new
 // ticket, what it may change, and whether it assigns afterwards
 // (contracts/api.md "Triage"). Onboarding links here as /settings/triage.
 
@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Row, Section, SettingsPage } from "@/components/layout";
 import { PriorityIcon } from "@/components/indicators";
-import { JevAvatar, SetByJev, useAssistantName } from "@/components/tickets/jev";
+import { OllieAvatar, SetByOllie, useAssistantName } from "@/components/tickets/ollie";
 import { TagChip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -224,7 +224,7 @@ function Explainer({ s, name }: { s?: TriageSettings; name: string }) {
   return (
     <div className="grid animate-rise-in gap-4 rounded-lg border border-line bg-sunken/50 p-4 md:grid-cols-[1fr_300px]">
       <div className="flex min-w-0 gap-3">
-        <JevAvatar size={32} />
+        <OllieAvatar size={32} />
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[13px] font-medium">
             {t("triage.explainer.title", { name })}
@@ -256,9 +256,9 @@ function Explainer({ s, name }: { s?: TriageSettings; name: string }) {
                 transition={springs.row}
                 className="flex items-center gap-1.5 text-[11.5px] text-fg-2"
               >
-                <JevAvatar size={14} />
+                <OllieAvatar size={14} />
                 {l.node}
-                <SetByJev className="ml-auto" />
+                <SetByOllie className="ml-auto" />
               </motion.li>
             ))}
           </AnimatePresence>

@@ -1,4 +1,4 @@
-// Package assistant is Jev, opendesk's assistant: a tool-using conversation on the
+// Package assistant is Ollie, opendesk's assistant: a tool-using conversation on the
 // configured AI provider, streamed over SSE, that reads the workspace and proposes
 // changes the user approves one by one (contracts/ai.md, Assistant). Tools run through
 // the public API in process, as the calling user, so they carry exactly that user's
@@ -31,7 +31,7 @@ const maxSteps = 8
 
 var (
 	errNotPending = httpx.E(http.StatusConflict, "approval_not_pending", "This change is no longer waiting for approval.")
-	errBusy       = httpx.E(http.StatusConflict, "assistant_busy", "Jev is still working on this conversation.")
+	errBusy       = httpx.E(http.StatusConflict, "assistant_busy", "Ollie is still working on this conversation.")
 	errOff        = httpx.E(http.StatusForbidden, "assistant_off", "The assistant is turned off for this workspace.")
 	errBadToken   = httpx.E(http.StatusForbidden, "approval_invalid", "This approval is not valid for you.")
 )

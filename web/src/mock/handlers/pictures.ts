@@ -133,7 +133,7 @@ export function onboarding(ws: WsData): Onboarding {
     publish_article: ws.articles.some((a) => a.status === "published"),
     setup_triage: (ws.workspace.settings.auto_assign ?? "none") !== "none" || ws.routing.rules.some((r) => r.mode !== "none") || ws.ai.auto_triage,
     create_label: ws.tags.some((t) => !SEEDED_LABELS.includes(t.name.toLowerCase())),
-    try_jev: ws.aiUsage.some((u) => u.user_id !== null),
+    try_ollie: ws.aiUsage.some((u) => u.user_id !== null),
   };
   const steps: OnboardingStep[] = [
     { id: "connect_mailbox", title: "Connect a mailbox", description: "Bring your support email in so messages become tickets.", done: done.connect_mailbox, href: "/settings/mailboxes", requires: "admin" },
@@ -141,9 +141,9 @@ export function onboarding(ws: WsData): Onboarding {
     { id: "upload_photo", title: "Upload your photo", description: "Customers and teammates see who is replying.", done: done.upload_photo, href: "/settings/profile", requires: "agent" },
     { id: "install_widget", title: "Install the chat widget", description: "Add live chat to your site with one script tag.", done: done.install_widget, href: "/settings/widget", requires: "admin" },
     { id: "publish_article", title: "Publish a help article", description: "Answer common questions before they become tickets.", done: done.publish_article, href: "/kb", requires: "agent" },
-    { id: "setup_triage", title: "Set up triage and assignment", description: "Let Jev sort new tickets and route them to whoever is available.", done: done.setup_triage, href: "/settings/triage", requires: "admin" },
+    { id: "setup_triage", title: "Set up triage and assignment", description: "Let Ollie sort new tickets and route them to whoever is available.", done: done.setup_triage, href: "/settings/triage", requires: "admin" },
     { id: "create_label", title: "Create a label", description: "Group tickets by topic, product or customer type.", done: done.create_label, href: "/settings/tags", requires: "admin" },
-    { id: "try_jev", title: "Try Jev", description: "Ask Jev to draft a reply, summarize a ticket or find an answer.", done: done.try_jev, href: "/inbox/all", requires: "agent" },
+    { id: "try_ollie", title: "Try Ollie", description: "Ask Ollie to draft a reply, summarize a ticket or find an answer.", done: done.try_ollie, href: "/inbox/all", requires: "agent" },
   ];
   return { steps, done_count: steps.filter((s) => s.done).length, total: steps.length, dismissed: !!row?.onboarding_dismissed };
 }

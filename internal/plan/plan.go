@@ -46,7 +46,7 @@ var Costs = map[string]int{
 	"answer":      3, // widget AI answer from the knowledge base
 	"kb_draft":    5, // knowledge base article draft from tickets
 	"copilot":     2, // free-form question about a ticket
-	"assistant":   2, // one model turn of the assistant (Jev)
+	"assistant":   2, // one model turn of the assistant (Ollie)
 }
 
 var (

@@ -1,4 +1,4 @@
-// Jev's panel state and runs. One conversation is live at a time; its blocks
+// Ollie's panel state and runs. One conversation is live at a time; its blocks
 // (text and tool steps, in the order they happened) render the transcript, and
 // runs stream into the last assistant entry.
 
@@ -28,11 +28,11 @@ type State = {
   approval: Approval | null;
   /** Set when a run ended well, for the blob's cheer. */
   lastOk: boolean;
-  /** A prompt to send once the panel is ready (askJev). */
+  /** A prompt to send once the panel is ready (askOllie). */
   queued: string | null;
 };
 
-const PREFS = "od-jev-prefs";
+const PREFS = "od-ollie-prefs";
 
 function readPrefs(): Partial<Pick<State, "mode" | "offset" | "sessionId">> {
   try {
@@ -53,7 +53,7 @@ function writePrefs(s: State) {
 
 const prefs = readPrefs();
 
-export const useJev = create<State>(() => ({
+export const useOllie = create<State>(() => ({
   open: false,
   mode: prefs.mode === "floating" ? "floating" : "docked",
   offset: prefs.offset ?? { right: 24, bottom: 24 },
@@ -68,7 +68,7 @@ export const useJev = create<State>(() => ({
   queued: null,
 }));
 
-useJev.subscribe((s, prev) => {
+useOllie.subscribe((s, prev) => {
   if (s.mode !== prev.mode || s.offset !== prev.offset || s.sessionId !== prev.sessionId) writePrefs(s);
 });
 
@@ -98,7 +98,7 @@ export function toEntries(tr: Transcript): Entry[] {
 }
 
 function patchLast(fn: (e: Entry) => Entry) {
-  useJev.setState((s) => {
+  useOllie.setState((s) => {
     const entries = s.entries.slice();
     const i = entries.length - 1;
     if (i < 0 || entries[i].role !== "assistant") return s;
@@ -110,7 +110,7 @@ function patchLast(fn: (e: Entry) => Entry) {
 function apply(e: RunEvent) {
   switch (e.type) {
     case "session":
-      useJev.setState({ title: e.session.title });
+      useOllie.setState({ title: e.session.title });
       void queryClient.invalidateQueries({ queryKey: sessionsKey });
       break;
     case "text":
@@ -132,10 +132,10 @@ function apply(e: RunEvent) {
       });
       break;
     case "approval":
-      useJev.setState({ approval: e.approval });
+      useOllie.setState({ approval: e.approval });
       break;
     case "done":
-      useJev.setState({ lastOk: e.status === "complete" });
+      useOllie.setState({ lastOk: e.status === "complete" });
       break;
   }
 }
@@ -144,65 +144,65 @@ async function run(go: (signal: AbortSignal) => Promise<void>) {
   controller?.abort();
   const c = new AbortController();
   controller = c;
-  useJev.setState({ running: true, lastOk: false });
+  useOllie.setState({ running: true, lastOk: false });
   try {
     await go(c.signal);
   } catch (err) {
-    if ((err as Error)?.name !== "AbortError") patchLast((en) => ({ ...en, error: errorMessage(err, "Jev could not answer. Try again.") }));
+    if ((err as Error)?.name !== "AbortError") patchLast((en) => ({ ...en, error: errorMessage(err, "Ollie could not answer. Try again.") }));
   } finally {
     if (controller === c) controller = null;
-    useJev.setState({ running: false });
+    useOllie.setState({ running: false });
     // Tool writes went through the API: refresh what they may have changed.
     void queryClient.invalidateQueries({ queryKey: sessionsKey });
   }
 }
 
 async function ensureSession(): Promise<string> {
-  const s = useJev.getState();
+  const s = useOllie.getState();
   if (s.sessionId) return s.sessionId;
   const created = await assistantApi.create();
-  useJev.setState({ sessionId: created.id, title: created.title });
+  useOllie.setState({ sessionId: created.id, title: created.title });
   return created.id;
 }
 
 /** Reopening after a reload picks the last conversation back up. */
 function restore() {
-  const s = useJev.getState();
-  if (s.sessionId && !s.entries.length && !s.loading && !s.running && !s.queued) void jev.load(s.sessionId);
+  const s = useOllie.getState();
+  if (s.sessionId && !s.entries.length && !s.loading && !s.running && !s.queued) void ollie.load(s.sessionId);
 }
 
-export const jev = {
+export const ollie = {
   open: (open = true) => {
-    useJev.setState({ open });
+    useOllie.setState({ open });
     if (open) restore();
   },
-  toggle: () => jev.open(!useJev.getState().open),
-  setMode: (mode: Mode) => useJev.setState({ mode }),
-  setOffset: (offset: State["offset"]) => useJev.setState({ offset }),
-  sessions: (showSessions = !useJev.getState().showSessions) => useJev.setState({ showSessions }),
+  toggle: () => ollie.open(!useOllie.getState().open),
+  setMode: (mode: Mode) => useOllie.setState({ mode }),
+  setOffset: (offset: State["offset"]) => useOllie.setState({ offset }),
+  sessions: (showSessions = !useOllie.getState().showSessions) => useOllie.setState({ showSessions }),
 
   /** A fresh, empty conversation (created on the first message). */
   newChat: () => {
     controller?.abort();
-    useJev.setState({ sessionId: null, title: "", entries: [], approval: null, running: false, showSessions: false });
+    useOllie.setState({ sessionId: null, title: "", entries: [], approval: null, running: false, showSessions: false });
   },
 
   load: async (id: string) => {
     controller?.abort();
-    useJev.setState({ sessionId: id, loading: true, entries: [], approval: null, showSessions: false, running: false });
+    useOllie.setState({ sessionId: id, loading: true, entries: [], approval: null, showSessions: false, running: false });
     try {
       const tr = await assistantApi.get(id);
-      if (useJev.getState().sessionId !== id) return;
-      useJev.setState({ title: tr.session.title, entries: toEntries(tr), approval: tr.approval, loading: false });
+      if (useOllie.getState().sessionId !== id) return;
+      useOllie.setState({ title: tr.session.title, entries: toEntries(tr), approval: tr.approval, loading: false });
     } catch {
-      if (useJev.getState().sessionId === id) useJev.setState({ sessionId: null, title: "", entries: [], loading: false });
+      if (useOllie.getState().sessionId === id) useOllie.setState({ sessionId: null, title: "", entries: [], loading: false });
     }
   },
 
   send: async (text: string, context: PageContext | undefined = pageContext()) => {
     const t = text.trim();
-    if (!t || useJev.getState().running) return;
-    useJev.setState((s) => ({
+    if (!t || useOllie.getState().running) return;
+    useOllie.setState((s) => ({
       approval: null,
       entries: [...s.entries, { id: uid(), role: "user", text: t, blocks: [] }, { id: uid(), role: "assistant", text: "", blocks: [] }],
     }));
@@ -213,9 +213,9 @@ export const jev = {
   },
 
   decide: async (decision: "approve" | "deny") => {
-    const a = useJev.getState().approval;
-    if (!a || useJev.getState().running) return;
-    useJev.setState((s) => {
+    const a = useOllie.getState().approval;
+    if (!a || useOllie.getState().running) return;
+    useOllie.setState((s) => {
       const entries = s.entries.slice();
       if (entries[entries.length - 1]?.role !== "assistant") entries.push({ id: uid(), role: "assistant", text: "", blocks: [] });
       return { approval: null, entries };
@@ -229,13 +229,13 @@ export const jev = {
 
   /** Open on a fresh conversation and ask `prompt` there. */
   ask: (prompt: string) => {
-    const s = useJev.getState();
-    if (s.sessionId || s.entries.length) jev.newChat();
-    useJev.setState({ open: true, queued: prompt });
+    const s = useOllie.getState();
+    if (s.sessionId || s.entries.length) ollie.newChat();
+    useOllie.setState({ open: true, queued: prompt });
   },
   takeQueued: () => {
-    const q = useJev.getState().queued;
-    if (q) useJev.setState({ queued: null });
+    const q = useOllie.getState().queued;
+    if (q) useOllie.setState({ queued: null });
     return q;
   },
 };

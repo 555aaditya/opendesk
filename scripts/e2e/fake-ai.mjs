@@ -162,7 +162,7 @@ function agentTurn(j) {
     return { text: answerFrom(results) };
   }
   const call = planCall(textOf(last), tools);
-  if (!call) return { text: "Hi! I am Jev. Ask me about your queue, a ticket or your numbers." };
+  if (!call) return { text: "Hi! I am Ollie. Ask me about your queue, a ticket or your numbers." };
   const lead = { get_ticket: "Let me read that ticket.", list_team: "Checking the team's workload.", bulk_update_tickets: "I will prepare that change.", update_ticket: "Preparing the change.", draft_reply: "Here is a draft.", add_note: "Adding a note." }[call.name] ?? "Let me look.";
   return { text: lead, call: { id: `call_${Math.random().toString(36).slice(2, 10)}`, ...call } };
 }

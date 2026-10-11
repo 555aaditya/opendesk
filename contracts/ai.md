@@ -30,7 +30,7 @@ interface AISettings {
   assign_after_triage: boolean     // assign a ticket after auto-triage, attributed to ai (contracts/api.md "Triage"), default false
   auto_summarize: boolean          // keep a summary on tickets with 5+ messages, default false
   widget_answers: boolean          // answer bot in the chat widget, default false
-  assistant: boolean               // Jev, the assistant panel, default true
+  assistant: boolean               // Ollie, the assistant panel, default true
   tone: string                     // "friendly" | "professional" | "concise" | free text up to 200 chars
   reply_language: "customer" | "workspace"  // reply in the customer's language (default) or the workspace's
   instructions: string             // extra guidance for drafts, up to 2,000 chars
@@ -48,7 +48,7 @@ means English unless `instructions` name another language.
 
 | method | path | min role | credits | body → response |
 | --- | --- | --- | --- | --- |
-| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast}, embeddings: boolean, features: AISettings, costs: Record<string, number>, assistant_name: "Jev"}` |
+| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast}, embeddings: boolean, features: AISettings, costs: Record<string, number>, assistant_name: "Ollie"}` |
 | PATCH | `/v1/ai/settings` | admin | 0 | `Partial<AISettings>` → `AISettings` |
 | POST | `/v1/tickets/{id}/ai/draft` | agent | 3 | `{instructions?: string, tone?: string}` → `{body_html, body_text, sources: KBSource[]}`; uses the thread, contact, saved replies and the top KB matches |
 | POST | `/v1/tickets/{id}/ai/summary` | viewer | 1 | `{}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; stored on the ticket (`custom.ai_summary`) and published as `ticket.updated` |
@@ -116,16 +116,16 @@ A summary also sets `custom.ai_sentiment`. `custom.ai_summary` is
 Messages and tickets also get `language` detection for free when triage runs
 (`custom.language`), which the web app uses for a "Translate" affordance.
 
-## Jev (the assistant)
+## Ollie (the assistant)
 
-The AI has one name, **Jev**, exposed once as `assistant_name` in `GET /v1/ai/config`
+The AI has one name, **Ollie**, exposed once as `assistant_name` in `GET /v1/ai/config`
 (`ai.AssistantName` in Go). The web app and emails read it from there. Everything the AI
-does is attributed to Jev: the assistant, auto-triage, widget answers and AI automation
-actions. Activities with `actor_type = "ai"` render as "Jev set priority to High" with the
-Jev mark as the actor avatar; when the AI acted for a person (`actor.user` set), the line
-still names Jev.
+does is attributed to Ollie: the assistant, auto-triage, widget answers and AI automation
+actions. Activities with `actor_type = "ai"` render as "Ollie set priority to High" with the
+Ollie mark as the actor avatar; when the AI acted for a person (`actor.user` set), the line
+still names Ollie.
 
-Jev is an agent loop over tool use (Anthropic tool use; OpenAI-compatible `tools` as the
+Ollie is an agent loop over tool use (Anthropic tool use; OpenAI-compatible `tools` as the
 fallback; a provider without tool support answers `501 ai_unsupported`). It needs a signed-in
 user (`kind = user`; API keys get `403`), viewer or above, AI on and `settings.ai.assistant`
 on (`403 assistant_off`). Conversations belong to one user in one workspace.
@@ -162,7 +162,7 @@ JSON `{session, text, steps, approval, status}`. Events, in order:
 | event | data |
 | --- | --- |
 | `session` | `Session` (messages only; the title is set from the first message) |
-| `text` | `{text}`, a delta of Jev's markdown |
+| `text` | `{text}`, a delta of Ollie's markdown |
 | `tool` | `Step`, sent when a tool starts and again when it ends (same `id`) |
 | `approval` | `Approval` |
 | `done` | `{status: "complete" \| "awaiting_approval"}` |

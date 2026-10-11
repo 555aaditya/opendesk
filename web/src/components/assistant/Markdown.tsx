@@ -1,4 +1,4 @@
-// The light markdown Jev writes, rendered to React elements (never HTML):
+// The light markdown Ollie writes, rendered to React elements (never HTML):
 // paragraphs, "-" and "1." lists, **bold**, *italic*, `code`, [links](https://…)
 // and #123 ticket references, which open the ticket.
 
@@ -112,7 +112,7 @@ export function Markdown({ text, refs = [], caret, className }: { text: string; 
   for (const r of refs) if (r.kind === "ticket" && r.number) tickets.set(r.number, r);
   const ctx: Ctx = { tickets };
   const nodes = parseBlocks(text);
-  const caretEl = caret ? <span aria-hidden className="jev-caret ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[0.18em] rounded-full bg-tone-violet-solid" /> : null;
+  const caretEl = caret ? <span aria-hidden className="ollie-caret ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[0.18em] rounded-full bg-tone-violet-solid" /> : null;
   return (
     <div className={cn("flex flex-col gap-1.5 text-[13px] leading-[20px] text-fg-2", className)} data-ph-mask>
       {nodes.map((n, i) => {

@@ -124,7 +124,7 @@ type TriageField = "priority" | "labels";
 type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean; available: boolean /* AI is configured and on for the workspace */ };
 type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type BusinessHours = { enabled: boolean; timezone: string /* the workspace timezone */; schedule: Record<Weekday, { start: string; end: string }[]> /* "HH:MM", 24h */; holidays: { date: string /* YYYY-MM-DD */; name: string }[] };
-type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_jev";
+type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie";
 type OnboardingStep = { id: OnboardingStepId; title: string; description: string; done: boolean; href: string /* app path */; requires: "admin" | "agent" };
 type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
 type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
@@ -367,10 +367,10 @@ automation is saved and skipped at run time if the field was archived or deleted
 
 #### Triage
 
-`/v1/triage` is the one place to set up Jev's triage: `auto_triage` (`settings.ai.auto_triage`), `fields`
+`/v1/triage` is the one place to set up Ollie's triage: `auto_triage` (`settings.ai.auto_triage`), `fields`
 (`settings.ai.triage_fields`, default both: `priority` lets triage raise priority, `labels` lets it add labels; sentiment,
 language and category are always recorded) and `assign_after_triage` (`settings.ai.assign_after_triage`, default false):
-after Jev triages a new ticket, it is assigned by the resolved mode, or `load_balanced` when that mode is `none`, with actor
+after Ollie triages a new ticket, it is assigned by the resolved mode, or `load_balanced` when that mode is `none`, with actor
 `ai` and `via: "triage"`.
 
 #### Business hours
@@ -385,7 +385,7 @@ when the policy is applied (ticket created, priority changed).
 Steps, in order, and when each is done: `connect_mailbox` a mailbox exists; `invite_teammate` another member or a pending
 invitation; `upload_photo` the caller has a picture; `install_widget` a widget session was ever opened; `publish_article` a
 published article; `setup_triage` auto-assignment is not `none` anywhere or auto-triage is on; `create_label` a label other
-than the seeded ones; `try_jev` any Jev feature was used in the workspace. Titles are English copy the app may override.
+than the seeded ones; `try_ollie` any Ollie feature was used in the workspace. Titles are English copy the app may override.
 
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |

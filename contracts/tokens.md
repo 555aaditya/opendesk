@@ -13,7 +13,7 @@ and a consumer accepts exactly one purpose. `exp` is required.
 | `oauth_state`| OAuth start endpoints         | 10 min   | OAuth callbacks                 |
 | `passkey_login` | `POST /v1/auth/passkey/login/begin` | 5 min | `POST /v1/auth/passkey/login/finish` |
 | `passkey_register` | `POST /v1/me/passkeys/register/begin` | 5 min | `POST /v1/me/passkeys/register/finish` |
-| `assistant_approval` | a Jev run's `approval` event | 15 min | `POST /v1/assistant/actions/{id}/decision` |
+| `assistant_approval` | a Ollie run's `approval` event | 15 min | `POST /v1/assistant/actions/{id}/decision` |
 
 ## Claims
 

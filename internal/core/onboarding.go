@@ -14,7 +14,7 @@ import (
 
 // OnboardingStep is one item of the setup checklist.
 type OnboardingStep struct {
-	ID          string `json:"id" enum:"connect_mailbox,invite_teammate,upload_photo,install_widget,publish_article,setup_triage,create_label,try_jev"`
+	ID          string `json:"id" enum:"connect_mailbox,invite_teammate,upload_photo,install_widget,publish_article,setup_triage,create_label,try_ollie"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Done        bool   `json:"done"`
@@ -35,7 +35,7 @@ var seededLabels = []string{"question", "problem", "bug", "feature request", "bi
 
 // loadOnboarding computes every step from the workspace's real state.
 func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID) (Onboarding, error) {
-	var mailbox, teammate, photo, widget, article, triage, label, jev, dismissed bool
+	var mailbox, teammate, photo, widget, article, triage, label, ollie, dismissed bool
 	err := q.QueryRow(ctx, `SELECT
 		EXISTS (SELECT 1 FROM mailboxes WHERE workspace_id = $1),
 		(SELECT count(*) FROM members WHERE workspace_id = $1) > 1
@@ -50,7 +50,7 @@ func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID) (Onbo
 		EXISTS (SELECT 1 FROM ai_usage WHERE workspace_id = $1 AND user_id IS NOT NULL),
 		COALESCE((SELECT onboarding_dismissed_at IS NOT NULL FROM members WHERE workspace_id = $1 AND user_id = $2), false)
 		FROM workspaces w WHERE w.id = $1`, wid, uid, seededLabels).
-		Scan(&mailbox, &teammate, &photo, &widget, &article, &triage, &label, &jev, &dismissed)
+		Scan(&mailbox, &teammate, &photo, &widget, &article, &triage, &label, &ollie, &dismissed)
 	if err != nil {
 		return Onboarding{}, err
 	}
@@ -60,9 +60,9 @@ func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID) (Onbo
 		{"upload_photo", "Upload your photo", "Customers and teammates see who is replying.", photo, "/settings/profile", "agent"},
 		{"install_widget", "Install the chat widget", "Add live chat to your site with one script tag.", widget, "/settings/widget", "admin"},
 		{"publish_article", "Publish a help article", "Answer common questions before they become tickets.", article, "/kb", "agent"},
-		{"setup_triage", "Set up triage and assignment", "Let Jev sort new tickets and route them to whoever is available.", triage, "/settings/triage", "admin"},
+		{"setup_triage", "Set up triage and assignment", "Let Ollie sort new tickets and route them to whoever is available.", triage, "/settings/triage", "admin"},
 		{"create_label", "Create a label", "Group tickets by topic, product or customer type.", label, "/settings/tags", "admin"},
-		{"try_jev", "Try Jev", "Ask Jev to draft a reply, summarize a ticket or find an answer.", jev, "/inbox/all", "agent"},
+		{"try_ollie", "Try Ollie", "Ask Ollie to draft a reply, summarize a ticket or find an answer.", ollie, "/inbox/all", "agent"},
 	}
 	o := Onboarding{Steps: steps, Total: len(steps), Dismissed: dismissed}
 	for _, s := range steps {

@@ -1,6 +1,6 @@
-// Mock Jev (contracts/ai.md, Assistant): conversations, a scripted agent that
+// Mock Ollie (contracts/ai.md, Assistant): conversations, a scripted agent that
 // streams text and tool steps over SSE, approval cards that change the ticket
-// only once approved (attributed to Jev), and tips from simple counts.
+// only once approved (attributed to Ollie), and tips from simple counts.
 
 import type { AssistantSession, AssistantStep, Approval, Preview, Tip, TranscriptItem } from "@/components/assistant/api";
 import type { Ticket, UserRef } from "@/lib/api/types";
@@ -275,7 +275,7 @@ export function registerAssistant() {
         if (!t) continue;
         const before = ctx.ws.activities.length;
         applyPatch(ctx.ws, t, p.patch, me, true, { createLabels: true, lenient: true });
-        // Jev made the change on the user's behalf.
+        // Ollie made the change on the user's behalf.
         for (const a of ctx.ws.activities.slice(before)) a.actor = { type: "ai", user: me };
       }
       p.step.status = "done";

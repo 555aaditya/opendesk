@@ -1,4 +1,4 @@
-// Jev's panel. Docked, it is a column beside the work panel that slides open;
+// Ollie's panel. Docked, it is a column beside the work panel that slides open;
 // floating, it is a card you can drag anywhere. On phones it is a sheet.
 // Esc closes it, ⌘Enter approves the change waiting in it.
 
@@ -9,12 +9,12 @@ import { useTranslation } from "react-i18next";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { Composer, type ComposerHandle } from "./Composer";
-import { JevMark } from "./JevMark";
+import { OllieMark } from "./OllieMark";
 import { Markdown } from "./Markdown";
 import { useAssistantName } from "./name";
 import { SessionList } from "./SessionList";
 import { ApprovalCard, StepRow } from "./Steps";
-import { jev, useJev, type Entry } from "./store";
+import { ollie, useOllie, type Entry } from "./store";
 import { Suggestions } from "./Suggestions";
 import type { AssistantRef } from "./api";
 
@@ -41,32 +41,32 @@ function HeadButton({ label, onClick, children, active, shortcut }: { label: str
 function Header({ onDragStart }: { onDragStart?: (e: RPointerEvent) => void }) {
   const { t } = useTranslation("assistant");
   const name = useAssistantName();
-  const { title, mode, showSessions, running, approval, lastOk } = useJev();
+  const { title, mode, showSessions, running, approval, lastOk } = useOllie();
   const state = approval ? "attention" : running ? "thinking" : "idle";
   return (
     <div
       onPointerDown={onDragStart}
       className={cn("flex h-11 shrink-0 items-center gap-2 border-b border-line-soft pl-3 pr-1.5", onDragStart && "cursor-grab touch-none select-none active:cursor-grabbing")}
     >
-      <JevMark size={22} state={state} celebrate={lastOk} listen />
+      <OllieMark size={22} state={state} celebrate={lastOk} listen />
       <div className="flex min-w-0 flex-1 flex-col leading-tight">
         <span className="text-[13px] font-semibold text-fg">{name}</span>
         <span className="truncate text-[11px] text-fg-4" data-ph-mask>
           {showSessions ? t("history") : title || t("untitled")}
         </span>
       </div>
-      <HeadButton label={t("history")} active={showSessions} onClick={() => jev.sessions()}>
+      <HeadButton label={t("history")} active={showSessions} onClick={() => ollie.sessions()}>
         <History className="size-3.5" />
       </HeadButton>
-      <HeadButton label={t("newChat")} onClick={() => jev.newChat()}>
+      <HeadButton label={t("newChat")} onClick={() => ollie.newChat()}>
         <Plus className="size-3.5" />
       </HeadButton>
       <span className="hidden md:contents">
-        <HeadButton label={mode === "docked" ? t("float") : t("dock")} onClick={() => jev.setMode(mode === "docked" ? "floating" : "docked")}>
+        <HeadButton label={mode === "docked" ? t("float") : t("dock")} onClick={() => ollie.setMode(mode === "docked" ? "floating" : "docked")}>
           {mode === "docked" ? <Maximize2 className="size-3.5" /> : <PanelRight className="size-3.5" />}
         </HeadButton>
       </span>
-      <HeadButton label={t("close", { name })} shortcut="mod j" onClick={() => jev.open(false)}>
+      <HeadButton label={t("close", { name })} shortcut="mod j" onClick={() => ollie.open(false)}>
         <X className="size-3.5" />
       </HeadButton>
     </div>
@@ -84,8 +84,8 @@ function Thinking() {
   const name = useAssistantName();
   return (
     <div className="flex h-6 items-center gap-2 text-[12px] text-fg-3" role="status">
-      <JevMark variant="spark" size={13} state="thinking" />
-      <span className="jev-shimmer">{t("thinking", { name })}</span>
+      <OllieMark variant="spark" size={13} state="thinking" />
+      <span className="ollie-shimmer">{t("thinking", { name })}</span>
     </div>
   );
 }
@@ -115,7 +115,7 @@ function Empty({ onPick }: { onPick: (p: string) => void }) {
   return (
     <div className="flex flex-1 flex-col justify-end gap-4 px-4 pb-4">
       <div className="flex flex-col items-start gap-3">
-        <JevMark size={44} listen />
+        <OllieMark size={44} listen />
         <div>
           <p className="text-[15px] font-semibold tracking-[-0.01em] text-fg">{t("hello", { name })}</p>
           <p className="mt-1 text-[12.5px] leading-[19px] text-fg-3">{t("helloSub")}</p>
@@ -127,7 +127,7 @@ function Empty({ onPick }: { onPick: (p: string) => void }) {
 }
 
 function Conversation({ composer }: { composer: React.RefObject<ComposerHandle | null> }) {
-  const { entries, running, approval, loading } = useJev();
+  const { entries, running, approval, loading } = useOllie();
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const reduce = useReducedMotion();
@@ -140,7 +140,7 @@ function Conversation({ composer }: { composer: React.RefObject<ComposerHandle |
 
   const send = (text: string) => {
     stick.current = true;
-    void jev.send(text);
+    void ollie.send(text);
   };
 
   if (loading) {
@@ -186,7 +186,7 @@ function Conversation({ composer }: { composer: React.RefObject<ComposerHandle |
           busy={running}
           onDecide={(d) => {
             stick.current = true;
-            void jev.decide(d).then(() => composer.current?.focus());
+            void ollie.decide(d).then(() => composer.current?.focus());
           }}
         />
       )}
@@ -196,18 +196,18 @@ function Conversation({ composer }: { composer: React.RefObject<ComposerHandle |
 
 /** Title, body and composer; shared by every presentation. */
 export function PanelBody({ onDragStart }: { onDragStart?: (e: RPointerEvent) => void }) {
-  const showSessions = useJev((s) => s.showSessions);
-  const running = useJev((s) => s.running);
-  const entries = useJev((s) => s.entries.length);
-  const queued = useJev((s) => s.queued);
+  const showSessions = useOllie((s) => s.showSessions);
+  const running = useOllie((s) => s.running);
+  const entries = useOllie((s) => s.entries.length);
+  const queued = useOllie((s) => s.queued);
   const composer = useRef<ComposerHandle>(null);
 
   useEffect(() => {
     composer.current?.focus();
   }, [showSessions]);
   useEffect(() => {
-    const q = queued && jev.takeQueued();
-    if (q) void jev.send(q);
+    const q = queued && ollie.takeQueued();
+    if (q) void ollie.send(q);
   }, [queued]);
 
   return (
@@ -216,12 +216,12 @@ export function PanelBody({ onDragStart }: { onDragStart?: (e: RPointerEvent) =>
       onKeyDown={(e) => {
         if (e.key === "Escape" && !e.defaultPrevented) {
           e.preventDefault();
-          if (useJev.getState().showSessions) jev.sessions(false);
-          else jev.open(false);
+          if (useOllie.getState().showSessions) ollie.sessions(false);
+          else ollie.open(false);
         }
-        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && useJev.getState().approval) {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && useOllie.getState().approval) {
           e.preventDefault();
-          void jev.decide("approve");
+          void ollie.decide("approve");
         }
       }}
     >
@@ -231,10 +231,10 @@ export function PanelBody({ onDragStart }: { onDragStart?: (e: RPointerEvent) =>
         <div className="shrink-0 px-3 pb-3 pt-1">
           {entries > 0 && !running && (
             <div className="mb-2">
-              <Suggestions compact onPick={(p) => void jev.send(p)} />
+              <Suggestions compact onPick={(p) => void ollie.send(p)} />
             </div>
           )}
-          <Composer ref={composer} running={running} onSend={(t) => void jev.send(t)} onStop={() => jev.stop()} />
+          <Composer ref={composer} running={running} onSend={(t) => void ollie.send(t)} onStop={() => ollie.stop()} />
         </div>
       )}
     </div>
@@ -259,8 +259,8 @@ const useRoomToDock = () => useMedia("(min-width: 1600px)");
 export function AssistantDock() {
   const { t } = useTranslation("assistant");
   const name = useAssistantName();
-  const open = useJev((s) => s.open);
-  const mode = useJev((s) => s.mode);
+  const open = useOllie((s) => s.open);
+  const mode = useOllie((s) => s.mode);
   const room = useRoomToDock();
   const reduce = useReducedMotion();
   const show = open && mode === "docked" && room;
@@ -268,14 +268,14 @@ export function AssistantDock() {
     <AnimatePresence initial={false}>
       {show && (
         <motion.aside
-          key="jev-dock"
+          key="ollie-dock"
           aria-label={t("open", { name })}
           initial={{ width: 0, opacity: reduce ? 1 : 0 }}
           animate={{ width: PANEL_WIDTH, opacity: 1 }}
           exit={{ width: 0, opacity: reduce ? 1 : 0 }}
           transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 38 }}
           className="relative hidden shrink-0 overflow-hidden md:block"
-          data-jev-panel="docked"
+          data-ollie-panel="docked"
         >
           <div className="absolute inset-y-0 left-0 flex flex-col border-l border-t border-line bg-surface md:ml-2 md:rounded-tl-2xl" style={{ width: PANEL_WIDTH - 8 }}>
             <PanelBody />
@@ -290,9 +290,9 @@ export function AssistantDock() {
 export function AssistantFloat() {
   const { t } = useTranslation("assistant");
   const name = useAssistantName();
-  const open = useJev((s) => s.open);
-  const mode = useJev((s) => s.mode);
-  const offset = useJev((s) => s.offset);
+  const open = useOllie((s) => s.open);
+  const mode = useOllie((s) => s.mode);
+  const offset = useOllie((s) => s.offset);
   const desk = useIsDesktop();
   const room = useRoomToDock();
   const reduce = useReducedMotion();
@@ -321,7 +321,7 @@ export function AssistantFloat() {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       setLive(null);
-      if (d) jev.setOffset(clamp(d.right - (ev.clientX - d.x), d.bottom - (ev.clientY - d.y)));
+      if (d) ollie.setOffset(clamp(d.right - (ev.clientX - d.x), d.bottom - (ev.clientY - d.y)));
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -333,7 +333,7 @@ export function AssistantFloat() {
       <AnimatePresence>
         {show && (
           <motion.div
-            key="jev-sheet"
+            key="ollie-sheet"
             role="dialog"
             aria-label={t("open", { name })}
             initial={reduce ? { opacity: 0 } : { x: PANEL_WIDTH + 24 }}
@@ -342,7 +342,7 @@ export function AssistantFloat() {
             transition={reduce ? { duration: 0.12 } : { type: "spring", stiffness: 380, damping: 40 }}
             style={{ width: PANEL_WIDTH }}
             className="fixed bottom-0 right-0 top-12 z-40 flex flex-col overflow-hidden rounded-tl-2xl border-l border-t border-line bg-surface shadow-float"
-            data-jev-panel="docked"
+            data-ollie-panel="docked"
           >
             <PanelBody />
           </motion.div>
@@ -354,7 +354,7 @@ export function AssistantFloat() {
     <AnimatePresence>
       {show && (
         <motion.div
-          key="jev-float"
+          key="ollie-float"
           role="dialog"
           aria-label={t("open", { name })}
           initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.97 }}
@@ -366,7 +366,7 @@ export function AssistantFloat() {
             "fixed z-50 flex flex-col overflow-hidden border border-line bg-surface shadow-float",
             desk ? "rounded-2xl" : "inset-x-0 bottom-0 top-12 rounded-t-2xl",
           )}
-          data-jev-panel="floating"
+          data-ollie-panel="floating"
         >
           <PanelBody onDragStart={desk ? onDragStart : undefined} />
         </motion.div>

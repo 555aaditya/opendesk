@@ -26,7 +26,7 @@ type AISettings struct {
 	AutoTriage    bool `json:"auto_triage"`
 	AutoSummarize bool `json:"auto_summarize"`
 	WidgetAnswers bool `json:"widget_answers"`
-	// Assistant offers the assistant panel (Jev) to the workspace's members.
+	// Assistant offers the assistant panel (Ollie) to the workspace's members.
 	Assistant     bool   `json:"assistant"`
 	Tone          string `json:"tone"`
 	ReplyLanguage string `json:"reply_language" enum:"customer,workspace"`

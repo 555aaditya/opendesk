@@ -164,7 +164,7 @@ func TestAssignAfterTriage(t *testing.T) {
 			return err
 		})
 	}})
-	// Mode none, but Jev assigns after triage (load balanced) when the workspace allows it.
+	// Mode none, but Ollie assigns after triage (load balanced) when the workspace allows it.
 	e.SetSettings(ws, map[string]any{"auto_assign": "none", "ai": map[string]any{"auto_triage": true}})
 	if got := assignNew(t, e, ws, 1, nil); got[0] != nil {
 		t.Fatal("assigned without assign_after_triage")

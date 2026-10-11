@@ -10,7 +10,7 @@ import { ChevronRight, Menu as MenuIcon, Search, SquarePen } from "lucide-react"
 import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { Mark } from "@/components/brand";
-import { JevButton } from "@/components/assistant/JevButton";
+import { OllieButton } from "@/components/assistant/OllieButton";
 import { Kbd } from "@/components/ui/kbd";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
@@ -93,7 +93,7 @@ export function AppHeader() {
       <div className="flex shrink-0 items-center gap-1 px-2 sm:px-3">
         <ConnectionIndicator />
         <NotificationsButton />
-        <JevButton />
+        <OllieButton />
         <button
           type="button"
           onClick={() => shell.palette()}

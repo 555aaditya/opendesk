@@ -1,9 +1,9 @@
 ---
 title: Triage and assignment
-description: Let Jev triage new tickets, route them to available agents, cap each agent's load and count SLAs in business hours.
+description: Let Ollie triage new tickets, route them to available agents, cap each agent's load and count SLAs in business hours.
 ---
 
-New tickets can be triaged by Jev and assigned automatically to whoever is available. All of it lives in **Settings, Triage**.
+New tickets can be triaged by Ollie and assigned automatically to whoever is available. All of it lives in **Settings, Triage**.
 
 ## Assignment modes
 
@@ -33,11 +33,11 @@ Every member sets themselves **online**, **away** or **offline**. Admins can set
 
 Admins can cap how many open and pending tickets an agent holds at once (1 to 1000). An agent at the cap is skipped until they solve or hand off a ticket.
 
-## Triage by Jev
+## Triage by Ollie
 
-When AI is on, Jev can triage every new ticket: it records the sentiment, language and category, and can raise the priority and add labels. Choose which of priority and labels Jev may change.
+When AI is on, Ollie can triage every new ticket: it records the sentiment, language and category, and can raise the priority and add labels. Choose which of priority and labels Ollie may change.
 
-Turn on **Assign after triage** to route each ticket once Jev has triaged it. It uses the ticket's assignment mode, or load balancing when the mode is off. The activity shows the assignment by Jev, via triage.
+Turn on **Assign after triage** to route each ticket once Ollie has triaged it. It uses the ticket's assignment mode, or load balancing when the mode is off. The activity shows the assignment by Ollie, via triage.
 
 ## Business hours
 
@@ -45,6 +45,6 @@ Set opening hours for each day (up to 3 ranges), holidays, and the workspace tim
 
 ## Setup checklist
 
-New workspaces show a checklist: connect a mailbox, invite a teammate, upload your photo, install the chat widget, publish a help article, set up triage and assignment, create a label, and try Jev. Each step ticks itself off when it is done. Anyone can hide it for themselves.
+New workspaces show a checklist: connect a mailbox, invite a teammate, upload your photo, install the chat widget, publish a help article, set up triage and assignment, create a label, and try Ollie. Each step ticks itself off when it is done. Anyone can hide it for themselves.
 
 See the [API reference](/api/resources/pictures-assignment/).

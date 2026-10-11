@@ -433,7 +433,7 @@
     "assigned": "Assigned #{{number}} to you",
     "snoozed": "Snoozed #{{number}} until tomorrow"
   },
-  "jev": {
+  "ollie": {
     "setBy": "Set by {{name}}",
     "said": "{{name}} replied"
   }

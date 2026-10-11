@@ -3,11 +3,11 @@ import { installMock } from "@/mock/index";
 import { dispatch, parseSse } from "./testing";
 import { contextFor } from "./context";
 import { parseBlocks } from "./Markdown";
-import { pickTip } from "./JevTip";
+import { pickTip } from "./OllieTip";
 import { toEntries } from "./store";
 import { db } from "@/mock/db";
 
-describe("Jev helpers", () => {
+describe("Ollie helpers", () => {
   it("reads the page into context", () => {
     expect(contextFor("/inbox/mine/0190a3b2-1111-7000-8000-000000000001")).toMatchObject({ page: "ticket", folder: "mine", ticket_id: "0190a3b2-1111-7000-8000-000000000001" });
     expect(contextFor("/views/0190a3b2-1111-7000-8000-000000000002", "?priority=high")).toMatchObject({ page: "view", filters: { priority: "high" } });
@@ -44,10 +44,10 @@ describe("Jev helpers", () => {
   });
 });
 
-describe("mock Jev", () => {
+describe("mock Ollie", () => {
   installMock();
 
-  it("proposes a change and applies it only on approval, as Jev", async () => {
+  it("proposes a change and applies it only on approval, as Ollie", async () => {
     const ws = db.workspaces[0];
     const s = await dispatch("POST", "/v1/assistant/sessions", {});
     const sid = ((await s.json()) as { id: string }).id;

@@ -1,9 +1,9 @@
 ---
-title: Assistant (Jev)
-description: Conversations with Jev, streamed runs, approvals and tips.
+title: Assistant (Ollie)
+description: Conversations with Ollie, streamed runs, approvals and tips.
 ---
 
-Jev's routes are for signed-in people only: an API key gets `403`. They need AI on the instance and in the workspace, and `settings.ai.assistant` on (`403 assistant_off`). The assistant's display name comes from `assistant_name` in [`GET /v1/ai/config`](/api/resources/ai/).
+Ollie's routes are for signed-in people only: an API key gets `403`. They need AI on the instance and in the workspace, and `settings.ai.assistant` on (`403 assistant_off`). The assistant's display name comes from `assistant_name` in [`GET /v1/ai/config`](/api/resources/ai/).
 
 | Method | Path | Min role | Credits | Description |
 | --- | --- | --- | --- | --- |
@@ -12,7 +12,7 @@ Jev's routes are for signed-in people only: an API key gets `403`. They need AI 
 | `GET` | `/v1/assistant/sessions/{id}` | viewer | 0 | Transcript and any pending approval |
 | `PATCH` | `/v1/assistant/sessions/{id}` | viewer | 0 | Rename |
 | `DELETE` | `/v1/assistant/sessions/{id}` | viewer | 0 | Delete |
-| `POST` | `/v1/assistant/sessions/{id}/messages` | viewer | 2 per model turn | Send a message and run Jev |
+| `POST` | `/v1/assistant/sessions/{id}/messages` | viewer | 2 per model turn | Send a message and run Ollie |
 | `POST` | `/v1/assistant/actions/{id}/decision` | viewer | 2 per model turn | Approve or deny a proposed change |
 | `GET` | `/v1/assistant/tips` | viewer | 0 | Short tips from queue counts |
 
@@ -34,7 +34,7 @@ With `Accept: text/event-stream` the run streams:
 | Event | Data |
 | --- | --- |
 | `session` | The conversation (its title is set from the first message) |
-| `text` | `{ "text": "…" }`, a piece of Jev's markdown answer |
+| `text` | `{ "text": "…" }`, a piece of Ollie's markdown answer |
 | `tool` | A step: `{ id, tool, label, status, summary?, refs?, action_id? }`, sent when it starts and when it ends |
 | `approval` | `{ action_id, call_id, tool, preview, token, expires_at }` |
 | `done` | `{ "status": "complete" }` or `{ "status": "awaiting_approval" }` |
@@ -48,7 +48,7 @@ Errors: `402 no_credits` before anything is stored, `409 assistant_busy` while t
 
 ## Approvals
 
-Jev never changes anything on its own. A change arrives as an `approval` event with a `preview`:
+Ollie never changes anything on its own. A change arrives as an `approval` event with a `preview`:
 
 ```json
 {
@@ -69,9 +69,9 @@ Accept: text/event-stream
 { "decision": "approve", "token": "<approval token>" }
 ```
 
-The token is bound to the action, the user, the sign-in session and the workspace, and lasts 15 minutes. A decision runs once: a second answers `409 approval_not_pending`, a wrong token `403 approval_invalid`. Sending a new message expires the pending change. The response is a run, as above, in which Jev continues.
+The token is bound to the action, the user, the sign-in session and the workspace, and lasts 15 minutes. A decision runs once: a second answers `409 approval_not_pending`, a wrong token `403 approval_invalid`. Sending a new message expires the pending change. The response is a run, as above, in which Ollie continues.
 
-An approved change goes through the regular API with the user's permissions. Ticket activities record it with `actor_type: "ai"` and the user in `actor.user`, shown as Jev, and the audit log records `assistant.action`.
+An approved change goes through the regular API with the user's permissions. Ticket activities record it with `actor_type: "ai"` and the user in `actor.user`, shown as Ollie, and the audit log records `assistant.action`.
 
 ## Tips
 

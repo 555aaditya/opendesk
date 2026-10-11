@@ -5,7 +5,7 @@ import { ArrowUp, Square } from "lucide-react";
 import { forwardRef, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
-import { pulseJev } from "./pulse";
+import { pulseOllie } from "./pulse";
 import { useAssistantName } from "./name";
 
 export type ComposerHandle = { focus: () => void; set: (text: string) => void };
@@ -85,7 +85,7 @@ export const Composer = forwardRef<ComposerHandle, { running: boolean; onSend: (
             setHint(0);
           }}
           onKeyDown={(e) => {
-            if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1) pulseJev();
+            if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.length === 1) pulseOllie();
             if (open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
               e.preventDefault();
               setHint((h) => (h + (e.key === "ArrowDown" ? 1 : slash.length - 1)) % slash.length);

@@ -12,9 +12,9 @@ import { cn } from "@/lib/cn";
 import { tone } from "@/lib/tones";
 import { assistantApi, type Tip } from "./api";
 import { useAssistantName } from "./name";
-import { jev, useJev } from "./store";
+import { ollie, useOllie } from "./store";
 
-const KEY = "od-jev-tips";
+const KEY = "od-ollie-tips";
 const GAP = 20 * 60_000;
 const AGAIN = 24 * 3_600_000;
 const PAUSE = 7 * 24 * 3_600_000;
@@ -44,11 +44,11 @@ export function pickTip(tips: Tip[], m: Memory, now = Date.now()): Tip | null {
   return tips.find((t) => !(m.seen?.[t.key] && now - m.seen[t.key] < AGAIN)) ?? null;
 }
 
-export function JevTip({ enabled }: { enabled: boolean }) {
+export function OllieTip({ enabled }: { enabled: boolean }) {
   const { t } = useTranslation("assistant");
   const name = useAssistantName();
   const reduce = useReducedMotion();
-  const open = useJev((s) => s.open);
+  const open = useOllie((s) => s.open);
   const [tip, setTip] = useState<Tip | null>(null);
   const { data } = useQuery({
     queryKey: ["assistant", "tips"],
@@ -64,7 +64,7 @@ export function JevTip({ enabled }: { enabled: boolean }) {
   useEffect(() => {
     if (!enabled || open || tip || !data?.tips.length) return;
     const id = setTimeout(() => {
-      if (useJev.getState().open || document.hidden) return;
+      if (useOllie.getState().open || document.hidden) return;
       const m = read();
       const next = pickTip(data.tips, m);
       if (!next) return;
@@ -100,9 +100,9 @@ export function JevTip({ enabled }: { enabled: boolean }) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={reduce ? { opacity: 0 } : { opacity: 0, y: -4, scale: 0.98 }}
           transition={reduce ? { duration: 0.12 } : { type: "spring", stiffness: 460, damping: 32 }}
-          style={{ transformOrigin: "top right", ["--jev-tip-x" as string]: "34px" }}
-          className="jev-tip absolute right-0 top-[calc(100%+10px)] z-40 w-[296px] rounded-xl border border-line bg-raised p-3 shadow-pop"
-          data-jev-tip={tip.key}
+          style={{ transformOrigin: "top right", ["--ollie-tip-x" as string]: "34px" }}
+          className="ollie-tip absolute right-0 top-[calc(100%+10px)] z-40 w-[296px] rounded-xl border border-line bg-raised p-3 shadow-pop"
+          data-ollie-tip={tip.key}
         >
           <div className="flex items-start gap-2">
             <span className={cn("mt-[5px] size-1.5 shrink-0 rounded-full", tip.severity === "high" ? tone.red.solid : tip.severity === "medium" ? tone.amber.solid : tone.violet.solid)} />
@@ -121,7 +121,7 @@ export function JevTip({ enabled }: { enabled: boolean }) {
               type="button"
               onClick={() => {
                 setTip(null);
-                jev.ask(tip.prompt);
+                ollie.ask(tip.prompt);
               }}
               className="h-6 whitespace-nowrap rounded-md bg-inverse px-2 text-[12px] font-medium text-inverse-fg transition-[background-color,transform] hover:bg-inverse-hover active:scale-[0.97]"
             >

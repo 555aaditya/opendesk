@@ -14,7 +14,7 @@ import { AI_TONE, tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PriorityIcon, priorityLabel, StatusIcon, statusLabel } from "../bits";
 import { MessageItem } from "./MessageItem";
-import { isAIActor, JevAvatar, useAssistantName } from "../jev";
+import { isAIActor, OllieAvatar, useAssistantName } from "../ollie";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
 
 type Item = { kind: "message"; at: string; m: Message } | { kind: "activity"; at: string; a: Activity };
@@ -26,9 +26,9 @@ function ref(v: unknown, members: Member[] | undefined): UserRef | null {
   return null;
 }
 
-function actorName(a: Activity, t: TFunction<"inbox">, jev: string) {
-  // The AI acts on someone's behalf (actor.user), but the change is Jev's.
-  if (isAIActor(a.actor)) return jev;
+function actorName(a: Activity, t: TFunction<"inbox">, ollie: string) {
+  // The AI acts on someone's behalf (actor.user), but the change is Ollie's.
+  if (isAIActor(a.actor)) return ollie;
   if (a.actor.user) return a.actor.user.name;
   if (typeof a.data.automation_name === "string") return t("activity.automationNamed", { name: a.data.automation_name });
   if (a.actor.type === "automation") return t("activity.automation");
@@ -41,10 +41,10 @@ const M = <span className="mono text-fg-2" />;
 
 type Line = { icon: ReactNode; text: ReactNode; hue?: "red" | "ai" };
 
-type Ctx = { teams?: Team[]; members?: Member[]; tags?: Tag[]; fields?: CustomField[]; display: ReturnType<typeof useDisplay>; jev: string };
+type Ctx = { teams?: Team[]; members?: Member[]; tags?: Tag[]; fields?: CustomField[]; display: ReturnType<typeof useDisplay>; ollie: string };
 
-function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fields, display, jev }: Ctx): Line {
-  const who = actorName(a, t, jev);
+function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fields, display, ollie }: Ctx): Line {
+  const who = actorName(a, t, ollie);
   const d = a.data;
   const line = (key: Parameters<TFunction<"inbox">>[0], values: Record<string, unknown> = {}) => (
     <Trans t={t} i18nKey={key as never} values={{ who, ...values }} components={{ b: B, m: M }} />
@@ -147,12 +147,12 @@ function ActivityLine({ a }: { a: Activity }) {
   const { data: tags } = useQuery(q.tags());
   const { data: fields } = useTicketFields();
   const display = useDisplay();
-  const jev = useAssistantName();
-  const line = describe(a, t, { teams, members, tags, fields, display, jev });
+  const ollie = useAssistantName();
+  const line = describe(a, t, { teams, members, tags, fields, display, ollie });
   // Anything the AI did carries its violet mark as the actor.
   const ai = isAIActor(a.actor) || line.hue === "ai";
   const { text, hue } = line;
-  const icon = ai ? <JevAvatar size={20} className="rounded-sm" /> : line.icon;
+  const icon = ai ? <OllieAvatar size={20} className="rounded-sm" /> : line.icon;
   return (
     <div className="flex items-center gap-2.5 py-1 pl-[18px] text-[12px] text-fg-3">
       <span

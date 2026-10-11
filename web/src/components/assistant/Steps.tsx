@@ -9,7 +9,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/cn";
 import { tone } from "@/lib/tones";
 import type { Approval, AssistantRef, AssistantStep } from "./api";
-import { JevMark } from "./JevMark";
+import { OllieMark } from "./OllieMark";
 import { Markdown } from "./Markdown";
 import { openRef } from "./refs";
 import { useAssistantName } from "./name";
@@ -30,7 +30,7 @@ function StepIcon({ status }: { status: AssistantStep["status"] }) {
           className="flex"
         >
           {status === "running" || status === "approved" ? (
-            <JevMark variant="spark" size={13} state="thinking" />
+            <OllieMark variant="spark" size={13} state="thinking" />
           ) : status === "done" ? (
             <span className={cn("flex size-4 items-center justify-center rounded-[5px] text-white", tone.green.solid)}>
               <Check className="size-2.5" strokeWidth={3.5} />
@@ -40,7 +40,7 @@ function StepIcon({ status }: { status: AssistantStep["status"] }) {
               <X className="size-2.5" strokeWidth={3.5} />
             </span>
           ) : status === "awaiting_approval" ? (
-            <JevMark variant="spark" size={13} state="attention" />
+            <OllieMark variant="spark" size={13} state="attention" />
           ) : status === "denied" ? (
             <Ban className="size-3.5 text-fg-4" />
           ) : (
@@ -138,7 +138,7 @@ export function ApprovalCard({ approval, busy, onDecide }: { approval: Approval;
       data-approval={approval.action_id}
     >
       <div className="flex items-start gap-2.5 px-3 pb-2 pt-3">
-        <JevMark size={20} state="attention" />
+        <OllieMark size={20} state="attention" />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-fg">{p.title}</p>
           {p.summary && <p className="mt-0.5 line-clamp-2 text-[12px] text-fg-3">{p.summary}</p>}

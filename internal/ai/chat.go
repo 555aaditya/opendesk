@@ -16,7 +16,7 @@ import (
 // actor of every change AI makes (auto-triage, widget answers, the ai_triage action).
 // GET /v1/ai/config reports it as assistant_name so the web app and emails read it from
 // one place.
-const AssistantName = "Jev"
+const AssistantName = "Ollie"
 
 // ToolSpec is a function the model may call. Schema is a JSON Schema object.
 type ToolSpec struct {

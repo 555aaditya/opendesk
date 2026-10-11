@@ -10,7 +10,7 @@ Press <kbd>?</kbd> anywhere in the app to see this list. <kbd>mod</kbd> is <kbd>
 | Keys | Action |
 | --- | --- |
 | <kbd>mod</kbd> <kbd>k</kbd> | Command menu |
-| <kbd>mod</kbd> <kbd>j</kbd> | Ask Jev |
+| <kbd>mod</kbd> <kbd>j</kbd> | Ask Ollie |
 | <kbd>/</kbd> | Search tickets |
 | <kbd>c</kbd> | New ticket |
 | <kbd>?</kbd> | Keyboard shortcuts |

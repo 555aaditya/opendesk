@@ -1,4 +1,4 @@
-// What Jev knows about the page: read from the URL when a message is sent, so
+// What Ollie knows about the page: read from the URL when a message is sent, so
 // "summarize this" means the open ticket and "these" means the current view.
 
 import type { PageContext } from "./api";
@@ -54,7 +54,7 @@ export function pageContext(): PageContext {
   const ctx = contextFor(location.pathname, location.search);
   // A list's preview pane shows a ticket without putting it in the URL.
   if (!ctx.ticket_id && typeof document !== "undefined") {
-    const id = document.querySelector<HTMLElement>("[data-jev-ticket]")?.dataset.jevTicket;
+    const id = document.querySelector<HTMLElement>("[data-ollie-ticket]")?.dataset.ollieTicket;
     if (id && UUID.test(id)) {
       ctx.ticket_id = id;
       ctx.page = "ticket";

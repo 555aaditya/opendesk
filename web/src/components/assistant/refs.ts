@@ -1,4 +1,4 @@
-// Clickable references in Jev's answers: tickets (#123), contacts, articles,
+// Clickable references in Ollie's answers: tickets (#123), contacts, articles,
 // views and automations, opened in the app.
 
 import { router } from "@/router";

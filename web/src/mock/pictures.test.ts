@@ -64,7 +64,7 @@ describe("mock pictures, assignment and onboarding", () => {
   it("computes and dismisses the setup checklist", async () => {
     const o = (await call("GET", "/v1/onboarding")).body;
     expect(o.total).toBe(8);
-    expect(o.steps.map((s: { id: string }) => s.id)).toContain("try_jev");
+    expect(o.steps.map((s: { id: string }) => s.id)).toContain("try_ollie");
     expect(o.steps.find((s: { id: string }) => s.id === "connect_mailbox").done).toBe(true);
     await call("POST", "/v1/onboarding/dismiss");
     expect((await call("GET", "/v1/onboarding")).body.dismissed).toBe(true);

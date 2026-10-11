@@ -1,4 +1,4 @@
--- The assistant (Jev): conversations per user and workspace, their turns, and the
+-- The assistant (Ollie): conversations per user and workspace, their turns, and the
 -- write actions waiting on (or decided by) the user's approval.
 CREATE TABLE assistant_sessions (
     id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),

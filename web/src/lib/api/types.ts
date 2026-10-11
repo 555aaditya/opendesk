@@ -351,7 +351,7 @@ export type BusinessHours = {
   holidays: Holiday[];
 };
 export type OnboardingStepId =
-  | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_jev";
+  | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie";
 export type OnboardingStep = {
   id: OnboardingStepId;
   title: string;
@@ -648,7 +648,7 @@ export type AISettings = {
   auto_triage: boolean;
   auto_summarize: boolean;
   widget_answers: boolean;
-  /** The assistant panel (Jev). Default true. */
+  /** The assistant panel (Ollie). Default true. */
   assistant: boolean;
   tone: string;
   reply_language: "customer" | "workspace";
@@ -661,7 +661,7 @@ export type AIConfig = {
   embeddings: boolean;
   features: AISettings;
   costs: Partial<Record<AIFeature, number>>;
-  /** The name AI acts under everywhere ("Jev"). */
+  /** The name AI acts under everywhere ("Ollie"). */
   assistant_name?: string;
 };
 export type KBSource = { article_id: string; title: string; url: string };

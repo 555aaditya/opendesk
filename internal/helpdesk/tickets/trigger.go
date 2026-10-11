@@ -472,7 +472,7 @@ func resolveAssignMode(ctx context.Context, q pgx.Tx, wid uuid.UUID, team, mailb
 }
 
 // autoAssign assigns an unassigned open ticket by the mode that applies to it
-// (contracts/api.md "Assignment"). After Jev triaged a new ticket and the workspace
+// (contracts/api.md "Assignment"). After Ollie triaged a new ticket and the workspace
 // turned assign_after_triage on, the assignment is attributed to ai.
 func autoAssign(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID, trigger string) error {
 	s, err := hd.LoadSettings(ctx, tx, wid)

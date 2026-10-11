@@ -103,7 +103,7 @@ func TestProfilePictureAndWorkspaceImages(t *testing.T) {
 		st := s.(map[string]any)
 		steps[st["id"].(string)] = st["done"].(bool)
 	}
-	if len(steps) != 8 || !steps["upload_photo"] || steps["create_label"] || steps["connect_mailbox"] || steps["try_jev"] || ob.Body["dismissed"] != false {
+	if len(steps) != 8 || !steps["upload_photo"] || steps["create_label"] || steps["connect_mailbox"] || steps["try_ollie"] || ob.Body["dismissed"] != false {
 		t.Fatalf("onboarding: %s", ob.Raw)
 	}
 	_, _ = e.d.DB.Pool.Exec(ctx, `INSERT INTO tags (workspace_id, name, color) VALUES ($1, 'Refunds', 'red')`, wid)

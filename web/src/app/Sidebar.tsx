@@ -431,7 +431,7 @@ function SetupChecklist({ rail }: { rail: boolean }) {
         collapsed={rail}
         data={data}
         isAdmin={atLeast(role, "admin")}
-        unavailable={ai.enabled ? undefined : { try_jev: t("checklist.needs_ai") }}
+        unavailable={ai.enabled ? undefined : { try_ollie: t("checklist.needs_ai") }}
         onDismiss={() => dismiss.mutateAsync()}
         triggerClassName={cn("h-7 hover:bg-chrome-hover data-[state=open]:bg-chrome-hover", rail && "h-8")}
       />
