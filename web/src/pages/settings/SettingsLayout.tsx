@@ -18,6 +18,7 @@ import {
   MessageCircle,
   MessageSquareText,
   Shield,
+  SlidersHorizontal,
   Tag,
   User,
   Users,
@@ -35,6 +36,7 @@ type NavPath =
   | "/settings/teams"
   | "/settings/mailboxes"
   | "/settings/tags"
+  | "/settings/custom-fields"
   | "/settings/saved-replies"
   | "/settings/views"
   | "/settings/sla"
@@ -68,7 +70,8 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
   {
     title: "Inbox",
     items: [
-      { to: "/settings/tags", label: "Tags", icon: <Tag /> },
+      { to: "/settings/tags", label: "Labels", icon: <Tag /> },
+      { to: "/settings/custom-fields", label: "Custom fields", icon: <SlidersHorizontal /> },
       { to: "/settings/saved-replies", label: "Saved replies", icon: <MessageSquareText /> },
       { to: "/settings/views", label: "Views", icon: <Layers /> },
       { to: "/settings/sla", label: "SLA policies", icon: <Gauge /> },

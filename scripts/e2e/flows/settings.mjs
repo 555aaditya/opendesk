@@ -54,11 +54,11 @@ export async function run(t) {
     assert(x.member_ids?.length === 1 || x.members?.length === 1, `one member (${JSON.stringify(x).slice(0, 200)})`);
   });
 
-  await t.step("tags: create a tag", async () => {
+  await t.step("labels: create a label", async () => {
     await owner.goto(cfg.app + "/settings/tags");
-    await owner.getByRole("button", { name: "New tag" }).first().click();
-    await owner.getByLabel("New tag name").fill("enterprise");
-    await owner.getByRole("button", { name: "Add tag" }).click();
+    await owner.getByRole("button", { name: "New label" }).first().click();
+    await owner.getByLabel("New label name").fill("enterprise");
+    await owner.getByRole("button", { name: "Create label" }).click();
     await until(async () => (await api("GET", "/v1/tags", opts())).json?.data?.some((g) => g.name === "enterprise"), "tag saved");
   });
 

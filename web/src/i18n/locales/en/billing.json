@@ -128,7 +128,12 @@
     "body": "This instance has no billing. Every workspace has unlimited mailboxes, members and AI, using the instance's own AI provider key.",
     "mailboxes": "Unlimited mailboxes",
     "members": "Unlimited members",
-    "ai": "Unlimited AI with your own key"
+    "ai": "Unlimited AI with your own key",
+    "usedMailboxes": "Mailboxes",
+    "usedMembers": "Members",
+    "usedCredits": "AI credits used",
+    "noLimit": "No limit",
+    "thisPeriod": "Since {{date}}"
   },
   "usage": {
     "title": "AI usage",

@@ -1,6 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { RolePill } from "@/components/settings2/bits";
 import { SettingsPage, Section, Row } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +12,14 @@ import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import type { User } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { updateUser, useSession } from "@/lib/session";
+import { updateUser, useRole, useSession } from "@/lib/session";
 import { useTheme, type ThemePref } from "@/lib/theme";
 
 export default function Profile() {
+  const { t } = useTranslation("settings");
   const user = useSession((s) => s.user)!;
+  const role = useRole();
+  const workspace = useSession((s) => s.memberships.find((m) => m.workspace.id === s.workspaceId)?.workspace.name);
   const [name, setName] = useState(user.name);
   const [avatar, setAvatar] = useState(user.avatar_url);
   useEffect(() => {
@@ -38,18 +43,18 @@ export default function Profile() {
     },
     onSuccess: (u) => {
       updateUser(u);
-      toast.success("Profile saved");
+      toast.success(t("profile.saved"));
     },
   });
 
   const resend = useMutation({
     mutationFn: api.auth.resendVerification,
-    onSuccess: () => toast.success("Verification email sent", { description: "Check your inbox for the link." }),
+    onSuccess: () => toast.success(t("profile.verifySent"), { description: t("profile.verifySentHint") }),
     onError: (e) => toast.error(e),
   });
 
   return (
-    <SettingsPage title="Profile" description="How you appear to teammates in tickets, notes and mentions.">
+    <SettingsPage title={t("profile.title")} description={t("profile.description")}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -57,15 +62,23 @@ export default function Profile() {
         }}
       >
         <Section>
-          <Row label="Photo" description="An HTTPS image URL. Leave empty to use your initials.">
-            <div className="flex items-center gap-3">
-              <Avatar name={name || user.email} src={validAvatar ? avatar.trim() || null : null} size="xl" />
+          <div className="flex items-center gap-4 border-b border-line-soft py-4">
+            <Avatar name={name || user.email} src={validAvatar ? avatar.trim() || null : null} size="xl" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[14px] font-semibold tracking-[-0.01em]">{name.trim() || user.email}</div>
+              <div className="mono mt-0.5 truncate text-xs text-fg-3">{user.email}</div>
             </div>
-          </Row>
-          <Row label="Name" htmlFor="profile-name">
+            {role && (
+              <span className="flex shrink-0 items-center gap-2 text-xs text-fg-3">
+                {workspace}
+                <RolePill role={role} />
+              </span>
+            )}
+          </div>
+          <Row label={t("profile.name")} htmlFor="profile-name">
             <TextInput id="profile-name" className="w-[280px]" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
           </Row>
-          <Row label="Photo URL" htmlFor="profile-avatar">
+          <Row label={t("profile.photo")} description={t("profile.photoHint")} htmlFor="profile-avatar">
             <TextInput
               id="profile-avatar"
               className="w-[280px]"
@@ -76,15 +89,15 @@ export default function Profile() {
             />
           </Row>
           <Row
-            label="Email"
-            description={user.email_verified ? "Used to sign in and for notifications." : "Verify your email to receive notifications."}
+            label={t("profile.email")}
+            description={user.email_verified ? t("profile.emailHint") : t("profile.emailUnverified")}
           >
             <span className="mono text-[12.5px] text-fg-2">{user.email}</span>
             {user.email_verified ? (
-              <Badge tone="ok">Verified</Badge>
+              <Badge tone="ok">{t("profile.verified")}</Badge>
             ) : (
               <Button size="xs" loading={resend.isPending} onClick={() => resend.mutate()}>
-                Resend verification
+                {t("profile.resend")}
               </Button>
             )}
           </Row>
@@ -98,16 +111,16 @@ export default function Profile() {
                 setAvatar(user.avatar_url);
               }}
             >
-              Discard
+              {t("profile.discard")}
             </Button>
           )}
           <Button type="submit" variant="primary" disabled={!dirty || !name.trim() || !validAvatar} loading={save.isPending}>
-            Save changes
+            {t("profile.save")}
           </Button>
         </div>
       </form>
 
-      <Section title="Appearance" description="Applies to this browser.">
+      <Section title={t("profile.appearance")} description={t("profile.appearanceHint")}>
         <div className="py-3">
           <ThemeCards />
         </div>
@@ -117,14 +130,15 @@ export default function Profile() {
 }
 
 function ThemeCards() {
+  const { t } = useTranslation("settings");
   const { pref, setTheme } = useTheme();
   const opts: { value: ThemePref; label: string }[] = [
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-    { value: "system", label: "System" },
+    { value: "light", label: t("profile.theme.light") },
+    { value: "dark", label: t("profile.theme.dark") },
+    { value: "system", label: t("profile.theme.system") },
   ];
   return (
-    <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-3">
+    <div role="radiogroup" aria-label={t("profile.theme.label")} className="grid grid-cols-3 gap-3">
       {opts.map((o) => (
         <button
           key={o.value}

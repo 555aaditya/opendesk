@@ -18,6 +18,8 @@ import type { AIConfig, AIFeature, AISettings } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
+import { AI_TONE, tone } from "@/lib/tones";
+import { IconTile } from "@/components/settings2/bits";
 
 const PRESET_TONES = ["friendly", "professional", "concise"] as const;
 type ToneChoice = (typeof PRESET_TONES)[number] | "custom";
@@ -96,9 +98,16 @@ export default function AiSettings() {
         )}
 
         <Section>
-          <Row label={t("settings.enabled")} description={t("settings.enabled_hint")}>
+          <div className="flex items-center gap-3.5 py-3.5">
+            <IconTile tone={available && draft.enabled ? AI_TONE : "gray"} className="size-9 transition-colors duration-200">
+              <AiIcon className={cn(!(available && draft.enabled) && "text-current")} />
+            </IconTile>
+            <div className="min-w-0 flex-1">
+              <div className="text-[12.5px] font-medium text-fg">{t("settings.enabled")}</div>
+              <div className="mt-0.5 text-[12px] leading-[18px] text-fg-3">{t("settings.enabled_hint")}</div>
+            </div>
             <Switch checked={available && draft.enabled} disabled={!canEdit} onCheckedChange={(enabled) => set({ enabled })} aria-label={t("settings.enabled")} />
-          </Row>
+          </div>
         </Section>
 
         <Section title={t("settings.automatic")} description={t("settings.automatic_hint")}>
@@ -205,8 +214,8 @@ export default function AiSettings() {
               </span>
             </Row>
             <Row label={t("settings.search")} description={config.embeddings ? t("settings.embeddings_on") : t("settings.embeddings_off")}>
-              <span className="flex items-center gap-2 text-[12.5px] text-fg-2">
-                <span className={cn("size-1.5 rounded-full", config.embeddings ? "bg-ok" : "bg-fg-4")} aria-hidden />
+              <span className={cn("inline-flex h-5 items-center gap-1.5 rounded-sm px-1.5 text-[11px] font-medium", config.embeddings ? tone[AI_TONE].chip : tone.gray.chip)}>
+                <span className={cn("size-1.5 rounded-full", config.embeddings ? tone[AI_TONE].solid : tone.gray.solid)} aria-hidden />
                 {config.embeddings ? t("settings.semantic") : t("settings.keyword")}
               </span>
             </Row>
@@ -230,7 +239,9 @@ export default function AiSettings() {
                 {FEATURE_ORDER.filter((f) => config.costs[f] !== undefined).map((f) => (
                   <tr key={f} className="border-b border-line-soft last:border-0">
                     <td className="px-4 py-2.5 text-fg-2">{t(`features.${f}`)}</td>
-                    <td className="mono px-4 py-2.5 text-right tabular-nums text-fg">{config.costs[f]}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <CreditChip n={config.costs[f]!} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -275,12 +286,19 @@ function FeatureRow({
       description={
         <>
           {description}
-          {cost !== undefined && <span className="mono ml-1.5 text-[11px] text-fg-4">{t("credits", { count: cost })}</span>}
+          {cost !== undefined && <CreditChip n={cost} className="ml-1.5 align-[1px]" label={t("credits", { count: cost })} />}
         </>
       }
     >
       <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} aria-label={label} />
     </Row>
+  );
+}
+
+/** A credit cost in the AI hue. */
+function CreditChip({ n, label, className }: { n: number; label?: string; className?: string }) {
+  return (
+    <span className={cn("mono inline-flex h-[18px] items-center rounded-sm px-1.5 text-[10.5px] tabular-nums", tone[AI_TONE].chip, className)}>{label ?? n}</span>
   );
 }
 
@@ -295,10 +313,10 @@ function Counter({ n, max }: { n: number; max: number }) {
 function NotConfigured() {
   const { t } = useTranslation("ai");
   return (
-    <div className="flex gap-3.5 rounded-lg border border-line bg-surface px-4 py-4">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-sunken text-fg-2">
-        <AiIcon className="size-4" />
-      </span>
+    <div className="flex animate-rise-in gap-3.5 rounded-lg border border-line bg-surface px-4 py-4 shadow-xs">
+      <IconTile tone={AI_TONE}>
+        <AiIcon />
+      </IconTile>
       <div className="min-w-0 text-[12.5px] leading-5">
         <p className="text-[13px] font-medium text-fg">{t("settings.not_configured")}</p>
         <p className="mt-1 text-fg-3">

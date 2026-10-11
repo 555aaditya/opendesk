@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Field, TextInput } from "@/components/ui/input";
@@ -57,6 +58,7 @@ function validUrl(v: string): string | null {
 }
 
 export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | null; onClose: () => void; onCreated?: (w: Webhook & { secret: string }) => void }) {
+  const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
   const [url, setUrl] = useState(hook?.url ?? "");
   const [description, setDescription] = useState(hook?.description ?? "");
@@ -87,7 +89,7 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
     const ue = validUrl(url);
     setUrlError(ue);
     if (ue) return;
-    if (!events.length) return setError("Choose at least one event.");
+    if (!events.length) return setError(t("webhookForm.eventRequired"));
     save.mutate();
   };
 
@@ -99,16 +101,16 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
       open
       size="lg"
       onOpenChange={(o) => !o && onClose()}
-      title={hook ? "Edit webhook" : "New webhook"}
-      description="opendesk sends a signed POST with the event envelope to this URL."
+      title={hook ? t("webhookForm.editTitle") : t("webhookForm.newTitle")}
+      description={t("webhookForm.description")}
       footer={
         <>
           <span className="mr-auto text-xs text-danger-fg">{error}</span>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="primary" loading={save.isPending} onClick={submit}>
-            {hook ? "Save webhook" : "Create webhook"}
+            {hook ? t("webhookForm.save") : t("webhookForm.create")}
           </Button>
         </>
       }
@@ -120,7 +122,7 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
           submit();
         }}
       >
-        <Field label="Endpoint URL" error={urlError}>
+        <Field label={t("webhookForm.url")} error={urlError}>
           {(p) => (
             <TextInput
               {...p}
@@ -136,15 +138,17 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
             />
           )}
         </Field>
-        <Field label="Description" optional>
-          {(p) => <TextInput {...p} value={description} maxLength={200} placeholder="Sync tickets to the data warehouse" onChange={(e) => setDescription(e.target.value)} />}
+        <Field label={t("webhookForm.descriptionLabel")} optional>
+          {(p) => <TextInput {...p} value={description} maxLength={200} placeholder={t("webhookForm.descriptionPlaceholder")} onChange={(e) => setDescription(e.target.value)} />}
         </Field>
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-[12.5px] font-medium">Events</span>
+            <span className="text-[12.5px] font-medium">
+              {t("webhookForm.events")} <span className="mono ml-1 text-[11px] font-normal tabular-nums text-fg-4">{all ? allEvents.length : events.length}/{allEvents.length}</span>
+            </span>
             <label className="flex items-center gap-2 text-[12px] text-fg-2">
               <Checkbox checked={all ? true : events.length ? "indeterminate" : false} onCheckedChange={(on) => setEvents(on ? allEvents : [])} aria-label="All events" />
-              All events
+              {t("webhooks.allEvents")}
             </label>
           </div>
           <div className="grid max-h-[300px] grid-cols-1 overflow-y-auto rounded-md border border-line sm:grid-cols-2">
@@ -175,8 +179,8 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
         </div>
         <div className="flex items-center justify-between rounded-md border border-line px-3 py-2.5">
           <div>
-            <div className="text-[13px] font-medium">Active</div>
-            <div className="text-[12px] text-fg-3">Paused webhooks keep their settings but receive nothing.</div>
+            <div className="text-[13px] font-medium">{t("webhookForm.active")}</div>
+            <div className="text-[12px] text-fg-3">{t("webhookForm.activeHint")}</div>
           </div>
           <Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Webhook active" />
         </div>
@@ -187,6 +191,7 @@ export function WebhookDialog({ hook, onClose, onCreated }: { hook: Webhook | nu
 }
 
 export function SecretDialog({ secret, onClose }: { secret: string | null; onClose: () => void }) {
+  const { t } = useTranslation("settingsDev");
   const verify = `const [t, v1] = header.split(",").map((p) => p.split("=")[1]);
 const expected = hmacSha256Hex(secret, \`\${t}.\${rawBody}\`);
 const ok = timingSafeEqual(expected, v1) && Math.abs(Date.now() / 1000 - Number(t)) < 300;`;
@@ -195,18 +200,18 @@ const ok = timingSafeEqual(expected, v1) && Math.abs(Date.now() / 1000 - Number(
       open={!!secret}
       onOpenChange={(o) => !o && onClose()}
       size="lg"
-      title="Signing secret"
-      description="Copy it now. You won't see it again."
+      title={t("secret.title")}
+      description={t("secret.description")}
       footer={
         <Button variant="primary" onClick={onClose}>
-          I've saved it
+          {t("secret.saved")}
         </Button>
       }
     >
       <div className="flex flex-col gap-4 pb-1">
         <CopyField value={secret ?? ""} />
         <div className="flex flex-col gap-2">
-          <p className="text-[12.5px] text-fg-2">Every delivery carries a signature header. Verify it before trusting the body:</p>
+          <p className="text-[12.5px] text-fg-2">{t("secret.verify")}</p>
           <CopyField multiline value={`OD-Signature: t=<unix>,v1=<hex hmac_sha256(secret, "<t>.<body>")>`} />
           <CopyField multiline value={verify} />
           <p className="text-[12px] text-fg-3">

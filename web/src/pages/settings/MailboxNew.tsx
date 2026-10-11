@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { BackLink, NoAccess, SettingsPage } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { BackLink, NoAccess, Section, SettingsPage } from "@/components/layout";
 import { AddMailboxWizard } from "@/components/mailboxes/AddMailboxWizard";
 import { atLeast, useRole } from "@/lib/session";
 import { Button } from "@/components/ui/button";
@@ -8,28 +9,29 @@ import { limitDetail, showLimit } from "@/components/billing/PlanLimit";
 import { useLimit } from "@/components/billing/hooks";
 
 export default function MailboxNew() {
+  const { t } = useTranslation("settingsChannels");
   const navigate = useNavigate();
   const role = useRole();
   const limit = useLimit("mailboxes");
   return (
     <SettingsPage
-      title="Add a mailbox"
-      description="Choose how mail reaches opendesk. You can change the details later."
-      back={<BackLink to="/settings/mailboxes">Mailboxes</BackLink>}
+      title={t("new.title")}
+      description={t("new.description")}
+      back={<BackLink to="/settings/mailboxes">{t("detail.back")}</BackLink>}
     >
       {atLeast(role, "admin") && limit.atLimit ? (
-        <div className="rounded-lg border border-line">
+        <Section flush>
           <EmptyState
             lit={2}
-            title="You've reached a Free plan limit"
+            title={t("new.limitTitle")}
             description={limitDetail("mailboxes", limit.max)}
             action={
               <Button variant="primary" onClick={() => showLimit("mailboxes", limit.max)}>
-                Upgrade to Pro
+                {t("new.upgrade")}
               </Button>
             }
           />
-        </div>
+        </Section>
       ) : atLeast(role, "admin") ? (
         <AddMailboxWizard
           onCancel={() => void navigate({ to: "/settings/mailboxes" })}

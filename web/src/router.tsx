@@ -389,7 +389,8 @@ const sMailboxDetail = createRoute({
   component: page(() => import("./pages/settings/MailboxDetail")),
   staticData: { title: "Mailbox" },
 });
-const sTags = settingsPage("/tags", "Tags", () => import("./pages/settings/Tags"), (qc) => qc.ensureQueryData(q.tags()));
+const sTags = settingsPage("/tags", "Labels", () => import("./pages/settings/Tags"), (qc) => qc.ensureQueryData(q.tags()));
+const sCustomFields = settingsPage("/custom-fields", "Custom fields", () => import("./pages/settings/CustomFields"));
 const sSavedReplies = settingsPage("/saved-replies", "Saved replies", () => import("./pages/settings/SavedReplies"), (qc) =>
   qc.ensureQueryData(q.savedReplies()),
 );
@@ -474,6 +475,7 @@ const routeTree = rootRoute.addChildren([
       sMailboxNew,
       sMailboxDetail,
       sTags,
+      sCustomFields,
       sSavedReplies,
       sViews,
       sSla,

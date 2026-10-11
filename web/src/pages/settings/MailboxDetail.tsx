@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { RefreshCw, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { BackLink, NoAccess, Row, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
@@ -13,7 +14,7 @@ import { Segmented } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
 import { RichEditor } from "@/components/editor/RichEditor";
 import { SaveBar } from "@/components/settings/SaveBar";
-import { MailboxIcon, MailboxStatus, TestResults, kindLabel } from "@/components/mailboxes/kinds";
+import { MailboxIcon, MailboxStatus, TestResults } from "@/components/mailboxes/kinds";
 import { ForwardingInstructions } from "@/components/mailboxes/AddMailboxWizard";
 import { useMailboxActions } from "@/components/mailboxes/useMailboxActions";
 import { api } from "@/lib/api/endpoints";
@@ -52,33 +53,55 @@ function toDraft(m: Mailbox): Draft {
 }
 
 export default function MailboxDetail() {
+  const { t } = useTranslation("settingsChannels");
   const { mailboxId } = useParams({ from: "/app/settings/mailboxes/$mailboxId" });
+  const back = <BackLink to="/settings/mailboxes">{t("detail.back")}</BackLink>;
   const role = useRole();
   const { data, isLoading } = useQuery({ ...q.mailboxes(), enabled: atLeast(role, "admin") });
   const mailbox = data?.find((m) => m.id === mailboxId);
 
   if (!atLeast(role, "admin"))
     return (
-      <SettingsPage title="Mailbox" back={<BackLink to="/settings/mailboxes">Mailboxes</BackLink>}>
+      <SettingsPage title={t("detail.fallbackTitle")} back={back}>
         <NoAccess what="mailboxes" />
       </SettingsPage>
     );
   if (isLoading)
     return (
-      <SettingsPage title={<Skeleton className="h-5 w-48" />} back={<BackLink to="/settings/mailboxes">Mailboxes</BackLink>}>
-        <Skeleton className="h-40 w-full rounded-lg" />
+      <SettingsPage title={<Skeleton className="h-5 w-48" />} back={back}>
+        {[180, 220, 120].map((h, i) => (
+          <div key={i} aria-hidden>
+            <Skeleton className="mb-3 h-3 w-28" />
+            <div className="rounded-lg border border-line px-4 py-4" style={{ height: h }}>
+              <Skeleton className="h-2.5 w-32" />
+              <Skeleton className="mt-2.5 h-2 w-[55%] opacity-60" />
+            </div>
+          </div>
+        ))}
       </SettingsPage>
     );
   if (!mailbox)
     return (
-      <SettingsPage title="Mailbox" back={<BackLink to="/settings/mailboxes">Mailboxes</BackLink>}>
-        <EmptyState lit={3} title="Mailbox not found" description="It may have been removed." />
+      <SettingsPage title={t("detail.fallbackTitle")} back={back}>
+        <Section flush>
+          <EmptyState
+            lit={3}
+            title={t("detail.notFound")}
+            description={t("detail.notFoundBody")}
+            action={
+              <Button size="sm" asChild>
+                <Link to="/settings/mailboxes">{t("detail.backToList")}</Link>
+              </Button>
+            }
+          />
+        </Section>
       </SettingsPage>
     );
   return <MailboxEditor key={mailbox.id} mailbox={mailbox} />;
 }
 
 function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
+  const { t } = useTranslation("settingsChannels");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: teams } = useQuery(q.teams());
@@ -117,7 +140,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
     onSuccess: (m) => {
       upsertInList(qc, qk.mailboxes, m);
       setDraft(toDraft(m));
-      toast.success("Mailbox saved");
+      toast.success(t("detail.saved"));
     },
     onError: (e) => toast.error(e),
   });
@@ -139,7 +162,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
     try {
       setTest(await api.mailboxes.test(mailbox.id));
     } catch (e) {
-      toast.error(errorMessage(e, "The test couldn't run"));
+      toast.error(errorMessage(e, t("detail.testRunFailed")));
     } finally {
       setTesting(false);
     }
@@ -149,10 +172,10 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
 
   return (
     <SettingsPage
-      back={<BackLink to="/settings/mailboxes">Mailboxes</BackLink>}
+      back={<BackLink to="/settings/mailboxes">{t("detail.back")}</BackLink>}
       title={
         <span className="flex items-center gap-3">
-          <MailboxIcon kind={mailbox.inbound_kind} />
+          <MailboxIcon kind={mailbox.inbound_kind} size="lg" />
           <span className="min-w-0">
             <span className="block truncate">{mailbox.name}</span>
             <span className="mono block truncate text-[12.5px] font-normal tracking-normal text-fg-3">{mailbox.email}</span>
@@ -162,21 +185,21 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
       actions={<MailboxStatus mailbox={mailbox} />}
     >
       <Section
-        title="Connection"
-        description={kindLabel[mailbox.inbound_kind]}
+        title={t("detail.connection")}
+        description={t(`kind.${mailbox.inbound_kind}`)}
         actions={
           <Button size="sm" icon={<Zap className="size-3.5" />} loading={testing} onClick={runTest}>
-            Test connection
+            {t("detail.testConnection")}
           </Button>
         }
       >
         {mailbox.status === "error" && mailbox.last_error && (
-          <div className="border-b border-line-soft py-3.5">
-            <div className="flex items-start gap-2 text-[12.5px]">
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-danger" />
-              <div>
-                <div className="font-medium">Last sync failed</div>
-                <div className="mono mt-0.5 break-words text-xs text-fg-3">{mailbox.last_error}</div>
+          <div className="-mx-4 border-b border-tone-red-line bg-tone-red-soft px-4 py-3" role="alert">
+            <div className="flex items-start gap-2.5 text-[12.5px]">
+              <span className="mt-1.5 size-1.5 shrink-0 animate-pulse-soft rounded-full bg-tone-red-solid motion-reduce:animate-none" />
+              <div className="min-w-0">
+                <div className="font-medium text-tone-red">{t("detail.lastSyncFailed")}</div>
+                <div className="mono mt-0.5 break-words text-xs text-fg-2">{mailbox.last_error}</div>
               </div>
             </div>
           </div>
@@ -186,14 +209,14 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
             <TestResults result={test} />
           </div>
         )}
-        <Row label="Last synced" description={mailbox.inbound_kind === "forwarding" ? "Forwarded mail arrives as soon as it is sent." : undefined}>
-          <span className="mono text-xs text-fg-3">{mailbox.last_synced_at ? relLong(mailbox.last_synced_at) : "Never"}</span>
+        <Row label={t("detail.lastSynced")} description={mailbox.inbound_kind === "forwarding" ? t("detail.forwardingInstant") : undefined}>
+          <span className="mono text-xs text-fg-3">{mailbox.last_synced_at ? relLong(mailbox.last_synced_at) : t("detail.never")}</span>
         </Row>
         {oauth && (
-          <Row label="Account" description={`Connected with ${kindLabel[mailbox.inbound_kind]}. Reconnect if access was revoked or the password changed.`}>
+          <Row label={t("detail.account")} description={t("detail.accountHint", { provider: t(`kind.${mailbox.inbound_kind}`) })}>
             <span className="mono text-xs text-fg-2">{mailbox.config.oauth_email ?? mailbox.email}</span>
             <Button size="sm" icon={<RefreshCw className="size-3.5" />} loading={reconnect.isPending} onClick={() => reconnect.mutate()}>
-              Reconnect
+              {t("detail.reconnect")}
             </Button>
           </Row>
         )}
@@ -203,9 +226,9 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
           </div>
         )}
         {mailbox.inbound_kind === "imap" && (
-          <div className="flex flex-col gap-4 py-3.5">
+          <div className="grid gap-4 py-4 lg:grid-cols-2">
             <ServerEdit
-              title="Incoming (IMAP)"
+              title={t("detail.incoming")}
               host={draft.config.imap_host ?? ""}
               port={draft.config.imap_port ?? 993}
               tls={draft.config.imap_tls ?? "tls"}
@@ -218,7 +241,7 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
               onPassword={(v) => set("password", v)}
             />
             <ServerEdit
-              title="Outgoing (SMTP)"
+              title={t("detail.outgoing")}
               host={draft.config.smtp_host ?? ""}
               port={draft.config.smtp_port ?? 587}
               tls={draft.config.smtp_tls ?? "starttls"}
@@ -234,60 +257,60 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
         )}
       </Section>
 
-      <Section title="Sending">
-        <Row label="Name" description="Shown to your team." htmlFor="mb-name">
+      <Section title={t("detail.sending")} description={t("detail.sendingHint")}>
+        <Row label={t("detail.name")} description={t("detail.nameHint")} htmlFor="mb-name">
           <TextInput id="mb-name" className="w-[260px]" value={draft.name} onChange={(e) => set("name", e.target.value)} />
         </Row>
-        <Row label="Sender name" description="What customers see in the From line." htmlFor="mb-display">
+        <Row label={t("detail.senderName")} description={t("detail.senderNameHint")} htmlFor="mb-display">
           <TextInput id="mb-display" className="w-[260px]" value={draft.display_name} placeholder={mailbox.name} onChange={(e) => set("display_name", e.target.value)} />
         </Row>
-        <Row label="Team" description="New tickets from this mailbox go to this team.">
+        <Row label={t("detail.team")} description={t("detail.teamHint")}>
           <Select
             className="w-[260px]"
-            aria-label="Team"
+            aria-label={t("detail.team")}
             value={draft.team_id ?? "__none"}
             onChange={(v) => set("team_id", v === "__none" ? null : v)}
-            options={[{ value: "__none", label: "No team" }, ...(teams ?? []).map((t) => ({ value: t.id, label: t.name }))]}
+            options={[{ value: "__none", label: t("detail.noTeam") }, ...(teams ?? []).map((t) => ({ value: t.id, label: t.name }))]}
           />
         </Row>
         {mailbox.outbound_kind === "system" && (
-          <Row label="Sent from" description="Replies go out from opendesk's sending address on behalf of this mailbox. Use IMAP and SMTP to send from your own server.">
-            <span className="text-xs text-fg-3">opendesk</span>
+          <Row label={t("detail.sentFrom")} description={t("detail.sentFromHint")}>
+            <span className="mono text-xs text-fg-3">opendesk</span>
           </Row>
         )}
       </Section>
 
-      <Section title="Signature" description="Added below every reply sent from this mailbox.">
+      <Section title={t("detail.signature")} description={t("detail.signatureHint")}>
         <div className="-mx-4 -my-1">
           <RichEditor
             value={draft.signature_html}
             onChange={(v) => set("signature_html", v)}
-            placeholder="The Support team at Company"
-            ariaLabel="Signature"
+            placeholder={t("detail.signaturePlaceholder")}
+            ariaLabel={t("detail.signature")}
             contentClassName="min-h-[88px]"
           />
         </div>
       </Section>
 
-      <Section title="Auto-reply" description="Sent once when a customer opens a new ticket by email.">
-        <Row label="Send an automatic reply">
-          <Switch aria-label="Send an automatic reply" checked={draft.auto_reply_enabled} onCheckedChange={(v) => set("auto_reply_enabled", v)} />
+      <Section title={t("detail.autoReply")} description={t("detail.autoReplyHint")}>
+        <Row label={t("detail.autoReplyToggle")}>
+          <Switch aria-label={t("detail.autoReplyToggle")} checked={draft.auto_reply_enabled} onCheckedChange={(v) => set("auto_reply_enabled", v)} />
         </Row>
         {draft.auto_reply_enabled && (
           <div className="flex flex-col gap-3 py-3.5">
-            <Field label="Subject">
+            <Field label={t("detail.subject")}>
               {({ id }) => (
-                <TextInput id={id} value={draft.auto_reply_subject} placeholder="We got your message" onChange={(e) => set("auto_reply_subject", e.target.value)} />
+                <TextInput id={id} value={draft.auto_reply_subject} placeholder={t("detail.subjectPlaceholder")} onChange={(e) => set("auto_reply_subject", e.target.value)} />
               )}
             </Field>
             <div className="flex flex-col gap-1.5">
-              <span className="text-[12.5px] font-medium">Message</span>
+              <span className="text-[12.5px] font-medium">{t("detail.message")}</span>
               <div className="rounded-md border border-line focus-within:border-fg-3 focus-within:shadow-[0_0_0_3px_var(--focus)]">
                 <RichEditor
                   value={draft.auto_reply_html}
                   onChange={(v) => set("auto_reply_html", v)}
-                  placeholder="Thanks for writing in. We usually reply within a few hours."
-                  ariaLabel="Auto-reply message"
+                  placeholder={t("detail.messagePlaceholder")}
+                  ariaLabel={t("detail.autoReplyLabel")}
                   contentClassName="min-h-[100px]"
                 />
               </div>
@@ -296,22 +319,22 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
         )}
       </Section>
 
-      <Section title="Danger zone" danger>
+      <Section title={t("detail.danger")} danger>
         <Row
-          label={mailbox.status === "disabled" ? "Enable mailbox" : "Disable mailbox"}
-          description={mailbox.status === "disabled" ? "Start receiving and sending mail again." : "Stop syncing and sending without removing anything."}
+          label={mailbox.status === "disabled" ? t("detail.enableTitle") : t("detail.disableTitle")}
+          description={mailbox.status === "disabled" ? t("detail.enableHint") : t("detail.disableHint")}
         >
           <Button
             variant="danger"
             loading={setStatus.isPending}
             onClick={() => setStatus.mutate({ m: mailbox, status: mailbox.status === "disabled" ? "active" : "disabled" })}
           >
-            {mailbox.status === "disabled" ? "Enable" : "Disable"}
+            {mailbox.status === "disabled" ? t("detail.enable") : t("detail.disable")}
           </Button>
         </Row>
-        <Row label="Remove mailbox" description="Existing tickets stay. New mail to this address stops arriving.">
+        <Row label={t("detail.removeTitle")} description={t("detail.removeHint")}>
           <Button variant="danger" onClick={() => remove(mailbox, () => void navigate({ to: "/settings/mailboxes" }))}>
-            Remove
+            {t("detail.remove")}
           </Button>
         </Row>
       </Section>
@@ -335,21 +358,22 @@ function ServerEdit(p: {
   onUsername: (v: string) => void;
   onPassword: (v: string) => void;
 }) {
+  const { t } = useTranslation("settingsChannels");
   return (
-    <fieldset className="flex flex-col gap-3 rounded-lg border border-line p-3.5">
+    <fieldset className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-sunken/50 p-3.5">
       <legend className="px-1 text-[12.5px] font-medium">{p.title}</legend>
       <div className="grid grid-cols-[1fr_110px] gap-3">
-        <Field label="Server">{({ id }) => <TextInput id={id} className="mono" value={p.host} onChange={(e) => p.onHost(e.target.value)} />}</Field>
-        <Field label="Port">{({ id }) => <NumberInput id={id} value={p.port} min={1} max={65535} onChange={p.onPort} />}</Field>
+        <Field label={t("detail.server")}>{({ id }) => <TextInput id={id} className="mono" value={p.host} onChange={(e) => p.onHost(e.target.value)} />}</Field>
+        <Field label={t("detail.port")}>{({ id }) => <NumberInput id={id} value={p.port} min={1} max={65535} onChange={p.onPort} />}</Field>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Username">{({ id }) => <TextInput id={id} className="mono" autoComplete="off" value={p.username} onChange={(e) => p.onUsername(e.target.value)} />}</Field>
-        <Field label="Password" hint="Leave empty to keep the saved one.">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+        <Field label={t("detail.username")}>{({ id }) => <TextInput id={id} className="mono" autoComplete="off" value={p.username} onChange={(e) => p.onUsername(e.target.value)} />}</Field>
+        <Field label={t("detail.password")} hint={t("detail.passwordKeep")}>
           {({ id }) => <TextInput id={id} type="password" autoComplete="new-password" value={p.password} placeholder="••••••••" onChange={(e) => p.onPassword(e.target.value)} />}
         </Field>
       </div>
       <div className="flex items-center justify-between gap-3">
-        <span className="text-[12.5px] font-medium">Security</span>
+        <span className="text-[12.5px] font-medium">{t("detail.security")}</span>
         <Segmented
           size="xs"
           value={p.tls}
@@ -357,7 +381,7 @@ function ServerEdit(p: {
           options={[
             { value: "tls", label: "TLS" },
             { value: "starttls", label: "STARTTLS" },
-            { value: "none", label: "None" },
+            { value: "none", label: t("detail.tlsNone") },
           ]}
         />
       </div>

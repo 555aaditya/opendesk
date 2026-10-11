@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Dialog } from "@/components/ui/dialog";
@@ -11,6 +12,7 @@ import { TestResults } from "./kinds";
 
 /** Test, enable/disable and remove, shared by the list and the detail page. */
 export function useMailboxActions() {
+  const { t } = useTranslation("settingsChannels");
   const qc = useQueryClient();
   const confirm = useConfirm();
   const [testing, setTesting] = useState<{ mailbox: Mailbox; result?: MailboxTest; error?: unknown } | null>(null);
@@ -40,40 +42,44 @@ export function useMailboxActions() {
   };
 
   const remove = (m: Mailbox, after?: () => void) =>
-    confirm.show(`Mail sent to ${m.email} stops arriving in opendesk. Existing tickets stay.`, async () => {
+    confirm.show(t("actions.removeBody", { email: m.email }), async () => {
       const prev = qc.getQueryData<Mailbox[]>(qk.mailboxes);
       removeFromList(qc, qk.mailboxes, m.id);
       try {
         await api.mailboxes.remove(m.id);
-        toast.success("Mailbox removed");
+        toast.success(t("actions.removed"));
         after?.();
       } catch (e) {
         if (prev) qc.setQueryData(qk.mailboxes, prev);
         throw e;
       }
-    }, { title: "Remove mailbox?", confirmLabel: "Remove", danger: true });
+    }, { title: t("actions.removeTitle"), confirmLabel: t("actions.removeConfirm"), danger: true });
 
   const testDialog = testing && (
     <Dialog
       open
       onOpenChange={(o) => !o && setTesting(null)}
       size="sm"
-      title="Connection test"
+      title={t("actions.testTitle")}
       description={<span className="mono">{testing.mailbox.email}</span>}
       footer={
         <Button variant="primary" onClick={() => setTesting(null)}>
-          Done
+          {t("actions.done")}
         </Button>
       }
     >
       {testing.result ? (
         <TestResults result={testing.result} />
       ) : testing.error ? (
-        <p className="text-xs text-danger-fg">The test couldn't run. Try again in a moment.</p>
+        <p role="alert" className="text-xs text-danger-fg">{t("actions.testFailed")}</p>
       ) : (
-        <div className="flex flex-col gap-2 py-2">
-          <div className="skeleton h-3 w-2/3" />
-          <div className="skeleton h-3 w-1/2" />
+        <div className="flex flex-col gap-3 rounded-lg border border-line bg-sunken px-3 py-3" aria-busy="true">
+          {[0, 1].map((i) => (
+            <div key={i} className="flex items-center gap-2.5">
+              <div className="skeleton size-[18px] rounded-sm" />
+              <div className="skeleton h-2.5" style={{ width: i ? "40%" : "52%" }} />
+            </div>
+          ))}
         </div>
       )}
     </Dialog>

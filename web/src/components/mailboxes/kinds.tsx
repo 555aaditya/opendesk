@@ -1,8 +1,10 @@
-import { Forward, Server } from "lucide-react";
+import { Check, Forward, Server, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Mailbox, MailboxTest } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { Dot } from "@/components/ui/badge";
+import { tone, type Tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
+import { StatePill } from "@/components/settings2/bits";
 
 export function GoogleGlyph({ className }: { className?: string }) {
   return (
@@ -40,6 +42,9 @@ export const kindLabel: Record<Mailbox["inbound_kind"], string> = {
   forwarding: "Forwarding",
 };
 
+/** Each way in gets its own quiet hue, so a list of mailboxes scans by kind. */
+export const kindTone: Record<Mailbox["inbound_kind"], Tone> = { google: "blue", microsoft: "cyan", imap: "indigo", forwarding: "teal" };
+
 export function MailboxGlyph({ kind, className }: { kind: Mailbox["inbound_kind"]; className?: string }) {
   if (kind === "google") return <GoogleGlyph className={className} />;
   if (kind === "microsoft") return <MicrosoftGlyph className={className} />;
@@ -47,42 +52,62 @@ export function MailboxGlyph({ kind, className }: { kind: Mailbox["inbound_kind"
   return <Forward className={cn("size-4", className)} aria-hidden />;
 }
 
-export function MailboxIcon({ kind }: { kind: Mailbox["inbound_kind"] }) {
+export function MailboxIcon({ kind, size = "md" }: { kind: Mailbox["inbound_kind"]; size?: "sm" | "md" | "lg" }) {
   return (
-    <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-fg-2">
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-md",
+        size === "sm" ? "size-6 [&_svg]:size-3.5" : size === "lg" ? "size-10 rounded-lg [&_svg]:size-5" : "size-8 [&_svg]:size-4",
+        tone[kindTone[kind]].chip,
+      )}
+      aria-hidden
+    >
       <MailboxGlyph kind={kind} />
     </span>
   );
 }
 
+const statusState = { active: "active", error: "failing", disabled: "disabled" } as const;
+
 export function MailboxStatus({ mailbox }: { mailbox: Pick<Mailbox, "status" | "last_error"> }) {
-  const label = { active: "Active", error: "Needs attention", disabled: "Disabled" }[mailbox.status];
-  const tone = { active: "ok", error: "danger", disabled: "muted" } as const;
+  const { t } = useTranslation("settingsChannels");
   const el = (
-    <span className="inline-flex items-center gap-1.5 text-xs text-fg-2">
-      <Dot tone={tone[mailbox.status]} />
-      {label}
-    </span>
+    <StatePill state={statusState[mailbox.status]} pulse={mailbox.status === "error"}>
+      {t(`status.${mailbox.status}`)}
+    </StatePill>
   );
-  return mailbox.status === "error" && mailbox.last_error ? <Tooltip content={mailbox.last_error}>{el}</Tooltip> : el;
+  return mailbox.status === "error" && mailbox.last_error ? (
+    <Tooltip content={mailbox.last_error}>
+      <span className="inline-flex">{el}</span>
+    </Tooltip>
+  ) : (
+    el
+  );
 }
 
 export function TestResults({ result }: { result: MailboxTest }) {
+  const { t } = useTranslation("settingsChannels");
   const line = (label: string, r: { ok: boolean; error: string }) => (
-    <div className="flex items-start gap-2.5 py-1.5">
-      <Dot tone={r.ok ? "ok" : "danger"} className="mt-1.5" />
+    <div className="flex items-start gap-2.5 py-2">
+      <span
+        className={cn(
+          "mt-px flex size-[18px] shrink-0 items-center justify-center rounded-sm animate-indicator-in motion-reduce:animate-none",
+          r.ok ? tone.green.chip : tone.red.chip,
+        )}
+        aria-hidden
+      >
+        {r.ok ? <Check className="size-3" strokeWidth={2.5} /> : <X className="size-3" strokeWidth={2.5} />}
+      </span>
       <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] font-medium">
-          {label} {r.ok ? "works" : "failed"}
-        </div>
+        <div className="text-[12.5px] font-medium">{r.ok ? t("test.works", { what: label }) : t("test.failed", { what: label })}</div>
         {!r.ok && r.error && <div className="mono mt-0.5 break-words text-xs text-fg-3">{r.error}</div>}
       </div>
     </div>
   );
   return (
-    <div className="rounded-md border border-line bg-sunken px-3 py-1">
-      {line("Receiving", result.inbound)}
-      {line("Sending", result.outbound)}
+    <div role="status" className="divide-y divide-line-soft rounded-lg border border-line bg-sunken px-3">
+      {line(t("test.receiving"), result.inbound)}
+      {line(t("test.sending"), result.outbound)}
     </div>
   );
 }

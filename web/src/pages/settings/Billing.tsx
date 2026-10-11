@@ -21,11 +21,13 @@ import { toast } from "@/components/ui/toast";
 import { useBilling, useBuyCredits, useCanManageBilling, useCheckout, useFmt, usePortal } from "@/components/billing/hooks";
 import { Meter } from "@/components/billing/Meter";
 import { creditBreakdown, formatMoney, formatPrice, hasSubscription, isSelfHosted, limitState, stackDays, yearlySavings } from "@/components/billing/model";
-import { UsageChart, UsageDayTable, UsageLegend } from "@/components/billing/UsageChart";
+import { UsageChart, UsageDayTable, UsageLegend, shadeOf } from "@/components/billing/UsageChart";
 import { isApiError } from "@/lib/api/client";
 import type { Billing, BillingStatus, ReportsRange } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { cn } from "@/lib/cn";
+import { AI_TONE, SERIES, tone, toneFor, toneVar, type Tone } from "@/lib/tones";
+import { IconTile, SummaryStrip } from "@/components/settings2/bits";
 
 export default function BillingPage() {
   const { t } = useTranslation("billing");
@@ -42,7 +44,7 @@ export default function BillingPage() {
         </Section>
       ) : isSelfHosted(b) ? (
         <>
-          <SelfHosted />
+          <SelfHosted b={b} />
           <Usage />
         </>
       ) : (
@@ -128,10 +130,13 @@ function PageSkeleton() {
   );
 }
 
-function Notice({ icon, title, body, action }: { icon: ReactNode; title: ReactNode; body: ReactNode; action?: ReactNode }) {
+function Notice({ icon, title, body, action, hue }: { icon: ReactNode; title: ReactNode; body: ReactNode; action?: ReactNode; hue?: Tone }) {
   return (
-    <div role="status" className="flex items-start gap-3 rounded-lg border border-line bg-sunken/60 px-4 py-3">
-      <span className="mt-[3px] flex shrink-0 text-fg-3">{icon}</span>
+    <div
+      role="status"
+      className={cn("flex animate-rise-in items-start gap-3 rounded-lg border px-4 py-3", hue ? cn(tone[hue].soft, tone[hue].line) : "border-line bg-sunken/60")}
+    >
+      <span className={cn("mt-[3px] flex shrink-0", hue ? tone[hue].text : "text-fg-3")}>{icon}</span>
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-medium">{title}</div>
         <div className="mt-0.5 text-[12.5px] leading-[18px] text-fg-3">{body}</div>
@@ -156,7 +161,8 @@ function Notices({ b }: { b: Billing }) {
     <>
       {b.status === "past_due" && (
         <Notice
-          icon={<span className="block size-1.5 translate-y-[3px] rounded-full bg-warn" />}
+          hue="amber"
+          icon={<span className="block size-1.5 translate-y-[3px] animate-pulse-soft rounded-full bg-tone-amber-solid motion-reduce:animate-none" />}
           title={t("notice.pastDueTitle")}
           body={t("notice.pastDueBody")}
           action={portalButton(t("notice.updatePayment"))}
@@ -203,7 +209,11 @@ function PlanCard({ b }: { b: Billing }) {
   return (
     <Section flush>
       <div className="flex items-start justify-between gap-4 px-5 pb-4 pt-4">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3.5">
+          <IconTile tone={pro ? "blue" : "gray"} className="mt-0.5 size-10 rounded-lg [&_svg]:size-[18px]">
+            <CreditCard strokeWidth={1.75} />
+          </IconTile>
+          <div className="min-w-0">
           <div className="label-caps">{t("plan.current")}</div>
           <div className="mt-1.5 flex items-center gap-2.5">
             <span className="text-[22px] font-semibold leading-7 tracking-[-0.03em]">{t(`plans.${b.plan}`)}</span>
@@ -214,6 +224,7 @@ function PlanCard({ b }: { b: Billing }) {
             )}
           </div>
           <p className="mt-1 text-[12.5px] text-fg-3">{pro ? t("plan.proSummary") : t("plan.freeSummary")}</p>
+          </div>
         </div>
         {canManage && hasSubscription(b) && (
           <Button icon={<CreditCard className="size-3.5 text-fg-3" />} iconRight={<ArrowUpRight className="size-3 text-fg-4" />} loading={portal.isPending} onClick={() => portal.mutate()}>
@@ -222,7 +233,7 @@ function PlanCard({ b }: { b: Billing }) {
         )}
       </div>
       {pro && (
-        <div className="grid grid-cols-1 gap-4 border-t border-line-soft px-5 py-3.5 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 border-t border-line-soft bg-sunken/50 px-5 py-3.5 sm:grid-cols-3">
           <Fact
             label={t("plan.seats")}
             value={t("plan.seatsValue", { count: b.seats })}
@@ -278,7 +289,7 @@ function Upgrade({ b }: { b: Billing }) {
                   label: (
                     <span className="flex items-center gap-1.5">
                       {t("upgrade.yearly")}
-                      {save && <span className="mono text-[10.5px] font-normal text-fg-3">{t("upgrade.save", { pct: save })}</span>}
+                      {save && <span className={cn("mono rounded-xs px-1 text-[10.5px] font-normal", tone.green.chip)}>{t("upgrade.save", { pct: save })}</span>}
                     </span>
                   ),
                 },
@@ -309,10 +320,10 @@ function Upgrade({ b }: { b: Billing }) {
             <span className="text-[11.5px] text-fg-4">{t("upgrade.secure")}</span>
           </div>
         </div>
-        <ul className="flex flex-col justify-center gap-2 border-t border-line-soft px-5 py-4 sm:border-l sm:border-t-0 sm:pr-8">
+        <ul className="flex flex-col justify-center gap-2.5 border-t border-line-soft bg-sunken/50 px-5 py-4 sm:border-l sm:border-t-0 sm:pr-8">
           {(["mailboxes", "members", "credits", "same"] as const).map((k) => (
-            <li key={k} className="flex items-center gap-2 text-[12.5px] text-fg-2">
-              {k === "credits" ? <Sparkles className="size-3.5 text-fg-3" strokeWidth={1.75} /> : <Check className="size-3.5 text-fg-3" strokeWidth={2} />}
+            <li key={k} className="flex items-center gap-2.5 text-[12.5px] text-fg-2">
+              <BenefitIcon ai={k === "credits"} />
               {t(`upgrade.benefit.${k}`)}
             </li>
           ))}
@@ -338,8 +349,8 @@ function Limits({ b }: { b: Billing }) {
               <div className="text-[13px] font-medium">{r.label}</div>
               <div className="mt-0.5 text-[12.5px] leading-[18px] text-fg-3">{l.over ? t("limits.over") : r.hint}</div>
             </div>
-            <Meter value={l.used} max={l.max} label={`${r.label}: ${t("limits.of", { used: l.used, max: l.max })}`} className="hidden w-24 sm:block" />
-            <span className={cn("mono w-24 whitespace-nowrap text-right text-[12.5px] tabular-nums", l.atLimit ? "text-fg" : "text-fg-2")}>
+            <Meter value={l.used} max={l.max} label={`${r.label}: ${t("limits.of", { used: l.used, max: l.max })}`} className="hidden h-1.5 w-40 sm:block" />
+            <span className={cn("mono w-24 whitespace-nowrap text-right text-[12.5px] tabular-nums", l.over ? "text-tone-red" : l.atLimit ? "text-tone-amber" : "text-fg-2")}>
               {!l.limited ? t("limits.unlimited") : l.over ? t("limits.overOf", { used: l.used, max: l.max }) : t("limits.of", { used: l.used, max: l.max })}
             </span>
           </div>
@@ -363,10 +374,15 @@ function Credits({ b }: { b: Billing }) {
     <Section title={t("credits.title")} description={t("credits.description")} flush>
       <div className="grid gap-5 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <div className="min-w-0">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{fmt.num(c.remaining)}</span>
-            <span className="text-[12.5px] text-fg-3">{t("credits.remaining")}</span>
-            {c.low && <span className="size-1.5 self-center rounded-full bg-warn" aria-hidden />}
+          <div className="flex items-center gap-3">
+            <IconTile tone={AI_TONE}>
+              <Sparkles strokeWidth={1.75} />
+            </IconTile>
+            <div className="flex items-baseline gap-2">
+              <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{fmt.num(c.remaining)}</span>
+              <span className="text-[12.5px] text-fg-3">{t("credits.remaining")}</span>
+              {c.low && <span className="size-1.5 self-center animate-pulse-soft rounded-full bg-tone-amber-solid motion-reduce:animate-none" aria-hidden />}
+            </div>
           </div>
           <div className="mt-4">
             <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
@@ -376,14 +392,14 @@ function Credits({ b }: { b: Billing }) {
             <Meter value={c.monthlyUsed} max={c.monthly} label={t("credits.meterLabel", { used: c.monthlyUsed, total: c.monthly })} className="h-1.5" />
             <div className="mono mt-1.5 text-[11px] text-fg-4">{t("credits.resets", { date: fmt.date(b.credits.period_end) })}</div>
           </div>
-          {c.low && <p className="mt-3 text-[12.5px] text-fg-2">{t("credits.low")}</p>}
+          {c.low && <p className="mt-3 text-[12.5px] text-tone-amber">{t("credits.low")}</p>}
         </div>
         <div className="flex gap-6 sm:flex-col sm:gap-3 sm:border-l sm:border-line-soft sm:pl-6">
           <Fact label={t("credits.purchased")} value={fmt.num(c.purchased)} hint={t("credits.purchasedHint")} />
         </div>
       </div>
       {canManage && pack && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-line-soft px-5 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-t border-line-soft bg-sunken/50 px-5 py-3">
           <div className="min-w-0 flex-1">
             <div className="text-[13px] font-medium">{t("credits.buyTitle")}</div>
             <div className="mono mt-0.5 text-[11.5px] text-fg-3">{t("credits.packSize", { credits: fmt.num(perPack) })}</div>
@@ -401,28 +417,52 @@ function Credits({ b }: { b: Billing }) {
   );
 }
 
-function SelfHosted() {
-  const { t } = useTranslation("billing");
+function BenefitIcon({ ai }: { ai?: boolean }) {
   return (
-    <Section flush>
-      <div className="flex items-start gap-4 px-5 py-5">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-line bg-sunken text-fg-2">
-          <Server className="size-4" strokeWidth={1.75} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold tracking-[-0.01em]">{t("selfHosted.title")}</div>
-          <p className="mt-1 max-w-[520px] text-[12.5px] leading-[19px] text-fg-3">{t("selfHosted.body")}</p>
-          <ul className="mt-3.5 flex flex-wrap gap-x-5 gap-y-1.5">
-            {(["mailboxes", "members", "ai"] as const).map((k) => (
-              <li key={k} className="flex items-center gap-1.5 text-[12.5px] text-fg-2">
-                {k === "ai" ? <Sparkles className="size-3.5 text-fg-3" strokeWidth={1.75} /> : <Check className="size-3.5 text-fg-3" strokeWidth={2} />}
-                {t(`selfHosted.${k}`)}
-              </li>
-            ))}
-          </ul>
+    <span className={cn("flex size-4 shrink-0 items-center justify-center rounded-xs", ai ? tone[AI_TONE].chip : tone.green.chip)} aria-hidden>
+      {ai ? <Sparkles className="size-2.5" strokeWidth={2} /> : <Check className="size-2.5" strokeWidth={3} />}
+    </span>
+  );
+}
+
+function SelfHosted({ b }: { b: Billing }) {
+  const { t } = useTranslation("billing");
+  const fmt = useFmt();
+  return (
+    <>
+      <Section flush>
+        <div className="flex items-start gap-4 px-5 py-5">
+          <IconTile tone="green" className="size-10 rounded-lg [&_svg]:size-[18px]">
+            <Server strokeWidth={1.75} />
+          </IconTile>
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-semibold tracking-[-0.01em]">{t("selfHosted.title")}</div>
+            <p className="mt-1 max-w-[560px] text-[12.5px] leading-[19px] text-fg-3">{t("selfHosted.body")}</p>
+            <ul className="mt-3.5 flex flex-wrap gap-x-5 gap-y-2">
+              {(["mailboxes", "members", "ai"] as const).map((k) => (
+                <li key={k} className="flex items-center gap-2 text-[12.5px] text-fg-2">
+                  <BenefitIcon ai={k === "ai"} />
+                  {t(`selfHosted.${k}`)}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
-    </Section>
+      </Section>
+      <SummaryStrip
+        className="-mt-4"
+        items={[
+          { label: t("selfHosted.usedMailboxes"), value: fmt.num(b.usage.mailboxes), hint: t("selfHosted.noLimit") },
+          { label: t("selfHosted.usedMembers"), value: fmt.num(b.usage.members), hint: t("selfHosted.noLimit") },
+          {
+            label: t("selfHosted.usedCredits"),
+            value: fmt.num(b.credits.used),
+            tone: AI_TONE,
+            hint: b.credits.period_end ? t("credits.resets", { date: fmt.date(b.credits.period_end) }) : t("selfHosted.noLimit"),
+          },
+        ]}
+      />
+    </>
   );
 }
 
@@ -484,7 +524,13 @@ function Usage() {
           <div className="grid border-t border-line-soft md:grid-cols-2">
             <Breakdown
               title={t("usage.byFeature")}
-              rows={data.by_feature.map((f) => ({ key: f.feature, label: t(`features.${f.feature}`), calls: f.calls, credits: f.credits }))}
+              rows={data.by_feature.map((f) => ({
+                key: f.feature,
+                label: t(`features.${f.feature}`),
+                calls: f.calls,
+                credits: f.credits,
+                color: shadeOf(stacked.series, stacked.series.includes(f.feature) ? f.feature : "other"),
+              }))}
               total={total}
             />
             <Breakdown
@@ -493,7 +539,14 @@ function Usage() {
               rows={data.by_member.map((m) => ({
                 key: m.user?.id ?? "widget",
                 label: m.user?.name ?? t("usage.widget"),
-                icon: m.user ? <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> : <span className="flex size-4 items-center justify-center rounded-full border border-line"><Sparkles className="size-2.5 text-fg-3" /></span>,
+                icon: m.user ? (
+                  <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" />
+                ) : (
+                  <span className={cn("flex size-4 items-center justify-center rounded-xs", tone.teal.chip)}>
+                    <Sparkles className="size-2.5" />
+                  </span>
+                ),
+                color: toneVar(m.user ? toneFor(m.user.name) : "teal"),
                 calls: m.calls,
                 credits: m.credits,
               }))}
@@ -513,7 +566,7 @@ function Breakdown({
   className,
 }: {
   title: string;
-  rows: { key: string; label: string; icon?: ReactNode; calls: number; credits: number }[];
+  rows: { key: string; label: string; icon?: ReactNode; calls: number; credits: number; color?: string }[];
   total: number;
   className?: string;
 }) {
@@ -541,8 +594,11 @@ function Breakdown({
                   {r.icon}
                   <span className="truncate text-fg-2">{r.label}</span>
                 </span>
-                <div className="mt-1 h-[3px] rounded-full bg-hover">
-                  <div className="h-full rounded-full bg-fg-3" style={{ width: `${(r.credits / max) * 100}%` }} />
+                <div className="mt-1 h-[3px] overflow-hidden rounded-full bg-hover">
+                  <div
+                    className="h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none"
+                    style={{ width: `${(r.credits / max) * 100}%`, background: r.color ?? toneVar(SERIES[0]) }}
+                  />
                 </div>
               </td>
               <td className="mono py-1.5 text-right align-top tabular-nums text-fg-4">{fmt.num(r.calls)}</td>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionNeedsValue, aiActions, offered, opsFor, sentimentLabel } from "./automation";
+import { actionLabel, actionNeedsValue, aiActions, fieldLabel, offered, opLabel, opsFor, sentimentLabel, triggerLabel } from "./automation";
 
 describe("automation AI helpers", () => {
   it("offers AI actions only when AI is on, but keeps one in use", () => {
@@ -14,5 +14,16 @@ describe("automation AI helpers", () => {
     expect(actionNeedsValue("ai_triage")).toBe(false);
     expect(sentimentLabel("frustrated")).toBe("Frustrated");
     expect(sentimentLabel("custom")).toBe("custom");
+  });
+});
+
+describe("automation labels", () => {
+  it("reads every label from the catalogs", () => {
+    expect(triggerLabel.ticket_created).toBe("A ticket is created");
+    expect(opLabel.not_contains).toBe("doesn't contain");
+    expect(actionLabel.add_tag).toBe("Add tag");
+    expect(fieldLabel.from_email).toBe("Sender email");
+    expect(Object.keys(fieldLabel)).toContain("sentiment");
+    expect(Object.keys(actionLabel).at(-1)).toBe("ai_triage");
   });
 });

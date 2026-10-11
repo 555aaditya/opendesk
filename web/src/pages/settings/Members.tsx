@@ -2,16 +2,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { LogOut, MoreHorizontal, UserMinus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { SettingsPage, Section, ListRow } from "@/components/layout";
+import { ListSkeleton, RolePill, roleTone, StatePill, SummaryStrip } from "@/components/settings2/bits";
+import { MotionList, MotionRow } from "@/components/settings2/motion";
+import { EmptyState } from "@/components/ui/empty";
+import { SearchInput } from "@/components/ui/input";
+import { tone as tones } from "@/lib/tones";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/ui/confirm";
 import { Dialog } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Select } from "@/components/ui/select";
-import { SkeletonRows } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage, isApiError } from "@/lib/api/client";
@@ -43,13 +47,15 @@ function canManage(me: Role, meId: string, target: Member) {
 }
 
 export default function Members() {
+  const { t } = useTranslation("settings");
   const role = useRole();
   const [inviteOpen, setInviteOpen] = useState(false);
   const limit = useLimit("members");
   return (
     <SettingsPage
-      title="Members"
-      description="Everyone who can sign in to this workspace."
+      wide
+      title={t("members.title")}
+      description={t("members.description")}
       actions={
         atLeast(role, "admin") && (
           <Button
@@ -57,20 +63,23 @@ export default function Members() {
             icon={<UserPlus className="size-3.5" />}
             onClick={() => (limit.atLimit ? showLimit("members", limit.max) : setInviteOpen(true))}
           >
-            Invite people
+            {t("members.invite")}
           </Button>
         )
       }
     >
       {atLeast(role, "admin") && <PlanLimitHint kind="members" className="-mt-3" />}
-      <MembersList />
+      <MemberSummary />
+      <MembersList onInvite={atLeast(role, "admin") ? () => (limit.atLimit ? showLimit("members", limit.max) : setInviteOpen(true)) : undefined} />
       {atLeast(role, "admin") && <Invitations />}
       {inviteOpen && <InviteDialog onClose={() => setInviteOpen(false)} />}
     </SettingsPage>
   );
 }
 
-function MembersList() {
+function MembersList({ onInvite }: { onInvite?: () => void }) {
+  const { t } = useTranslation("settings");
+  const [query, setQuery] = useState("");
   const qc = useQueryClient();
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -126,89 +135,152 @@ function MembersList() {
       { title: "Leave this workspace?", confirmLabel: "Leave", danger: true },
     );
 
-  const sorted = [...(data ?? [])].sort((a, b) => {
-    const r = { owner: 0, admin: 1, agent: 2, viewer: 3 } as const;
-    return r[a.role] - r[b.role] || a.user.name.localeCompare(b.user.name);
-  });
+  const term = query.trim().toLowerCase();
+  const sorted = [...(data ?? [])]
+    .filter((m) => !term || m.user.name.toLowerCase().includes(term) || m.user.email.toLowerCase().includes(term))
+    .sort((a, b) => {
+      const r = { owner: 0, admin: 1, agent: 2, viewer: 3 } as const;
+      return r[a.role] - r[b.role] || a.user.name.localeCompare(b.user.name);
+    });
 
   return (
     <Section
       flush
-      title={data ? `${data.length} ${data.length === 1 ? "member" : "members"}` : "Members"}
+      title={data ? t("members.count", { count: data.length }) : t("members.title")}
       actions={
-        role !== "owner" && (
-          <Button size="sm" variant="ghost" icon={<LogOut className="size-3.5" />} onClick={leave}>
-            Leave workspace
-          </Button>
-        )
+        <>
+          {(data?.length ?? 0) > 6 && <SearchInput value={query} onChange={setQuery} placeholder={t("members.search")} className="w-[220px]" />}
+          {role !== "owner" && (
+            <Button size="sm" variant="ghost" icon={<LogOut className="size-3.5" />} onClick={leave}>
+              {t("members.leave")}
+            </Button>
+          )}
+        </>
       }
     >
       {isLoading ? (
-        <SkeletonRows rows={4} />
+        <ListSkeleton rows={5} />
+      ) : !sorted.length ? (
+        <EmptyState
+          compact
+          lit={3}
+          title={term ? t("members.noMatch") : t("members.emptyTitle")}
+          description={term ? t("members.noMatchHint") : t("members.emptyHint")}
+          action={
+            !term && onInvite ? (
+              <Button size="sm" icon={<UserPlus className="size-3.5" />} onClick={onInvite}>
+                {t("members.invite")}
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
-        sorted.map((m) => {
-          const manageable = canManage(role, meId, m);
-          return (
-            <ListRow key={m.user.id}>
-              <Avatar name={m.user.name || m.user.email} src={m.user.avatar_url} size="lg" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 text-[13px] font-medium">
-                  <span className="truncate">{m.user.name}</span>
-                  {m.user.id === meId && <span className="text-xs font-normal text-fg-4">You</span>}
-                </div>
-                <div className="mono truncate text-xs text-fg-3">{m.user.email}</div>
-              </div>
-              <span className="hidden w-32 whitespace-nowrap text-xs text-fg-3 sm:block">Joined {shortDate(m.created_at)}</span>
-              <div className="w-[120px]">
-                {manageable ? (
-                  <Select
-                    size="sm"
-                    aria-label={`Role for ${m.user.name}`}
-                    value={m.role}
-                    onChange={(v) => changeRole.mutate({ uid: m.user.id, role: v })}
-                    options={grantable(role)
-                      .concat(m.role === "admin" && role !== "owner" ? ["admin"] : [])
-                      .map((r) => ({ value: r, label: roleLabel[r] }))}
-                  />
-                ) : (
-                  <span className="flex h-7 items-center px-2.5 text-[12.5px] text-fg-2">{roleLabel[m.role]}</span>
-                )}
-              </div>
-              <div className="w-7">
-                {manageable && (
-                  <Menu>
-                    <MenuTrigger asChild>
-                      <Button size="sm" variant="ghost" square aria-label={`Actions for ${m.user.name}`}>
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </MenuTrigger>
-                    <MenuContent>
-                      <MenuItem
-                        danger
-                        icon={<UserMinus />}
-                        onSelect={() =>
-                          confirm.show(`${m.user.name} loses access right away. Their tickets stay, unassigned.`, () => remove(m), {
-                            title: "Remove member?",
-                            confirmLabel: "Remove",
-                            danger: true,
-                          })
-                        }
-                      >
-                        Remove from workspace
-                      </MenuItem>
-                    </MenuContent>
-                  </Menu>
-                )}
-              </div>
-            </ListRow>
-          );
-        })
+        <>
+          <div className="hidden h-8 items-center gap-3 border-b border-line-soft bg-sunken px-4 sm:flex">
+            <span className="label-caps flex-1">{t("members.columns.person")}</span>
+            <span className="label-caps w-32">{t("members.columns.joined")}</span>
+            <span className="label-caps w-[120px]">{t("members.columns.role")}</span>
+            <span className="w-7" />
+          </div>
+          <MotionList>
+            {sorted.map((m) => {
+              const manageable = canManage(role, meId, m);
+              return (
+                <MotionRow key={m.user.id}>
+                  <ListRow>
+                    <Avatar name={m.user.name || m.user.email} src={m.user.avatar_url} size="lg" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 text-[13px] font-medium">
+                        <span className="truncate">{m.user.name}</span>
+                        {m.user.id === meId && (
+                          <span className="rounded-sm bg-hover px-1.5 py-px text-[10.5px] font-medium text-fg-3">{t("members.you")}</span>
+                        )}
+                      </div>
+                      <div className="mono truncate text-xs text-fg-3">{m.user.email}</div>
+                    </div>
+                    <span className="hidden w-32 whitespace-nowrap text-xs tabular-nums text-fg-3 sm:block">{shortDate(m.created_at)}</span>
+                    <div className="w-[120px]">
+                      {manageable ? (
+                        <Select
+                          size="sm"
+                          aria-label={`Role for ${m.user.name}`}
+                          value={m.role}
+                          onChange={(v) => changeRole.mutate({ uid: m.user.id, role: v })}
+                          options={grantable(role)
+                            .concat(m.role === "admin" && role !== "owner" ? ["admin"] : [])
+                            .map((r) => ({ value: r, label: roleLabel[r], icon: <RoleDot role={r} /> }))}
+                        />
+                      ) : (
+                        <span className="flex h-7 items-center px-0.5">
+                          <RolePill role={m.role} />
+                        </span>
+                      )}
+                    </div>
+                    <div className="w-7">
+                      {manageable && (
+                        <Menu>
+                          <MenuTrigger asChild>
+                            <Button size="sm" variant="ghost" square aria-label={`Actions for ${m.user.name}`}>
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </MenuTrigger>
+                          <MenuContent>
+                            <MenuItem
+                              danger
+                              icon={<UserMinus />}
+                              onSelect={() =>
+                                confirm.show(t("members.removeBody", { name: m.user.name }), () => remove(m), {
+                                  title: t("members.removeTitle"),
+                                  confirmLabel: t("members.removeConfirm"),
+                                  danger: true,
+                                })
+                              }
+                            >
+                              {t("members.remove")}
+                            </MenuItem>
+                          </MenuContent>
+                        </Menu>
+                      )}
+                    </div>
+                  </ListRow>
+                </MotionRow>
+              );
+            })}
+          </MotionList>
+        </>
       )}
     </Section>
   );
 }
 
+function RoleDot({ role }: { role: Role }) {
+  return <span className={cn("!size-1.5 rounded-full", tones[roleTone[role]].solid)} aria-hidden />;
+}
+
+/** Headcount by role, plus open invitations. */
+function MemberSummary() {
+  const { t } = useTranslation("settings");
+  const role = useRole();
+  const { data } = useQuery(q.members());
+  const { data: invites } = useQuery({ ...q.invitations(), enabled: atLeast(role, "admin") });
+  if (!data) return null;
+  const n = (r: Role[]) => data.filter((m) => r.includes(m.role)).length;
+  return (
+    <SummaryStrip
+      className="-mb-3"
+      items={[
+        { label: t("members.summary.members"), value: data.length },
+        { label: t("members.summary.admins"), value: n(["owner", "admin"]), tone: roleTone.admin },
+        { label: t("members.summary.agents"), value: n(["agent"]), tone: roleTone.agent },
+        { label: t("members.summary.viewers"), value: n(["viewer"]), tone: roleTone.viewer },
+        ...(atLeast(role, "admin") ? [{ label: t("members.summary.invited"), value: invites?.length ?? 0, tone: "amber" as const }] : []),
+      ]}
+    />
+  );
+}
+
 function Invitations() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const confirm = useConfirm();
   const { data, isLoading } = useQuery(q.invitations());
@@ -225,38 +297,50 @@ function Invitations() {
     }
   };
 
-  if (isLoading) return <SkeletonRows rows={2} />;
-  if (!data?.length) return null;
+  if (isLoading || !data?.length) return null;
 
   return (
-    <Section flush title="Pending invitations" description="Invitations expire after 7 days.">
-      {data.map((inv) => {
-        const expired = Date.parse(inv.expires_at) < Date.now();
-        return (
-          <ListRow key={inv.id}>
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-dashed border-line-strong text-fg-4">
-              <UserPlus className="size-3.5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="mono truncate text-[12.5px] text-fg">{inv.email}</div>
-              <div className="text-xs text-fg-3">
-                {inv.invited_by ? `Invited by ${inv.invited_by.name}` : "Invited"} {relLong(inv.created_at)}
-              </div>
-            </div>
-            {expired ? <Badge tone="warn">Expired</Badge> : <span className="hidden text-xs text-fg-3 sm:block">Expires {shortDate(inv.expires_at)}</span>}
-            <Badge tone="outline">{roleLabel[inv.role]}</Badge>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() =>
-                confirm.show(`The link sent to ${inv.email} stops working.`, () => revoke(inv), { title: "Revoke invitation?", confirmLabel: "Revoke" })
-              }
-            >
-              Revoke
-            </Button>
-          </ListRow>
-        );
-      })}
+    <Section flush title={t("members.invites.title")} description={t("members.invites.description")}>
+      <MotionList>
+        {data.map((inv) => {
+          const expired = Date.parse(inv.expires_at) < Date.now();
+          return (
+            <MotionRow key={inv.id}>
+              <ListRow>
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-dashed border-line-strong text-fg-4">
+                  <UserPlus className="size-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="mono truncate text-[12.5px] text-fg">{inv.email}</div>
+                  <div className="text-xs text-fg-3">
+                    {inv.invited_by ? t("members.invites.by", { name: inv.invited_by.name, when: relLong(inv.created_at) }) : t("members.invites.at", { when: relLong(inv.created_at) })}
+                  </div>
+                </div>
+                {expired ? (
+                  <StatePill state="expired">{t("members.invites.expired")}</StatePill>
+                ) : (
+                  <StatePill state="pending">{t("members.invites.expires", { date: shortDate(inv.expires_at) })}</StatePill>
+                )}
+                <span className="w-[72px]">
+                  <RolePill role={inv.role} />
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    confirm.show(t("members.invites.revokeBody", { email: inv.email }), () => revoke(inv), {
+                      title: t("members.invites.revokeTitle"),
+                      confirmLabel: t("members.invites.revoke"),
+                    })
+                  }
+                >
+                  {t("members.invites.revoke")}
+                </Button>
+              </ListRow>
+            </MotionRow>
+          );
+        })}
+      </MotionList>
     </Section>
   );
 }
@@ -264,6 +348,7 @@ function Invitations() {
 const emailRe = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
 function InviteDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const role = useRole();
   const options = grantable(role);
@@ -313,22 +398,22 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Invite people"
-      description="They get an email with a link to join. Links expire after 7 days."
+      title={t("members.invite")}
+      description={t("members.inviteDialog.description")}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="primary" loading={busy} onClick={send}>
-            Send invitations
+            {t("members.inviteDialog.send")}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-4 pb-1">
         <PlanLimitHint kind="members" compact />
-        <Field label="Email addresses" hint="Separate addresses with commas or spaces." error={error}>
+        <Field label={t("members.inviteDialog.emails")} hint={t("members.inviteDialog.emailsHint")} error={error}>
           {({ id }) => (
             <div
               className={cn(
@@ -377,8 +462,8 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
           )}
         </Field>
         <div className="flex flex-col gap-1.5">
-          <span className="text-[12.5px] font-medium">Role</span>
-          <div role="radiogroup" aria-label="Role" className="flex flex-col gap-1.5">
+          <span className="text-[12.5px] font-medium">{t("members.columns.role")}</span>
+          <div role="radiogroup" aria-label={t("members.columns.role")} className="flex flex-col gap-1.5">
             {options.map((r) => (
               <button
                 key={r}
@@ -395,7 +480,10 @@ function InviteDialog({ onClose }: { onClose: () => void }) {
                   {inviteRole === r && <span className="size-1.5 rounded-full bg-inverse" />}
                 </span>
                 <span className="flex-1">
-                  <span className="block text-[13px] font-medium">{roleLabel[r]}</span>
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium">
+                    <RoleDot role={r} />
+                    {roleLabel[r]}
+                  </span>
                   <span className="block text-xs text-fg-3">{roleHint[r]}</span>
                 </span>
               </button>

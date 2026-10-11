@@ -1,0 +1,91 @@
+{
+  "title": "Reports",
+  "compared_one": "Compared with the previous day",
+  "compared_other": "Compared with the previous {{count}} days",
+  "loading": "Loading reports",
+  "error": {
+    "title": "Reports couldn't load",
+    "description": "Check your connection and try again.",
+    "retry": "Retry"
+  },
+  "empty": {
+    "title": "Nothing to report yet",
+    "description": "Once tickets come in, volume, response times and satisfaction show up here."
+  },
+  "unit": {
+    "tickets_one": "{{count}} ticket",
+    "tickets_other": "{{count}} tickets"
+  },
+  "kpi": {
+    "created": "Created",
+    "solved": "Solved",
+    "openNow": "Open now",
+    "rightNow": "Right now",
+    "firstResponse": "First response",
+    "resolution": "Resolution",
+    "median": "Median",
+    "csat": "CSAT",
+    "ratings_one": "{{count}} rating",
+    "ratings_other": "{{count}} ratings",
+    "slaBreached": "SLA breached"
+  },
+  "delta": {
+    "none": "No change",
+    "title": "Compared with the previous period",
+    "better": "better than the previous period",
+    "worse": "worse than the previous period"
+  },
+  "volume": {
+    "title": "Volume over time",
+    "subtitle": "Tickets created and solved each day",
+    "chart": "Chart",
+    "table": "Table",
+    "avg": "Daily average",
+    "perDay": "created a day",
+    "busiest": "Busiest day",
+    "solveRate": "Solve rate",
+    "solvedOfCreated": "solved of created"
+  },
+  "backlog": {
+    "title": "Backlog",
+    "subtitle": "Open work right now, by status",
+    "open": "Open work",
+    "tickets": "tickets",
+    "unassigned": "Unassigned",
+    "emptyTitle": "Inbox zero",
+    "emptyDescription": "No open tickets right now."
+  },
+  "channel": {
+    "title": "By channel",
+    "subtitle": "Tickets created in the period"
+  },
+  "open": {
+    "subtitle": "Open work right now",
+    "sample": "The {{count}} most recent open tickets"
+  },
+  "priority": {
+    "title": "By priority"
+  },
+  "tags": {
+    "title": "By label",
+    "emptyTitle": "No labels on open work",
+    "emptyDescription": "Label tickets to see what people ask about."
+  },
+  "agents": {
+    "title": "Leaderboard",
+    "subtitle": "Tickets solved in the period",
+    "caption": "Tickets solved and first response time by agent",
+    "agent": "Agent",
+    "solved": "Solved",
+    "share": "Share",
+    "firstResponse": "First response",
+    "emptyTitle": "No solved tickets",
+    "emptyDescription": "Agents appear here once they solve tickets in this period."
+  },
+  "response": {
+    "title": "Response times",
+    "subtitle": "Medians for the period",
+    "fastest": "Fastest first reply",
+    "none": "No replies in this period yet."
+  }
+}

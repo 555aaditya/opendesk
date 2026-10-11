@@ -1,33 +1,38 @@
 import { i18n } from "@/i18n";
 import type { ActionType, AutomationTrigger, ConditionField, ConditionOp, Sentiment } from "@/lib/api/types";
+import type { Tone } from "@/lib/tones";
 
-export const triggerLabel: Record<AutomationTrigger, string> = {
-  ticket_created: "A ticket is created",
-  customer_replied: "The customer replies",
-  agent_replied: "An agent replies",
-  ticket_updated: "A ticket is updated",
+const tr = i18n.t as unknown as (key: string) => string;
+
+/** A label table read from the settingsInbox catalog on access, so it follows the loaded language. */
+function labels<K extends string>(keys: readonly K[], group: string): Record<K, string> {
+  const out = {} as Record<K, string>;
+  for (const k of keys)
+    Object.defineProperty(out, k, {
+      get: () => tr(`settingsInbox:${group}.${k}`),
+      enumerable: true,
+    });
+  return out;
+}
+
+const triggers = ["ticket_created", "customer_replied", "agent_replied", "ticket_updated"] as const satisfies readonly AutomationTrigger[];
+
+export const triggerLabel: Record<AutomationTrigger, string> = labels(triggers, "triggers");
+export const triggerShort: Record<AutomationTrigger, string> = labels(triggers, "triggersShort");
+
+/** Each trigger keeps one hue across the list and the builder. */
+export const triggerTone: Record<AutomationTrigger, Tone> = {
+  ticket_created: "blue",
+  customer_replied: "teal",
+  agent_replied: "indigo",
+  ticket_updated: "amber",
 };
 
-export const triggerShort: Record<AutomationTrigger, string> = {
-  ticket_created: "Ticket created",
-  customer_replied: "Customer replied",
-  agent_replied: "Agent replied",
-  ticket_updated: "Ticket updated",
-};
-
-export const fieldLabel: Record<ConditionField, string> = {
-  subject: "Subject",
-  body: "Message text",
-  from_email: "Sender email",
-  channel: "Channel",
-  mailbox_id: "Mailbox",
-  priority: "Priority",
-  status: "Status",
-  tag: "Tag",
-  get sentiment() {
-    return i18n.t("ai:automation.sentiment");
-  },
-};
+const plainFields = ["subject", "body", "from_email", "channel", "mailbox_id", "priority", "status", "tag"] as const;
+export const fieldLabel: Record<ConditionField, string> = Object.defineProperty(labels(plainFields, "fields"), "sentiment", {
+  get: () => i18n.t("ai:automation.sentiment"),
+  enumerable: true,
+}) as Record<ConditionField, string>;
 
 /** Fields and actions that need the instance's AI (contracts/ai.md). */
 export const aiFields: ReadonlySet<ConditionField> = new Set(["sentiment"]);
@@ -38,36 +43,19 @@ export function sentimentLabel(s: string): string {
   return (sentiments as string[]).includes(s) ? i18n.t(`ai:sentiment.${s as Sentiment}`) : s;
 }
 
-export const opLabel: Record<ConditionOp, string> = {
-  contains: "contains",
-  not_contains: "doesn't contain",
-  equals: "is",
-  not_equals: "is not",
-  eq: "is",
-};
+export const opLabel: Record<ConditionOp, string> = labels(["contains", "not_contains", "equals", "not_equals", "eq"] as const, "ops");
 
 /** Text fields take any operator; enumerated fields only is / is not. */
 export function opsFor(field: ConditionField): ConditionOp[] {
   if (field === "sentiment") return ["equals", "not_equals"]; // the API stores "eq" as "equals"
-  return field === "subject" || field === "body" || field === "from_email"
-    ? ["contains", "not_contains", "equals", "not_equals"]
-    : ["equals", "not_equals"];
+  return field === "subject" || field === "body" || field === "from_email" ? ["contains", "not_contains", "equals", "not_equals"] : ["equals", "not_equals"];
 }
 
-export const actionLabel: Record<ActionType, string> = {
-  set_status: "Set status to",
-  set_priority: "Set priority to",
-  assign_user: "Assign to",
-  assign_team: "Assign to team",
-  add_tag: "Add tag",
-  remove_tag: "Remove tag",
-  send_reply: "Send a reply",
-  add_note: "Add an internal note",
-  mark_spam: "Mark as spam",
-  get ai_triage() {
-    return i18n.t("ai:automation.ai_triage");
-  },
-};
+const plainActions = ["set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam"] as const;
+export const actionLabel: Record<ActionType, string> = Object.defineProperty(labels(plainActions, "actionTypes"), "ai_triage", {
+  get: () => i18n.t("ai:automation.ai_triage"),
+  enumerable: true,
+}) as Record<ActionType, string>;
 
 export function actionNeedsValue(t: ActionType) {
   return t !== "mark_spam" && t !== "ai_triage";

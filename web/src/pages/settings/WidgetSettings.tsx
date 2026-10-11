@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Moon, Sun, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { StatePill } from "@/components/settings2/bits";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { NoAccess, Row, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -50,6 +53,8 @@ function normalizeOrigin(v: string): string | null {
 }
 
 export default function WidgetSettings() {
+  const { t } = useTranslation("settingsDev");
+  const reduce = useReducedMotion();
   const role = useRole();
   const admin = atLeast(role, "admin");
   const ws = useWorkspace();
@@ -71,14 +76,14 @@ export default function WidgetSettings() {
     onSuccess: (s) => {
       qc.setQueryData(qk.widgetSettings, s);
       setDraft(s);
-      toast.success("Widget settings saved");
+      toast.success(t("widget.saved"));
     },
-    onError: (e) => toast.error(e, "Couldn't save the widget settings"),
+    onError: (e) => toast.error(e, t("widget.saveError")),
   });
 
   if (!admin)
     return (
-      <SettingsPage title="Chat widget">
+      <SettingsPage title={t("widget.title")}>
         <NoAccess what="the chat widget" />
       </SettingsPage>
     );
@@ -87,7 +92,7 @@ export default function WidgetSettings() {
   const addOrigin = () => {
     if (!draft || !originInput.trim()) return;
     const o = normalizeOrigin(originInput);
-    if (!o) return setOriginError("Enter a site address like https://example.com");
+    if (!o) return setOriginError(t("widget.originInvalid"));
     setOriginError(null);
     if (!draft.allowed_origins.includes(o)) set({ allowed_origins: [...draft.allowed_origins, o] });
     setOriginInput("");
@@ -106,13 +111,18 @@ export default function WidgetSettings() {
   return (
     <SettingsPage
       wide
-      title="Chat widget"
-      description="Live chat on your site. Conversations land in the inbox as chat tickets, and replies reach the visitor instantly."
+      title={t("widget.title")}
+      description={t("widget.description")}
+      actions={
+        draft && (
+          <StatePill state={draft.enabled ? "active" : "disabled"}>{draft.enabled ? t("widget.live") : t("widget.hidden")}</StatePill>
+        )
+      }
     >
       <UnsavedGuard when={dirty && !save.isPending} />
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
         <div className="flex min-w-0 flex-col gap-8">
-          <Section title="Settings">
+          <Section title={t("widget.settings")} description={t("widget.settingsHint")}>
             {isLoading || !draft ? (
               <div className="flex flex-col gap-3 py-3">
                 <div className="skeleton h-4 w-1/2" />
@@ -121,25 +131,25 @@ export default function WidgetSettings() {
               </div>
             ) : (
               <>
-                <Row label="Show the widget" description="Off hides the launcher everywhere, even with the script installed.">
+                <Row label={t("widget.show")} description={t("widget.showHint")}>
                   <Switch checked={draft.enabled} onCheckedChange={(enabled) => set({ enabled })} aria-label="Show the widget" />
                 </Row>
-                <Row label="Greeting" description="The first message visitors see." stack htmlFor="widget-greeting">
+                <Row label={t("widget.greeting")} description={t("widget.greetingHint")} stack htmlFor="widget-greeting">
                   <Textarea
                     id="widget-greeting"
                     value={draft.greeting}
                     maxLength={280}
                     rows={2}
-                    placeholder="Hi there. How can we help?"
+                    placeholder={t("widget.greetingPlaceholder")}
                     onChange={(e) => set({ greeting: e.target.value })}
                   />
                 </Row>
-                <Row label="Ask for an email first" description="Visitors leave an address before chatting, so you can follow up by email.">
+                <Row label={t("widget.requireEmail")} description={t("widget.requireEmailHint")}>
                   <Switch checked={draft.require_email} onCheckedChange={(require_email) => set({ require_email })} aria-label="Ask for an email first" />
                 </Row>
                 <Row
-                  label="Allowed sites"
-                  description="The widget only loads on these origins. Leave empty to allow any site."
+                  label={t("widget.origins")}
+                  description={t("widget.originsHint")}
                   stack
                   htmlFor="widget-origin"
                 >
@@ -147,13 +157,14 @@ export default function WidgetSettings() {
                     {draft.allowed_origins.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {draft.allowed_origins.map((o) => (
-                          <span key={o} className="mono inline-flex h-6 items-center gap-1 rounded-sm border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2">
+                          <span key={o} className="mono inline-flex h-6 animate-pop-in items-center gap-1.5 rounded-sm border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2 motion-reduce:animate-none">
+                            <span className="size-1.5 rounded-full bg-tone-green-solid" aria-hidden />
                             {o}
                             <button
                               type="button"
                               aria-label={`Remove ${o}`}
                               onClick={() => set({ allowed_origins: draft.allowed_origins.filter((x) => x !== o) })}
-                              className="flex size-5 items-center justify-center rounded text-fg-4 hover:bg-hover hover:text-fg"
+                              className="flex size-5 items-center justify-center rounded-xs text-fg-4 transition-colors hover:bg-hover hover:text-fg"
                             >
                               <X className="size-3" />
                             </button>
@@ -184,35 +195,50 @@ export default function WidgetSettings() {
                         Add
                       </Button>
                     </div>
-                    {originError && <p className="text-xs text-danger-fg">{originError}</p>}
+                    {originError && (
+                      <p role="alert" className="text-xs text-danger-fg">
+                        {originError}
+                      </p>
+                    )}
+                    {!draft.allowed_origins.length && !originError && <p className="text-[12px] text-fg-4">{t("widget.anySite")}</p>}
                   </div>
                 </Row>
               </>
             )}
           </Section>
 
-          {dirty && draft && (
-            <div className="sticky bottom-4 z-10 -mt-4 flex items-center gap-3 rounded-lg border border-line bg-raised px-4 py-2.5 shadow-pop">
-              <span className="flex-1 text-[12.5px] text-fg-2">You have unsaved changes</span>
-              <Button size="sm" variant="ghost" onClick={() => settings && setDraft(settings)}>
-                Revert
-              </Button>
-              <Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate(draft)}>
-                Save changes
-              </Button>
-            </div>
-          )}
+          <AnimatePresence initial={false}>
+            {dirty && draft && (
+              <motion.div
+                key="savebar"
+                initial={reduce ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: 8, transition: { duration: 0.14 } }}
+                transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                className="sticky bottom-4 z-10 -mt-4 flex items-center gap-3 rounded-lg border border-line bg-raised px-4 py-2.5 shadow-pop"
+              >
+                <span className="size-1.5 rounded-full bg-tone-amber-solid" aria-hidden />
+                <span className="flex-1 text-[12.5px] text-fg-2">{t("widget.unsaved")}</span>
+                <Button size="sm" variant="ghost" onClick={() => settings && setDraft(settings)}>
+                  {t("widget.revert")}
+                </Button>
+                <Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate(draft)}>
+                  Save changes
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <Section title="Install" description="Paste this before the closing body tag on every page that should show the widget.">
+          <Section title={t("widget.install")} description={t("widget.installHint")}>
             <div className="flex flex-col gap-3 py-3">
               <CopyField value={snippet} multiline />
               <div className="flex items-center gap-2 text-[12px] text-fg-3">
-                Widget key <span className="mono text-fg-2">{ws?.widget_key}</span>
+                {t("widget.key")} <span className="mono text-fg-2">{ws?.widget_key}</span>
               </div>
             </div>
           </Section>
 
-          <Section title="Identify signed-in users" description="Optional. Links chats to the right contact and keeps their history across devices.">
+          <Section title={t("widget.identify")} description={t("widget.identifyHint")}>
             <div className="flex flex-col gap-3 py-3">
               <CopyField value={identify} multiline />
               <p className="text-[12.5px] leading-5 text-fg-3">
@@ -225,14 +251,14 @@ export default function WidgetSettings() {
 
         <div className="lg:sticky lg:top-6 lg:self-start">
           <div className="mb-2.5 flex items-center justify-between">
-            <h2 className="text-[13.5px] font-semibold tracking-[-0.01em]">Preview</h2>
+            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">{t("widget.preview")}</h2>
             <Segmented
               size="xs"
               value={previewDark ? "dark" : "light"}
               onChange={(v) => setPreviewDark(v === "dark")}
               options={[
-                { value: "light", label: "Light", icon: <Sun /> },
-                { value: "dark", label: "Dark", icon: <Moon /> },
+                { value: "light", label: t("widget.light"), icon: <Sun /> },
+                { value: "dark", label: t("widget.dark"), icon: <Moon /> },
               ]}
             />
           </div>
@@ -247,10 +273,11 @@ export default function WidgetSettings() {
           <p className="mt-2 text-[12px] text-fg-3">
             {ws?.settings.brand_color ? (
               <>
-                Accent <span className="mono text-fg-2">{ws.settings.brand_color}</span> comes from workspace settings.
+                <span className="mr-1 inline-block size-2.5 rounded-xs align-[-1px]" style={{ background: ws.settings.brand_color }} aria-hidden />
+                {t("widget.accent")} <span className="mono text-fg-2">{ws.settings.brand_color}</span> {t("widget.accentSuffix")}
               </>
             ) : (
-              "Set a brand colour in workspace settings to tint the launcher and send button."
+              t("widget.noAccent")
             )}
           </p>
         </div>
@@ -260,6 +287,7 @@ export default function WidgetSettings() {
 }
 
 function RotateSecret() {
+  const { t } = useTranslation("settingsDev");
   const confirm = useConfirm();
   const [secret, setSecret] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
@@ -286,8 +314,8 @@ function RotateSecret() {
     <>
       <div className="flex items-center justify-between gap-4 rounded-md border border-line px-3 py-2.5">
         <div className="min-w-0">
-          <div className="text-[13px] font-medium">Widget secret</div>
-          <div className="text-[12px] text-fg-3">Rotating it invalidates every identify hash until your server uses the new one.</div>
+          <div className="text-[13px] font-medium">{t("widget.secret")}</div>
+          <div className="text-[12px] text-fg-3">{t("widget.secretHint")}</div>
         </div>
         <Button
           size="sm"
@@ -304,8 +332,8 @@ function RotateSecret() {
         </Button>
       </div>
       {blocked && (
-        <p className="flex items-start gap-2 text-[12.5px] text-fg-2">
-          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warn" />
+        <p role="alert" className="flex items-start gap-2 rounded-md bg-tone-amber-soft px-3 py-2 text-[12.5px] text-tone-amber">
+          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-tone-amber-solid" />
           {blocked}
         </p>
       )}

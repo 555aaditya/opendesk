@@ -1,243 +1,528 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
-import { SettingsPage, Section } from "@/components/layout";
+// Settings > Labels (the API's tags): coloured labels in groups, with where
+// they apply, how often they're used, archive and merge.
+
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Archive, ArchiveRestore, ChevronRight, FolderPlus, GitMerge, GripVertical, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Reorder, useDragControls, useReducedMotion } from "motion/react";
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { SettingsPage, Section, Row } from "@/components/layout";
+import { Badge, TagChip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SearchInput, TextInput } from "@/components/ui/input";
-import { EmptyState } from "@/components/ui/empty";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useConfirm } from "@/components/ui/confirm";
+import { EmptyState } from "@/components/ui/empty";
+import { SearchInput } from "@/components/ui/input";
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
+import { Segmented } from "@/components/ui/tabs";
+import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/toast";
-import { ListSkeleton } from "@/components/settings2/bits";
-import { useListMutation } from "@/components/settings2/optimistic";
+import { ListSkeleton, SummaryStrip } from "@/components/settings2/bits";
+import { ColorSwatchPicker } from "@/components/settings2/ColorSwatchPicker";
+import { MotionList, MotionRow, rowSpring } from "@/components/settings2/motion";
+import { GroupDialog, MergeDialog } from "@/components/settings2/labels/GroupDialog";
+import { LabelDialog, scopeIcon } from "@/components/settings2/labels/LabelDialog";
+import {
+  SCOPES,
+  totalUsage,
+  useLabels,
+  useLabelStructureWrites,
+  useLabelWrites,
+  type Label,
+  type LabelCaps,
+  type LabelGroup,
+} from "@/components/settings2/labels/model";
 import { api } from "@/lib/api/endpoints";
-import type { Tag } from "@/lib/api/types";
-import { q, qk, upsertInList } from "@/lib/queries";
-import { atLeast, useRole } from "@/lib/session";
+import type { Workspace, WorkspaceSettings } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
+import { q, qk } from "@/lib/queries";
+import { atLeast, updateWorkspace, useRole } from "@/lib/session";
+import { tone as tones } from "@/lib/tones";
+
+type Editing = { label: Label | null; group?: string | null } | null;
 
 export default function Tags() {
-  const { data: tags, isLoading } = useQuery(q.tags());
+  const { t } = useTranslation("settings");
+  const { labels, groups, caps, isLoading } = useLabels();
+  const writes = useLabelWrites(caps);
+  const structure = useLabelStructureWrites();
   const role = useRole();
-  const canEdit = atLeast(role, "agent");
-  const [query, setQuery] = useState("");
-  const [creating, setCreating] = useState(false);
+  const canEdit = atLeast(role, "admin");
   const confirm = useConfirm();
-  const qc = useQueryClient();
+  const [query, setQuery] = useState("");
+  const [editing, setEditing] = useState<Editing>(null);
+  const [groupEditing, setGroupEditing] = useState<LabelGroup | "new" | null>(null);
+  const [merging, setMerging] = useState<Label | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
-  const rename = useListMutation<Tag, { id: string; name: string }>(
-    qk.tags,
-    (v) => api.tags.update(v.id, { name: v.name }),
-    (rows, v) => rows.map((t) => (t.id === v.id ? { ...t, name: v.name } : t)),
-    { errorText: "Couldn't rename the tag" },
-  );
-  const remove = useListMutation<Tag, string>(qk.tags, (id) => api.tags.remove(id), (rows, id) => rows.filter((t) => t.id !== id), {
-    errorText: "Couldn't delete the tag",
-  });
-  const create = useMutation({
-    mutationFn: (name: string) => api.tags.create({ name }),
-    onSuccess: (t) => {
-      upsertInList(qc, qk.tags, t);
-      toast.success(`Tag “${t.name}” created`);
-    },
-    onError: (e) => toast.error(e, "Couldn't create the tag"),
-  });
+  const term = query.trim().toLowerCase();
+  const match = (l: Label) => !term || l.name.toLowerCase().includes(term) || l.description.toLowerCase().includes(term);
+  const active = labels.filter((l) => !l.archived);
+  const archived = labels.filter((l) => l.archived);
+  const shown = active.filter(match);
 
-  const shown = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return [...(tags ?? [])].filter((t) => !term || t.name.toLowerCase().includes(term)).sort((a, b) => a.name.localeCompare(b.name));
-  }, [tags, query]);
+  const sections = useMemo(() => {
+    const out: { group: LabelGroup | null; rows: Label[] }[] = [...groups]
+      .sort((a, b) => a.position - b.position)
+      .map((g) => ({ group: g, rows: shown.filter((l) => l.group_id === g.id) }));
+    out.push({ group: null, rows: shown.filter((l) => !l.group_id || !groups.some((g) => g.id === l.group_id)) });
+    return out.filter((s) => s.group || s.rows.length || !groups.length);
+  }, [groups, shown]);
+
+  const askDelete = (l: Label) =>
+    confirm.show(
+      <>
+        {t("labels.delete.body.before")} <TagChip name={l.name} color={l.color} className="mx-0.5 align-[-3px]" /> {t("labels.delete.body.after")}
+      </>,
+      () => writes.remove.mutateAsync(l.id),
+      { title: t("labels.delete.title"), confirmLabel: t("labels.delete.confirm"), danger: true },
+    );
+
+  const setArchived = (l: Label, v: boolean) =>
+    writes.update.mutate(
+      { id: l.id, archived: v },
+      { onSuccess: () => toast.success(v ? t("labels.archivedToast", { name: l.name }) : t("labels.restoredToast", { name: l.name })) },
+    );
+
+  const rowProps = {
+    caps,
+    canEdit,
+    groups,
+    onEdit: (l: Label) => setEditing({ label: l }),
+    onDelete: askDelete,
+    onArchive: setArchived,
+    onMerge: setMerging,
+    onColor: (l: Label, c: Label["color"]) => writes.update.mutate({ id: l.id, color: c }),
+    onMove: (l: Label, g: string | null) => writes.update.mutate({ id: l.id, group_id: g }),
+  };
+
+  const summary: { label: string; value: number | string }[] = [
+    { label: t("labels.summary.labels"), value: active.length },
+    caps.groups ? { label: t("labels.summary.groups"), value: groups.length } : null,
+    caps.usage ? { label: t("labels.summary.onTickets"), value: active.reduce((n, l) => n + (l.usage?.tickets ?? 0), 0).toLocaleString() } : null,
+    caps.archive ? { label: t("labels.summary.archived"), value: archived.length } : null,
+  ].flatMap((x) => (x ? [x] : []));
+
+  const search = <SearchInput value={query} onChange={setQuery} placeholder={t("labels.filter")} className="w-[220px]" />;
 
   return (
     <SettingsPage
-      title="Tags"
-      description="Label tickets so they are easy to find, filter and report on. Removing a tag takes it off every ticket that has it."
+      title={t("labels.title")}
+      description={t("labels.description")}
       actions={
         canEdit && (
-          <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-            New tag
-          </Button>
+          <>
+            {caps.groups && (
+              <Button icon={<FolderPlus className="size-3.5" />} onClick={() => setGroupEditing("new")}>
+                {t("labels.newGroup")}
+              </Button>
+            )}
+            <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing({ label: null })}>
+              {t("labels.newLabel")}
+            </Button>
+          </>
         )
       }
     >
-      <Section
-        flush
-        title={tags ? `${tags.length} ${tags.length === 1 ? "tag" : "tags"}` : "Tags"}
-        actions={<SearchInput value={query} onChange={setQuery} placeholder="Filter tags" className="w-[220px]" />}
-      >
-        {creating && (
-          <NewTagRow
-            onCancel={() => setCreating(false)}
-            onSave={async (name) => {
-              await create.mutateAsync(name);
-              setCreating(false);
-            }}
-            existing={tags ?? []}
-          />
-        )}
-        {isLoading ? (
+      {summary.length > 1 && <SummaryStrip items={summary} className="-mb-3" />}
+
+      {isLoading ? (
+        <Section flush title={t("labels.title")}>
           <ListSkeleton rows={6} />
-        ) : !shown.length && !creating ? (
+        </Section>
+      ) : !active.length ? (
+        <Section>
           <EmptyState
-            compact
             lit={2}
-            title={query ? "No tags match" : "No tags yet"}
-            description={query ? "Try a different name." : "Tags you add to tickets show up here."}
+            title={t("labels.empty.title")}
+            description={t("labels.empty.description")}
             action={
-              canEdit && !query ? (
-                <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-                  New tag
+              canEdit && (
+                <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setEditing({ label: null })}>
+                  {t("labels.newLabel")}
                 </Button>
-              ) : undefined
+              )
             }
           />
-        ) : (
-          shown.map((t) => (
-            <TagRow
-              key={t.id}
-              tag={t}
-              canEdit={canEdit}
-              onRename={(name) => rename.mutate({ id: t.id, name })}
-              onDelete={() =>
-                confirm.show(
-                  <>
-                    <span className="font-medium text-fg">{t.name}</span> will be removed from every ticket that has it. This can't be undone.
-                  </>,
-                  () => remove.mutateAsync(t.id),
-                  { title: "Delete this tag?", confirmLabel: "Delete tag", danger: true },
+        </Section>
+      ) : (
+        <>
+          {sections.map(({ group, rows }, i) => (
+            <Section
+              key={group?.id ?? "none"}
+              flush
+              title={
+                group ? (
+                  <span className="flex items-center gap-2">
+                    <span className={cn("size-2 rounded-xs", tones[group.color ?? "gray"].solid)} aria-hidden />
+                    {group.name}
+                    {group.exclusive && (
+                      <Tooltip content={t("labels.group.exclusiveHint")}>
+                        <span tabIndex={0}>
+                          <Badge tone="outline" className="h-[18px] font-normal">
+                            {t("labels.group.exclusiveBadge")}
+                          </Badge>
+                        </span>
+                      </Tooltip>
+                    )}
+                    <span className="mono text-[11px] font-normal tabular-nums text-fg-4">{rows.length}</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    {groups.length ? t("labels.ungrouped") : t("labels.count", { count: shown.length })}
+                  </span>
                 )
               }
-            />
-          ))
-        )}
-      </Section>
+              actions={
+                <>
+                  {i === 0 && search}
+                  {group && canEdit && <GroupMenu group={group} onEdit={() => setGroupEditing(group)} onDelete={() => void structure.removeGroup(group.id)} onAdd={() => setEditing({ label: null, group: group.id })} />}
+                </>
+              }
+            >
+              {caps.usage && rows.length > 0 && <ColumnHead caps={caps} />}
+              {rows.length ? (
+                caps.reorder && canEdit && !term ? (
+                  <SortableRows rows={rows} {...rowProps} onReorder={(ids) => void structure.reorder(ids)} />
+                ) : (
+                  <MotionList>
+                    {rows.map((l) => (
+                      <MotionRow key={l.id}>
+                        <LabelRow label={l} {...rowProps} />
+                      </MotionRow>
+                    ))}
+                  </MotionList>
+                )
+              ) : term ? (
+                <EmptyState compact lit={2} title={t("labels.noMatch.title")} description={t("labels.noMatch.description")} />
+              ) : (
+                <EmptyState compact lit={2} title={t("labels.emptyGroup")} />
+              )}
+            </Section>
+          ))}
+        </>
+      )}
+
+      {caps.archive && archived.length > 0 && (
+        <section className="animate-rise-in">
+          <button
+            type="button"
+            aria-expanded={showArchived}
+            onClick={() => setShowArchived((v) => !v)}
+            className="flex items-center gap-1.5 rounded-md text-[13px] font-semibold text-fg-2 hover:text-fg"
+          >
+            <ChevronRight className={cn("size-3.5 text-fg-4 transition-transform duration-150", showArchived && "rotate-90")} />
+            {t("labels.archivedSection", { count: archived.length })}
+          </button>
+          {showArchived && (
+            <div className="mt-3 overflow-hidden rounded-lg border border-line bg-surface shadow-xs">
+              <MotionList>
+                {archived.filter(match).map((l) => (
+                  <MotionRow key={l.id}>
+                    <LabelRow label={l} {...rowProps} />
+                  </MotionRow>
+                ))}
+              </MotionList>
+            </div>
+          )}
+        </section>
+      )}
+
+      {caps.colors && canEdit && <CreationRule />}
+
+      {editing && (
+        <LabelDialog
+          label={editing.label}
+          caps={caps}
+          groups={groups}
+          existing={labels}
+          defaultGroup={editing.group}
+          onClose={() => setEditing(null)}
+          onSave={async (v) => {
+            if (editing.label) {
+              await writes.update.mutateAsync({ id: editing.label.id, ...v });
+              toast.success(t("labels.savedToast"));
+            } else {
+              const made = await writes.create.mutateAsync(v);
+              toast.success(t("labels.createdToast", { name: made.name }));
+            }
+          }}
+        />
+      )}
+      {groupEditing && (
+        <GroupDialog group={groupEditing === "new" ? null : groupEditing} onClose={() => setGroupEditing(null)} onSave={(v) => structure.saveGroup(groupEditing === "new" ? null : groupEditing.id, v)} />
+      )}
+      {merging && <MergeDialog label={merging} labels={labels} onClose={() => setMerging(null)} onMerge={(into) => structure.merge(merging.id, into)} />}
     </SettingsPage>
   );
 }
 
-function TagRow({ tag, canEdit, onRename, onDelete }: { tag: Tag; canEdit: boolean; onRename: (n: string) => void; onDelete: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(tag.name);
-  const cancelled = useRef(false);
-
-  const commit = () => {
-    if (cancelled.current) {
-      cancelled.current = false;
-      return;
-    }
-    const v = draft.trim();
-    setEditing(false);
-    if (v && v !== tag.name) onRename(v);
-    else setDraft(tag.name);
-  };
-
+function ColumnHead({ caps }: { caps: LabelCaps }) {
+  const { t } = useTranslation("settings");
   return (
-    <div className="group flex h-11 items-center gap-3 border-b border-line-soft px-4 last:border-0">
-      <span className="size-1.5 shrink-0 rounded-full bg-fg-4" aria-hidden />
-      {editing ? (
-        <TextInput
-          autoFocus
-          inputSize="sm"
-          value={draft}
-          maxLength={50}
-          aria-label="Tag name"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              cancelled.current = true;
-              setDraft(tag.name);
-              setEditing(false);
-            }
-          }}
-          className="max-w-[280px]"
-        />
-      ) : canEdit ? (
-        <Tooltip content="Click to rename">
-          <button
-            type="button"
-            onClick={() => {
-              setDraft(tag.name);
-              setEditing(true);
-            }}
-            className="-mx-1.5 truncate rounded-md px-1.5 py-0.5 text-left text-[13px] text-fg hover:bg-hover"
-          >
-            {tag.name}
-          </button>
-        </Tooltip>
-      ) : (
-        <span className="truncate text-[13px]">{tag.name}</span>
-      )}
-      <span className="flex-1" />
-      {canEdit && !editing && (
-        <Tooltip content="Delete tag">
-          <button
-            type="button"
-            aria-label={`Delete ${tag.name}`}
-            onClick={onDelete}
-            className={cn(
-              "flex size-7 items-center justify-center rounded-md text-fg-3 transition-opacity hover:bg-hover hover:text-danger-fg",
-              "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100",
-            )}
-          >
-            <Trash2 className="size-3.5" />
-          </button>
-        </Tooltip>
-      )}
+    <div className="flex h-8 items-center gap-3 border-b border-line-soft bg-sunken px-4 text-fg-4">
+      <span className="label-caps flex-1">{t("labels.columns.label")}</span>
+      {caps.scope && <span className="label-caps hidden w-[76px] md:block">{t("labels.columns.appliesTo")}</span>}
+      <span className="label-caps w-14 text-right">{t("labels.columns.uses")}</span>
+      <span className="w-7" />
     </div>
   );
 }
 
-function NewTagRow({ onSave, onCancel, existing }: { onSave: (n: string) => Promise<void>; onCancel: () => void; existing: Tag[] }) {
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const dup = existing.some((t) => t.name.toLowerCase() === name.trim().toLowerCase());
-  const submit = async () => {
-    const v = name.trim();
-    if (!v || dup) return;
-    setBusy(true);
+type RowProps = {
+  caps: LabelCaps;
+  canEdit: boolean;
+  groups: LabelGroup[];
+  onEdit: (l: Label) => void;
+  onDelete: (l: Label) => void;
+  onArchive: (l: Label, v: boolean) => void;
+  onMerge: (l: Label) => void;
+  onColor: (l: Label, c: Label["color"]) => void;
+  onMove: (l: Label, group: string | null) => void;
+};
+
+function LabelRow({ label: l, caps, canEdit, groups, onEdit, onDelete, onArchive, onMerge, onColor, onMove, handle }: RowProps & { label: Label; handle?: React.ReactNode }) {
+  const { t } = useTranslation("settings");
+  return (
+    <div
+      role={canEdit ? "button" : undefined}
+      tabIndex={canEdit ? 0 : undefined}
+      aria-label={canEdit ? t("labels.editAria", { name: l.name }) : undefined}
+      onClick={canEdit ? () => onEdit(l) : undefined}
+      onKeyDown={(e) => {
+        if (canEdit && e.key === "Enter" && e.target === e.currentTarget) onEdit(l);
+      }}
+      className={cn(
+        "group flex min-h-11 items-center gap-3 bg-surface px-4 py-2 outline-none focus-visible:bg-hover",
+        canEdit && "cursor-pointer transition-colors hover:bg-sunken",
+        l.archived && "opacity-70",
+      )}
+    >
+      {handle}
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <TagChip name={l.name} color={l.color} className="max-w-[220px] text-[11.5px]" />
+        {l.description && <span className="min-w-0 truncate text-[12px] text-fg-3">{l.description}</span>}
+      </div>
+      {caps.scope && (
+        <span className="hidden w-[76px] items-center gap-1.5 text-fg-4 md:flex [&_svg]:size-3.5">
+          {SCOPES.map((s) => (
+            <Tooltip key={s} content={l.applies_to.includes(s) ? t(`labels.scope.${s}`) : t("labels.scope.not", { what: t(`labels.scope.${s}`).toLowerCase() })}>
+              <span tabIndex={-1} className={cn("flex", !l.applies_to.includes(s) && "opacity-25")}>
+                {scopeIcon[s]}
+              </span>
+            </Tooltip>
+          ))}
+        </span>
+      )}
+      {caps.usage && (
+        <Tooltip content={l.usage ? t("labels.usageHint", { tickets: l.usage.tickets, contacts: l.usage.contacts, companies: l.usage.companies }) : ""}>
+          <span className="mono w-14 text-right text-[11.5px] tabular-nums text-fg-3">{totalUsage(l).toLocaleString()}</span>
+        </Tooltip>
+      )}
+      <div className="w-7">
+        {canEdit && (
+          <Menu>
+            <MenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                square
+                aria-label={t("labels.actionsAria", { name: l.name })}
+                onClick={(e) => e.stopPropagation()}
+                className="opacity-100 data-[state=open]:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </MenuTrigger>
+            <MenuContent>
+              <MenuItem icon={<Pencil />} onSelect={() => onEdit(l)}>
+                {t("labels.menu.edit")}
+              </MenuItem>
+              {caps.colors && (
+                <MenuSub label={t("labels.menu.colour")} icon={<span className={cn("!size-3 rounded-xs", tones[l.color].solid)} />}>
+                  <div className="p-1.5" onKeyDown={(e) => e.stopPropagation()}>
+                    <ColorSwatchPicker value={l.color} onChange={(c) => onColor(l, c)} size="sm" className="w-[124px]" />
+                  </div>
+                </MenuSub>
+              )}
+              {caps.groups && groups.length > 0 && (
+                <MenuSub label={t("labels.menu.moveTo")}>
+                  <MenuItem onSelect={() => onMove(l, null)}>{t("labels.dialog.noGroup")}</MenuItem>
+                  {groups.map((g) => (
+                    <MenuItem key={g.id} icon={<span className={cn("!size-2 rounded-xs", tones[g.color ?? "gray"].solid)} />} onSelect={() => onMove(l, g.id)}>
+                      {g.name}
+                    </MenuItem>
+                  ))}
+                </MenuSub>
+              )}
+              {caps.merge && (
+                <MenuItem icon={<GitMerge />} onSelect={() => onMerge(l)}>
+                  {t("labels.menu.merge")}
+                </MenuItem>
+              )}
+              {caps.archive && (
+                <MenuItem icon={l.archived ? <ArchiveRestore /> : <Archive />} onSelect={() => onArchive(l, !l.archived)}>
+                  {l.archived ? t("labels.menu.restore") : t("labels.menu.archive")}
+                </MenuItem>
+              )}
+              <MenuSeparator />
+              <MenuItem danger icon={<Trash2 />} onSelect={() => onDelete(l)}>
+                {t("labels.menu.delete")}
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Drag by the grip (or Alt+Arrow on it) to reorder labels inside a group. */
+function SortableRows({ rows, onReorder, ...rowProps }: RowProps & { rows: Label[]; onReorder: (ids: string[]) => void }) {
+  const [order, setOrder] = useState(rows.map((r) => r.id));
+  const [prevRows, setPrevRows] = useState(rows);
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    setOrder(rows.map((r) => r.id));
+  }
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const move = (id: string, dir: -1 | 1) => {
+    const i = order.indexOf(id);
+    const j = i + dir;
+    if (j < 0 || j >= order.length) return;
+    const next = order.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrder(next);
+    onReorder(next);
+  };
+  return (
+    <Reorder.Group axis="y" values={order} onReorder={setOrder} as="div">
+      {order.map((id) => {
+        const l = byId.get(id);
+        return l ? <SortableRow key={id} label={l} {...rowProps} onDrop={() => onReorder(order)} onMove={(dir) => move(id, dir)} /> : null;
+      })}
+    </Reorder.Group>
+  );
+}
+
+function SortableRow({ label, onDrop, onMove, ...rowProps }: Omit<RowProps, "onMove"> & { label: Label; onDrop: () => void; onMove: (dir: -1 | 1) => void } & Pick<RowProps, never>) {
+  const { t } = useTranslation("settings");
+  const controls = useDragControls();
+  const reduce = useReducedMotion();
+  return (
+    <Reorder.Item
+      as="div"
+      value={label.id}
+      dragListener={false}
+      dragControls={controls}
+      onDragEnd={onDrop}
+      transition={reduce ? { duration: 0 } : rowSpring}
+      whileDrag={{ scale: 1.01, boxShadow: "var(--shadow-pop)", zIndex: 2 }}
+      className="relative border-b border-line-soft last:border-0"
+    >
+      <LabelRow
+        label={label}
+        {...(rowProps as RowProps)}
+        onMove={() => {}}
+        handle={
+          <button
+            type="button"
+            aria-label={t("labels.reorderAria", { name: label.name })}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              controls.start(e);
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+                e.preventDefault();
+                e.stopPropagation();
+                onMove(e.key === "ArrowUp" ? -1 : 1);
+              }
+            }}
+            className="absolute left-0.5 top-1/2 flex h-7 w-4 -translate-y-1/2 cursor-grab touch-none items-center justify-center rounded-sm text-fg-4 opacity-0 transition-opacity hover:text-fg-2 focus-visible:opacity-100 active:cursor-grabbing group-hover:opacity-100"
+          >
+            <GripVertical className="size-3.5" />
+          </button>
+        }
+      />
+    </Reorder.Item>
+  );
+}
+
+function GroupMenu({ group, onEdit, onDelete, onAdd }: { group: LabelGroup; onEdit: () => void; onDelete: () => void; onAdd: () => void }) {
+  const { t } = useTranslation("settings");
+  const confirm = useConfirm();
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <Button size="sm" variant="ghost" square aria-label={t("labels.group.actionsAria", { name: group.name })}>
+          <MoreHorizontal className="size-4" />
+        </Button>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuItem icon={<Plus />} onSelect={onAdd}>
+          {t("labels.group.addLabel")}
+        </MenuItem>
+        <MenuItem icon={<Pencil />} onSelect={onEdit}>
+          {t("labels.group.edit")}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem
+          danger
+          icon={<Trash2 />}
+          onSelect={() =>
+            confirm.show(t("labels.group.deleteBody", { name: group.name }), async () => onDelete(), {
+              title: t("labels.group.deleteTitle"),
+              confirmLabel: t("labels.group.deleteConfirm"),
+              danger: true,
+            })
+          }
+        >
+          {t("labels.group.delete")}
+        </MenuItem>
+      </MenuContent>
+    </Menu>
+  );
+}
+
+/** Who may create a label by typing a new name: everyone, or admins only. */
+function CreationRule() {
+  const { t } = useTranslation("settings");
+  const qc = useQueryClient();
+  const { data: ws } = useQuery(q.workspace());
+  type Rule = "anyone" | "admins";
+  const current = ((ws?.settings as WorkspaceSettings & { label_creation?: Rule }) ?? {}).label_creation ?? "anyone";
+  const save = async (v: Rule) => {
+    if (!ws) return;
+    const prev = qc.getQueryData<Workspace>(qk.workspace);
+    const next = { ...ws, settings: { ...ws.settings, label_creation: v } };
+    qc.setQueryData(qk.workspace, next);
+    updateWorkspace(next);
     try {
-      await onSave(v);
-    } finally {
-      setBusy(false);
+      const settings: WorkspaceSettings = next.settings;
+      const w = await api.workspaces.update({ settings });
+      qc.setQueryData(qk.workspace, w);
+      toast.success(t("labels.creation.saved"));
+    } catch (e) {
+      if (prev) {
+        qc.setQueryData(qk.workspace, prev);
+        updateWorkspace(prev);
+      }
+      toast.error(e);
     }
   };
   return (
-    <form
-      className="flex items-center gap-2 border-b border-line-soft bg-hover/40 px-4 py-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <span className="size-1.5 shrink-0 rounded-full bg-fg" aria-hidden />
-      <TextInput
-        autoFocus
-        inputSize="sm"
-        value={name}
-        maxLength={50}
-        placeholder="Tag name, like billing"
-        aria-label="New tag name"
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            onCancel();
-          }
-        }}
-        invalid={dup}
-        className="max-w-[280px]"
-      />
-      {dup && <span className="text-xs text-danger-fg">Already exists</span>}
-      <span className="flex-1" />
-      <Button size="sm" variant="ghost" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button size="sm" variant="primary" type="submit" loading={busy} disabled={!name.trim() || dup}>
-        Add tag
-      </Button>
-    </form>
+    <Section title={t("labels.creation.title")}>
+      <Row label={t("labels.creation.label")} description={current === "admins" ? t("labels.creation.adminsHint") : t("labels.creation.anyoneHint")}>
+        <Segmented
+          value={current}
+          onChange={(v) => void save(v)}
+          options={[
+            { value: "anyone", label: t("labels.creation.anyone") },
+            { value: "admins", label: t("labels.creation.admins") },
+          ]}
+        />
+      </Row>
+    </Section>
   );
 }

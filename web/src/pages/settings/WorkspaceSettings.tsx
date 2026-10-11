@@ -2,6 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { DisplayOverridesEditor, type Overrides } from "@/components/settings2/DisplayOverrides";
+import { useLabels } from "@/components/settings2/labels/model";
 import { SettingsPage, Section, Row } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -17,15 +20,23 @@ import { toast } from "@/components/ui/toast";
 import { ReauthNotice } from "@/components/settings/ReauthNotice";
 import { SaveBar } from "@/components/settings/SaveBar";
 import { api } from "@/lib/api/endpoints";
-import type { Workspace, WorkspaceSettings as WS } from "@/lib/api/types";
+import type { Priority, TicketStatus, Workspace, WorkspaceSettings as WS } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { atLeast, reloadSession, updateWorkspace, useRole, useSession } from "@/lib/session";
 import { LOCALE_NAMES, matchLocale, SUPPORTED } from "@/i18n";
 
-type Draft = { name: string; settings: Required<Pick<WS, "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "auto_assign">> & { brand_color: string; locale: string } };
+// Display overrides from the labels contract; local until the API types carry them.
+type DisplaySettings = { status_labels?: Overrides<TicketStatus>; priority_labels?: Overrides<Priority> };
+type Draft = {
+  name: string;
+  settings: Required<Pick<WS, "timezone" | "help_center_enabled" | "help_center_title" | "csat_enabled" | "auto_assign">> & { brand_color: string; locale: string };
+  display: Required<DisplaySettings>;
+};
 
 function toDraft(w: Workspace): Draft {
+  const extra = w.settings as WS & DisplaySettings;
   return {
+    display: { status_labels: extra.status_labels ?? {}, priority_labels: extra.priority_labels ?? {} },
     name: w.name,
     settings: {
       timezone: w.settings.timezone ?? "UTC",
@@ -50,7 +61,10 @@ function timezones(): string[] {
 }
 
 export default function WorkspaceSettings() {
+  const { t } = useTranslation("settings");
   const { data: ws } = useQuery(q.workspace());
+  // The display overrides ship with the labels API; show them once the server speaks it.
+  const displaySupported = useLabels().caps.colors;
   const role = useRole();
   const canEdit = atLeast(role, "admin");
   const qc = useQueryClient();
@@ -63,16 +77,20 @@ export default function WorkspaceSettings() {
   const tzItems = useMemo(() => timezones().map((t) => ({ value: t, label: t.replace(/_/g, " ") })), []);
 
   const save = useMutation({
-    mutationFn: (d: Draft) =>
-      api.workspaces.update({
-        name: d.name.trim(),
-        settings: { ...d.settings, help_center_title: d.settings.help_center_title.trim(), brand_color: d.settings.brand_color || undefined },
-      }),
+    mutationFn: (d: Draft) => {
+      const settings: WS = {
+        ...d.settings,
+        help_center_title: d.settings.help_center_title.trim(),
+        brand_color: d.settings.brand_color || undefined,
+        ...(displaySupported ? d.display : {}),
+      };
+      return api.workspaces.update({ name: d.name.trim(), settings });
+    },
     onMutate: async (d) => {
       await qc.cancelQueries({ queryKey: qk.workspace });
       const prev = qc.getQueryData<Workspace>(qk.workspace);
       if (prev) {
-        const next = { ...prev, name: d.name.trim(), settings: { ...prev.settings, ...d.settings } };
+        const next = { ...prev, name: d.name.trim(), settings: { ...prev.settings, ...d.settings, ...(displaySupported ? d.display : {}) } };
         qc.setQueryData(qk.workspace, next);
         updateWorkspace(next);
       }
@@ -88,14 +106,15 @@ export default function WorkspaceSettings() {
     onSuccess: (w) => {
       qc.setQueryData(qk.workspace, w);
       updateWorkspace(w);
-      toast.success("Workspace saved");
+      toast.success(t("workspace.saved"));
     },
   });
 
   if (!ws || !draft) {
     return (
-      <SettingsPage title="General">
-        <Skeleton className="h-40 w-full rounded-lg" />
+      <SettingsPage title={t("workspace.title")}>
+        <Skeleton className="h-52 w-full rounded-lg" />
+        <Skeleton className="h-36 w-full rounded-lg" />
       </SettingsPage>
     );
   }
@@ -107,21 +126,21 @@ export default function WorkspaceSettings() {
   const helpUrl = `${location.origin}/help/${ws.slug}`;
 
   return (
-    <SettingsPage title="General" description="Settings that apply to everyone in this workspace.">
+    <SettingsPage title={t("workspace.title")} description={t("workspace.description")}>
       <fieldset disabled={!canEdit} className="flex flex-col gap-8">
         <Section>
-          <Row label="Workspace name" htmlFor="ws-name">
+          <Row label={t("workspace.name")} htmlFor="ws-name">
             <TextInput id="ws-name" className="w-[280px]" value={draft.name} maxLength={60} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           </Row>
-          <Row label="Workspace URL" description="Used by the help center and the chat widget.">
+          <Row label={t("workspace.url")} description={t("workspace.urlHint")}>
             <span className="mono text-[12.5px] text-fg-2">{ws.slug}</span>
           </Row>
-          <Row label="Timezone" description="Reports, SLA business days and timestamps in emails use it.">
+          <Row label={t("workspace.timezone")} description={t("workspace.timezoneHint")}>
             <Picker
               items={tzItems}
               value={draft.settings.timezone}
               onSelect={(v) => set("timezone", v)}
-              placeholder="Search timezones"
+              placeholder={t("workspace.searchTimezones")}
               width={280}
               align="end"
               trigger={
@@ -132,14 +151,14 @@ export default function WorkspaceSettings() {
             />
           </Row>
           <Row
-            label="Customer language"
-            description="The help center, satisfaction survey and chat widget follow each visitor's browser language. This one is used when we don't support theirs."
+            label={t("workspace.language")}
+            description={t("workspace.languageHint")}
           >
             <Picker
               items={SUPPORTED.map((l) => ({ value: l, label: LOCALE_NAMES[l], keywords: [l] }))}
               value={draft.settings.locale}
               onSelect={(v) => set("locale", v)}
-              placeholder="Search languages"
+              placeholder={t("workspace.searchLanguages")}
               width={220}
               align="end"
               trigger={
@@ -151,11 +170,11 @@ export default function WorkspaceSettings() {
           </Row>
         </Section>
 
-        <Section title="Help center" description="A public site with your published knowledge base articles.">
-          <Row label="Publish the help center" description={draft.settings.help_center_enabled ? "Anyone with the link can read published articles." : "Only your team can see articles."}>
-            <Switch aria-label="Publish the help center" checked={draft.settings.help_center_enabled} onCheckedChange={(v) => set("help_center_enabled", v)} disabled={!canEdit} />
+        <Section title={t("workspace.helpCenter")} description={t("workspace.helpCenterHint")}>
+          <Row label={t("workspace.publish")} description={draft.settings.help_center_enabled ? t("workspace.publishOn") : t("workspace.publishOff")}>
+            <Switch aria-label={t("workspace.publish")} checked={draft.settings.help_center_enabled} onCheckedChange={(v) => set("help_center_enabled", v)} disabled={!canEdit} />
           </Row>
-          <Row label="Title" htmlFor="hc-title">
+          <Row label={t("workspace.hcTitle")} htmlFor="hc-title">
             <TextInput
               id="hc-title"
               className="w-[280px]"
@@ -165,37 +184,37 @@ export default function WorkspaceSettings() {
               onChange={(e) => set("help_center_title", e.target.value)}
             />
           </Row>
-          <Row label="Public address">
+          <Row label={t("workspace.publicAddress")}>
             <a href={helpUrl} target="_blank" rel="noreferrer" className="mono inline-flex items-center gap-1 text-[12.5px] text-fg-2 hover:text-fg">
               {helpUrl.replace(/^https?:\/\//, "")}
               <ExternalLink className="size-3" />
             </a>
-            <CopyButton value={helpUrl} label="Copy link" />
+            <CopyButton value={helpUrl} label={t("workspace.copyLink")} />
           </Row>
         </Section>
 
-        <Section title="Conversations">
-          <Row label="Satisfaction survey" description="Ask customers to rate the conversation after a ticket is solved.">
-            <Switch aria-label="Satisfaction survey" checked={draft.settings.csat_enabled} onCheckedChange={(v) => set("csat_enabled", v)} disabled={!canEdit} />
+        <Section title={t("workspace.conversations")}>
+          <Row label={t("workspace.csat")} description={t("workspace.csatHint")}>
+            <Switch aria-label={t("workspace.csat")} checked={draft.settings.csat_enabled} onCheckedChange={(v) => set("csat_enabled", v)} disabled={!canEdit} />
           </Row>
-          <Row label="Auto-assign" description="Round robin spreads new tickets across agents who are online.">
+          <Row label={t("workspace.autoAssign")} description={t("workspace.autoAssignHint")}>
             <Segmented
               value={draft.settings.auto_assign}
               onChange={(v) => canEdit && set("auto_assign", v)}
               options={[
-                { value: "none", label: "Off" },
-                { value: "round_robin", label: "Round robin" },
+                { value: "none", label: t("workspace.off") },
+                { value: "round_robin", label: t("workspace.roundRobin") },
               ]}
             />
           </Row>
-          <Row label="Brand colour" description="Used only by the chat widget and outgoing email buttons. The app itself stays monochrome.">
+          <Row label={t("workspace.brand")} description={t("workspace.brandHint")}>
             <span
               aria-hidden
               className="size-6 rounded-md border border-line"
               style={{ background: colorOk && draft.settings.brand_color ? draft.settings.brand_color : "#0a0a0a" }}
             />
             <TextInput
-              aria-label="Brand colour hex"
+              aria-label={t("workspace.brandHex")}
               className="mono w-[120px]"
               placeholder="#0A0A0A"
               value={draft.settings.brand_color}
@@ -208,6 +227,18 @@ export default function WorkspaceSettings() {
             />
           </Row>
         </Section>
+
+        {displaySupported && (
+          <Section title={t("display.title")} description={t("display.description")}>
+            <DisplayOverridesEditor
+              statuses={draft.display.status_labels}
+              priorities={draft.display.priority_labels}
+              onStatuses={(v) => setDraft({ ...draft, display: { ...draft.display, status_labels: v } })}
+              onPriorities={(v) => setDraft({ ...draft, display: { ...draft.display, priority_labels: v } })}
+              disabled={!canEdit}
+            />
+          </Section>
+        )}
       </fieldset>
 
       {role === "owner" && <DangerZone ws={ws} />}
@@ -224,6 +255,7 @@ export default function WorkspaceSettings() {
 }
 
 function DangerZone({ ws }: { ws: Workspace }) {
+  const { t } = useTranslation("settings");
   const confirm = useConfirm();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -238,15 +270,15 @@ function DangerZone({ ws }: { ws: Workspace }) {
       setTransferTo(null);
       await reloadSession(ws.id);
       void qc.invalidateQueries({ queryKey: qk.members });
-      toast.success("Ownership transferred");
+      toast.success(t("danger.transferred"));
     },
   });
 
   const target = members?.find((m) => m.user.id === transferTo);
 
   return (
-    <Section title="Danger zone" danger>
-      <Row label="Transfer ownership" description="Make another member the owner. You become an admin.">
+    <Section title={t("danger.title")} danger>
+      <Row label={t("danger.transfer")} description={t("danger.transferHint")}>
         <Picker
           items={(members ?? [])
             .filter((m) => m.user.id !== me && m.role !== "viewer")
@@ -256,18 +288,18 @@ function DangerZone({ ws }: { ws: Workspace }) {
             transfer.reset();
             setTransferTo(v);
           }}
-          placeholder="Choose a member"
+          placeholder={t("danger.chooseMember")}
           align="end"
-          trigger={<Button variant="danger">Transfer</Button>}
+          trigger={<Button variant="danger">{t("danger.transferButton")}</Button>}
         />
       </Row>
-      <Row label="Delete workspace" description="Removes every ticket, contact, article and setting. This can't be undone.">
+      <Row label={t("danger.delete")} description={t("danger.deleteHint")}>
         <Button
           variant="danger"
           onClick={() => {
             setError(null);
             confirm.show(
-              `All of ${ws.name}'s data is removed for everyone. Members lose access immediately.`,
+              t("danger.deleteBody", { name: ws.name }),
               async () => {
                 try {
                   await api.workspaces.delete(ws.name);
@@ -279,11 +311,11 @@ function DangerZone({ ws }: { ws: Workspace }) {
                 const s = await reloadSession();
                 void navigate(s.workspaceId ? { to: "/" } : { to: "/onboarding" });
               },
-              { title: "Delete workspace?", confirmLabel: "Delete workspace", danger: true, typeToConfirm: ws.name },
+              { title: t("danger.deleteTitle"), confirmLabel: t("danger.delete"), danger: true, typeToConfirm: ws.name },
             );
           }}
         >
-          Delete workspace
+          {t("danger.delete")}
         </Button>
       </Row>
       {!!error && (
@@ -296,15 +328,15 @@ function DangerZone({ ws }: { ws: Workspace }) {
           open
           onOpenChange={(o) => !o && setTransferTo(null)}
           size="sm"
-          title={`Make ${target.user.name} the owner?`}
-          description="They get full control, including deleting the workspace. You stay on as an admin."
+          title={t("danger.transferTitle", { name: target.user.name })}
+          description={t("danger.transferBody")}
           footer={
             <>
               <Button variant="ghost" onClick={() => setTransferTo(null)}>
-                Cancel
+                {t("cancel")}
               </Button>
               <Button variant="danger-solid" loading={transfer.isPending} onClick={() => transfer.mutate(target.user.id)}>
-                Transfer ownership
+                {t("danger.transfer")}
               </Button>
             </>
           }

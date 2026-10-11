@@ -1,0 +1,236 @@
+{
+  "cancel": "Cancel",
+  "apiKeys": {
+    "title": "API keys",
+    "description": "Keys act on this workspace through the public API with only the scopes you give them. Send them as",
+    "new": "New key",
+    "count_one": "{{count}} key",
+    "count_other": "{{count}} keys",
+    "revokeError": "Couldn't revoke the key",
+    "renameError": "Couldn't rename the key",
+    "summary": {
+      "active": "Active",
+      "expiring": "Expiring soon",
+      "expiringHint": "Within 14 days",
+      "unused": "Never used",
+      "expired": "Expired"
+    },
+    "empty": {
+      "title": "No API keys yet",
+      "description": "Create a key to connect a script, an integration or your own backend."
+    },
+    "col": {
+      "key": "Key and scopes",
+      "lastUsed": "Last used",
+      "expires": "Expires",
+      "createdBy": "Created by"
+    },
+    "state": {
+      "active": "Active",
+      "expiring": "Expires soon",
+      "expired": "Expired"
+    },
+    "neverUsed": "Never used",
+    "noExpiry": "No expiry",
+    "rename": "Rename",
+    "revoke": "Revoke",
+    "revokeTitle": "Revoke this key?",
+    "revokeConfirm": "Revoke key",
+    "revokeBodyPrefix": "Anything using",
+    "revokeBodySuffix": "stops working right away. This can't be undone.",
+    "created": {
+      "title": "Copy your new key",
+      "description": "This is the only time it's shown. Store it somewhere safe, like your secrets manager.",
+      "done": "Done",
+      "warning": "You won't see it again. If you lose it, revoke the key and make a new one."
+    },
+    "form": {
+      "title": "New API key",
+      "create": "Create key",
+      "name": "Name",
+      "namePlaceholder": "Zapier sync",
+      "nameRequired": "Name the key so you know what uses it.",
+      "scopeRequired": "Choose at least one scope.",
+      "scopes": "Scopes",
+      "readOnly": "Read only",
+      "full": "Full access",
+      "custom": "Custom",
+      "expires": "Expires",
+      "in30": "In 30 days",
+      "in90": "In 90 days",
+      "in365": "In a year",
+      "never": "Never"
+    },
+    "scopeFull": "full access",
+    "scopeRead": "read only"
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "Get a signed HTTPS request whenever something changes. Failed deliveries are retried with backoff.",
+    "new": "New webhook",
+    "count_one": "{{count}} endpoint",
+    "count_other": "{{count}} endpoints",
+    "updateError": "Couldn't update the webhook",
+    "deleteError": "Couldn't delete the webhook",
+    "summary": {
+      "active": "Active",
+      "failing": "Failing",
+      "paused": "Paused",
+      "delivered": "Delivered",
+      "deliveredHint_one": "Of the last {{count}} attempt",
+      "deliveredHint_other": "Of the last {{count}} attempts",
+      "noAttempts": "No attempts yet"
+    },
+    "empty": {
+      "title": "No webhooks yet",
+      "description": "Send ticket and contact events to your own systems as they happen."
+    },
+    "col": {
+      "endpoint": "Endpoint",
+      "events": "Events",
+      "lastDelivery": "Last delivery",
+      "status": "Status"
+    },
+    "state": {
+      "active": "Active",
+      "failing": "Failing",
+      "paused": "Paused"
+    },
+    "noDescription": "No description",
+    "allEvents": "All events",
+    "never": "Never",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteTitle": "Delete this webhook?",
+    "deleteConfirm": "Delete webhook",
+    "deleteBodyPrefix": "Deliveries to",
+    "deleteBodySuffix": "stop right away."
+  },
+  "webhook": {
+    "title": "Webhook",
+    "notFound": "Webhook not found",
+    "notFoundHint": "It may have been deleted.",
+    "backToList": "Back to webhooks",
+    "sendTest": "Send test event",
+    "testSent": "Test event sent",
+    "testSentHint": "webhook.test is on its way.",
+    "testError": "Couldn't send the test event",
+    "deleted": "Webhook deleted",
+    "summary": {
+      "delivered": "Delivered",
+      "failed": "Failed",
+      "avg": "Avg response",
+      "last": "Last delivery"
+    },
+    "events": "Events",
+    "eventsAll": "Every event in the catalog, including new ones.",
+    "eventsCount_one": "{{count}} event subscribed",
+    "eventsCount_other": "{{count}} events subscribed",
+    "deliveries": "Recent deliveries",
+    "deliveriesHint": "The last 50 attempts. Failures are retried automatically.",
+    "filterAll": "All",
+    "filterFailed": "Failed",
+    "filterFailedCount_one": "Failed {{count}}",
+    "filterFailedCount_other": "Failed {{count}}",
+    "refresh": "Refresh",
+    "empty": "No deliveries yet",
+    "emptyHint": "Send a test event to check your endpoint.",
+    "emptyFailed": "No failed deliveries",
+    "emptyFailedHint": "Everything recent went through.",
+    "col": {
+      "status": "Status",
+      "event": "Event",
+      "response": "Response",
+      "duration": "Duration",
+      "attempts": "Attempts",
+      "when": "When"
+    },
+    "status": {
+      "succeeded": "Delivered",
+      "failed": "Failed",
+      "pending": "Pending"
+    }
+  },
+  "webhookForm": {
+    "newTitle": "New webhook",
+    "editTitle": "Edit webhook",
+    "description": "opendesk sends a signed POST with the event envelope to this URL.",
+    "save": "Save webhook",
+    "create": "Create webhook",
+    "url": "Endpoint URL",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Sync tickets to the data warehouse",
+    "events": "Events",
+    "eventRequired": "Choose at least one event.",
+    "active": "Active",
+    "activeHint": "Paused webhooks keep their settings but receive nothing."
+  },
+  "secret": {
+    "title": "Signing secret",
+    "description": "Copy it now. You won't see it again.",
+    "saved": "I've saved it",
+    "verify": "Every delivery carries a signature header. Verify it before trusting the body:"
+  },
+  "audit": {
+    "title": "Audit log",
+    "description": "Security and admin activity in this workspace: sign-ins, 2FA, members, keys, webhooks and mailboxes.",
+    "search": "Filter by person, action or IP",
+    "failed": "Failed",
+    "cat": {
+      "all": "All",
+      "access": "Sign-ins",
+      "security": "Security",
+      "people": "People",
+      "integrations": "Integrations",
+      "workspace": "Workspace"
+    },
+    "detail": {
+      "action": "Action",
+      "entity": "Entity",
+      "ip": "IP address"
+    },
+    "empty": "Nothing logged yet",
+    "emptyHint": "Sign-ins and admin changes appear here.",
+    "emptyFiltered": "Nothing matches",
+    "emptyFilteredHint": "Try another category or search.",
+    "emptyFilteredMore": "Older entries load as you scroll.",
+    "clear": "Clear filters",
+    "end": "That's everything"
+  },
+  "widget": {
+    "title": "Chat widget",
+    "description": "Live chat on your site. Conversations land in the inbox as chat tickets, and replies reach the visitor instantly.",
+    "live": "Live",
+    "hidden": "Hidden",
+    "saved": "Widget settings saved",
+    "saveError": "Couldn't save the widget settings",
+    "settings": "Behaviour",
+    "settingsHint": "What visitors see and where the widget may load.",
+    "show": "Show the widget",
+    "showHint": "Off hides the launcher everywhere, even with the script installed.",
+    "greeting": "Greeting",
+    "greetingHint": "The first message visitors see.",
+    "greetingPlaceholder": "Hi there. How can we help?",
+    "requireEmail": "Ask for an email first",
+    "requireEmailHint": "Visitors leave an address before chatting, so you can follow up by email.",
+    "origins": "Allowed sites",
+    "originsHint": "The widget only loads on these origins. Leave empty to allow any site.",
+    "originInvalid": "Enter a site address like https://example.com",
+    "anySite": "Loads on any site for now.",
+    "unsaved": "You have unsaved changes",
+    "revert": "Revert",
+    "install": "Install",
+    "installHint": "Paste this before the closing body tag on every page that should show the widget.",
+    "key": "Widget key",
+    "identify": "Identify signed-in users",
+    "identifyHint": "Optional. Links chats to the right contact and keeps their history across devices.",
+    "preview": "Preview",
+    "light": "Light",
+    "dark": "Dark",
+    "accent": "Accent",
+    "accentSuffix": "comes from workspace settings.",
+    "noAccent": "Set a brand colour in workspace settings to tint the launcher and send button.",
+    "secret": "Widget secret",
+    "secretHint": "Rotating it invalidates every identify hash until your server uses the new one."
+  }
+}

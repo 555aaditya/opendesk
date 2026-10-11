@@ -1,11 +1,12 @@
-// Credits per day, stacked by feature. Monochrome: the top three features take
-// ink, graphite and smoke, the rest fold into "Other" in ash. Each feature keeps
-// its shade in every bar; the legend, tooltip and table carry the names.
+// Credits per day, stacked by feature. The top features take the chart series
+// hues in order (lib/tones SERIES), the rest fold into a quiet "Other". Each
+// feature keeps its hue in every bar; the legend, tooltip and table carry the names.
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AIFeature } from "@/lib/api/types";
 import { niceTicks, useWidth } from "@/components/reports/useSize";
+import { SERIES, toneVar } from "@/lib/tones";
 import { useFmt } from "./hooks";
 import type { StackedDay } from "./model";
 
@@ -15,13 +16,14 @@ const ML = 40;
 const MR = 8;
 const MT = 8;
 
-export const SHADES = ["var(--fg)", "var(--fg-3)", "var(--fg-4)", "var(--line-strong)"];
+const OTHER = "var(--line-strong)";
 
 type Key = AIFeature | "other";
 
 export function shadeOf(series: Key[], key: Key) {
   const i = series.indexOf(key);
-  return key === "other" ? SHADES[3] : SHADES[Math.max(0, i)] ?? SHADES[3];
+  if (key === "other" || i < 0) return OTHER;
+  return toneVar(SERIES[i % SERIES.length]);
 }
 
 export function UsageLegend({ series }: { series: Key[] }) {

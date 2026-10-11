@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { NoAccess, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -14,7 +15,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { Avatar } from "@/components/ui/avatar";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { useConfirm } from "@/components/ui/confirm";
-import { ListSkeleton, MonoChip } from "@/components/settings2/bits";
+import { IconTile, ListSkeleton, MonoChip, StatePill, SummaryStrip } from "@/components/settings2/bits";
+import { MotionList, MotionRow } from "@/components/settings2/motion";
 import { useListMutation } from "@/components/settings2/optimistic";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
@@ -37,6 +39,7 @@ const readScopes = allScopes.filter((s) => s.endsWith(":read"));
 type Expiry = "never" | "30" | "90" | "365";
 
 export default function ApiKeys() {
+  const { t } = useTranslation("settingsDev");
   const role = useRole();
   const admin = atLeast(role, "admin");
   const { data: keys, isLoading } = useQuery({ ...q.apiKeys(), enabled: admin });
@@ -46,136 +49,178 @@ export default function ApiKeys() {
   const [renaming, setRenaming] = useState<string | null>(null);
 
   const revoke = useListMutation<ApiKey, string>(qk.apiKeys, (id) => api.apiKeys.remove(id), (rows, id) => rows.filter((k) => k.id !== id), {
-    errorText: "Couldn't revoke the key",
+    errorText: t("apiKeys.revokeError"),
   });
   const rename = useListMutation<ApiKey, { id: string; name: string }>(
     qk.apiKeys,
     (v) => api.apiKeys.update(v.id, { name: v.name }),
     (rows, v) => rows.map((k) => (k.id === v.id ? { ...k, name: v.name } : k)),
-    { errorText: "Couldn't rename the key" },
+    { errorText: t("apiKeys.renameError") },
   );
 
   if (!admin)
     return (
-      <SettingsPage title="API keys">
+      <SettingsPage title={t("apiKeys.title")}>
         <NoAccess what="API keys" />
       </SettingsPage>
     );
 
   const sorted = [...(keys ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const now = Date.now();
+  const counts = sorted.reduce(
+    (c, k) => {
+      const s = keyState(k, now);
+      c[s] += 1;
+      if (!k.last_used_at) c.unused += 1;
+      return c;
+    },
+    { active: 0, expiring: 0, expired: 0, unused: 0 },
+  );
 
   return (
     <SettingsPage
-      title="API keys"
+      wide
+      title={t("apiKeys.title")}
       description={
         <>
-          Keys act on this workspace through the public API with only the scopes you give them. Send them as{" "}
-          <span className="mono text-fg-2">Authorization: Bearer od_live_…</span>
+          {t("apiKeys.description")} <span className="mono text-fg-2">Authorization: Bearer od_live_…</span>
         </>
       }
       actions={
         <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-          New key
+          {t("apiKeys.new")}
         </Button>
       }
     >
-      <Section flush>
+      {sorted.length > 0 && (
+        <SummaryStrip
+          items={[
+            { label: t("apiKeys.summary.active"), value: counts.active + counts.expiring, tone: counts.active + counts.expiring ? "green" : undefined },
+            { label: t("apiKeys.summary.expiring"), value: counts.expiring, tone: counts.expiring ? "amber" : undefined, hint: t("apiKeys.summary.expiringHint") },
+            { label: t("apiKeys.summary.unused"), value: counts.unused },
+            { label: t("apiKeys.summary.expired"), value: counts.expired, tone: counts.expired ? "gray" : undefined },
+          ]}
+        />
+      )}
+      <Section flush title={keys ? t("apiKeys.count", { count: sorted.length }) : undefined}>
         {isLoading ? (
           <ListSkeleton rows={3} />
         ) : !sorted.length ? (
           <EmptyState
             compact
             lit={2}
-            icon={<KeyRound className="size-8 text-fg-4" strokeWidth={1.25} />}
-            title="No API keys"
-            description="Create a key to connect a script, an integration or your own backend."
+            className="py-12"
+            title={t("apiKeys.empty.title")}
+            description={t("apiKeys.empty.description")}
             action={
-              <Button size="sm" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-                New key
+              <Button size="sm" variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
+                {t("apiKeys.new")}
               </Button>
             }
           />
         ) : (
-          sorted.map((k) => {
-            const expired = !!k.expires_at && Date.parse(k.expires_at) < Date.now();
-            return (
-              <div key={k.id} className="group flex items-start gap-3 border-b border-line-soft px-4 py-3 last:border-0">
-                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border border-line text-fg-3">
-                  <KeyRound className="size-3.5" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    {renaming === k.id ? (
-                      <InlineName
-                        initial={k.name}
-                        onDone={(name) => {
-                          setRenaming(null);
-                          if (name && name !== k.name) rename.mutate({ id: k.id, name });
-                        }}
-                      />
-                    ) : (
-                      <span className="truncate text-[13px] font-medium">{k.name}</span>
-                    )}
-                    <span className="mono text-[11.5px] text-fg-3">{k.prefix}…</span>
-                    {expired && (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-danger-fg">
-                        <span className="size-1.5 rounded-full bg-danger" /> Expired
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {k.scopes.map((s) => (
-                      <MonoChip key={s}>{s}</MonoChip>
-                    ))}
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-fg-3">
-                    <Tooltip content={k.last_used_at ? fullDate(k.last_used_at) : "Never used"}>
-                      <span>{k.last_used_at ? `Used ${relLong(k.last_used_at)}` : "Never used"}</span>
-                    </Tooltip>
-                    <span className="text-fg-4">·</span>
-                    <span>{k.expires_at ? `${expired ? "Expired" : "Expires"} ${shortDate(k.expires_at)}` : "No expiry"}</span>
-                    {k.created_by && (
-                      <>
-                        <span className="text-fg-4">·</span>
-                        <span className="flex items-center gap-1.5">
-                          <Avatar name={k.created_by.name} src={k.created_by.avatar_url} size="xs" />
-                          {k.created_by.name}, {shortDate(k.created_at)}
+          <>
+            <div className="hidden h-8 items-center gap-4 border-b border-line-soft bg-sunken px-4 md:grid md:grid-cols-[minmax(0,1fr)_130px_130px_170px_28px]">
+              <span className="label-caps">{t("apiKeys.col.key")}</span>
+              <span className="label-caps">{t("apiKeys.col.lastUsed")}</span>
+              <span className="label-caps">{t("apiKeys.col.expires")}</span>
+              <span className="label-caps">{t("apiKeys.col.createdBy")}</span>
+              <span />
+            </div>
+            <MotionList>
+              {sorted.map((k) => {
+                const state = keyState(k, now);
+                return (
+                  <MotionRow key={k.id}>
+                    <div className="group relative flex flex-col gap-2 px-4 py-3 transition-colors hover:bg-sunken md:grid md:grid-cols-[minmax(0,1fr)_130px_130px_170px_28px] md:items-center md:gap-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <IconTile tone={state === "expired" ? "gray" : "violet"}>
+                          <KeyRound />
+                        </IconTile>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {renaming === k.id ? (
+                              <InlineName
+                                initial={k.name}
+                                onDone={(name) => {
+                                  setRenaming(null);
+                                  if (name && name !== k.name) rename.mutate({ id: k.id, name });
+                                }}
+                              />
+                            ) : (
+                              <span className="truncate text-[13px] font-medium">{k.name}</span>
+                            )}
+                            {state === "expired" ? (
+                              <StatePill state="expired">{t("apiKeys.state.expired")}</StatePill>
+                            ) : state === "expiring" ? (
+                              <StatePill state="pending">{t("apiKeys.state.expiring")}</StatePill>
+                            ) : (
+                              <StatePill state="active">{t("apiKeys.state.active")}</StatePill>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <span className="mono mr-1 text-[11px] text-fg-4">{k.prefix.slice(0, 12)}…</span>
+                            <ScopeChips scopes={k.scopes} />
+                          </div>
+                        </div>
+                      </div>
+                      <Tooltip content={k.last_used_at ? fullDate(k.last_used_at) : t("apiKeys.neverUsed")}>
+                        <span className={cn("text-[12px] max-md:pl-11", k.last_used_at ? "text-fg-2" : "text-fg-4")}>
+                          {k.last_used_at ? relLong(k.last_used_at) : t("apiKeys.neverUsed")}
                         </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-                <Menu>
-                  <MenuTrigger asChild>
-                    <button type="button" aria-label={`Actions for ${k.name}`} className="flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg">
-                      <MoreHorizontal className="size-4" />
-                    </button>
-                  </MenuTrigger>
-                  <MenuContent>
-                    <MenuItem icon={<Pencil />} onSelect={() => setRenaming(k.id)}>
-                      Rename
-                    </MenuItem>
-                    <MenuSeparator />
-                    <MenuItem
-                      danger
-                      icon={<Trash2 />}
-                      onSelect={() =>
-                        confirm.show(
+                      </Tooltip>
+                      <span className={cn("text-[12px] max-md:pl-11", state === "expired" ? "text-fg-4" : state === "expiring" ? "text-tone-amber" : "text-fg-2")}>
+                        {k.expires_at ? shortDate(k.expires_at) : t("apiKeys.noExpiry")}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-fg-3 max-md:pl-11">
+                        {k.created_by ? (
                           <>
-                            Anything using <span className="font-medium text-fg">{k.name}</span> stops working right away. This can't be undone.
-                          </>,
-                          () => revoke.mutateAsync(k.id),
-                          { title: "Revoke this key?", confirmLabel: "Revoke key", danger: true },
-                        )
-                      }
-                    >
-                      Revoke
-                    </MenuItem>
-                  </MenuContent>
-                </Menu>
-              </div>
-            );
-          })
+                            <Avatar name={k.created_by.name} src={k.created_by.avatar_url} size="xs" />
+                            <span className="truncate text-fg-2">{k.created_by.name}</span>
+                            <span className="shrink-0 text-fg-4">{shortDate(k.created_at)}</span>
+                          </>
+                        ) : (
+                          shortDate(k.created_at)
+                        )}
+                      </span>
+                      <Menu>
+                        <MenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Actions for ${k.name}`}
+                            className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg max-md:absolute max-md:right-3 max-md:top-3"
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </button>
+                        </MenuTrigger>
+                        <MenuContent>
+                          <MenuItem icon={<Pencil />} onSelect={() => setRenaming(k.id)}>
+                            {t("apiKeys.rename")}
+                          </MenuItem>
+                          <MenuSeparator />
+                          <MenuItem
+                            danger
+                            icon={<Trash2 />}
+                            onSelect={() =>
+                              confirm.show(
+                                <>
+                                  {t("apiKeys.revokeBodyPrefix")} <span className="font-medium text-fg">{k.name}</span> {t("apiKeys.revokeBodySuffix")}
+                                </>,
+                                () => revoke.mutateAsync(k.id),
+                                { title: t("apiKeys.revokeTitle"), confirmLabel: t("apiKeys.revokeConfirm"), danger: true },
+                              )
+                            }
+                          >
+                            {t("apiKeys.revoke")}
+                          </MenuItem>
+                        </MenuContent>
+                      </Menu>
+                    </div>
+                  </MotionRow>
+                );
+              })}
+            </MotionList>
+          </>
         )}
       </Section>
 
@@ -191,24 +236,49 @@ export default function ApiKeys() {
       <Dialog
         open={!!created}
         onOpenChange={(o) => !o && setCreated(null)}
-        title="Copy your new key"
-        description="This is the only time it's shown. Store it somewhere safe, like your secrets manager."
+        title={t("apiKeys.created.title")}
+        description={t("apiKeys.created.description")}
         footer={
           <Button variant="primary" onClick={() => setCreated(null)}>
-            Done
+            {t("apiKeys.created.done")}
           </Button>
         }
       >
         <div className="flex flex-col gap-3 pb-1">
           <CopyField value={created?.secret ?? ""} />
-          <p className="flex items-start gap-2 text-[12px] text-fg-3">
-            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warn" />
-            You won't see it again. If you lose it, revoke the key and make a new one.
+          <p className="flex items-start gap-2 rounded-md bg-tone-amber-soft px-3 py-2 text-[12px] text-tone-amber">
+            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-tone-amber-solid" />
+            {t("apiKeys.created.warning")}
           </p>
         </div>
       </Dialog>
     </SettingsPage>
   );
+}
+
+/** Scopes, compact: a preset reads as one chip; write access is tinted so it stands out. */
+function ScopeChips({ scopes }: { scopes: string[] }) {
+  const { t } = useTranslation("settingsDev");
+  const set = new Set(scopes);
+  if (allScopes.every((s) => set.has(s))) return <MonoChip className="border-tone-amber-line text-tone-amber">{t("apiKeys.scopeFull")}</MonoChip>;
+  if (scopes.length === readScopes.length && readScopes.every((s) => set.has(s))) return <MonoChip>{t("apiKeys.scopeRead")}</MonoChip>;
+  return (
+    <>
+      {scopes.map((s) => (
+        <MonoChip key={s} className={s.endsWith(":write") ? "border-tone-amber-line text-tone-amber" : undefined}>
+          {s}
+        </MonoChip>
+      ))}
+    </>
+  );
+}
+
+const SOON = 14 * 86400_000;
+function keyState(k: ApiKey, now: number): "active" | "expiring" | "expired" {
+  if (!k.expires_at) return "active";
+  const at = Date.parse(k.expires_at);
+  if (at < now) return "expired";
+  return at - now < SOON ? "expiring" : "active";
 }
 
 function InlineName({ initial, onDone }: { initial: string; onDone: (v: string | null) => void }) {
@@ -237,6 +307,7 @@ function InlineName({ initial, onDone }: { initial: string; onDone: (v: string |
 }
 
 function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (k: ApiKey & { secret: string }) => void }) {
+  const { t } = useTranslation("settingsDev");
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>(readScopes);
@@ -264,8 +335,8 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
 
   const submit = () => {
     setError(null);
-    if (!name.trim()) return setError("Name the key so you know what uses it.");
-    if (!scopes.length) return setError("Choose at least one scope.");
+    if (!name.trim()) return setError(t("apiKeys.form.nameRequired"));
+    if (!scopes.length) return setError(t("apiKeys.form.scopeRequired"));
     create.mutate();
   };
 
@@ -273,15 +344,15 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title="New API key"
+      title={t("apiKeys.form.title")}
       footer={
         <>
           <span className="mr-auto text-xs text-danger-fg">{error}</span>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="primary" loading={create.isPending} onClick={submit}>
-            Create key
+            {t("apiKeys.form.create")}
           </Button>
         </>
       }
@@ -293,12 +364,12 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
           submit();
         }}
       >
-        <Field label="Name">
-          {(p) => <TextInput {...p} autoFocus value={name} maxLength={80} placeholder="Zapier sync" onChange={(e) => setName(e.target.value)} />}
+        <Field label={t("apiKeys.form.name")}>
+          {(p) => <TextInput {...p} autoFocus value={name} maxLength={80} placeholder={t("apiKeys.form.namePlaceholder")} onChange={(e) => setName(e.target.value)} />}
         </Field>
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="text-[12.5px] font-medium">Scopes</span>
+            <span className="text-[12.5px] font-medium">{t("apiKeys.form.scopes")}</span>
             <Segmented
               size="xs"
               value={preset}
@@ -307,13 +378,13 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
                 if (v === "full") setScopes(allScopes);
               }}
               options={[
-                { value: "read", label: "Read only" },
-                { value: "full", label: "Full access" },
-                { value: "custom", label: "Custom" },
+                { value: "read", label: t("apiKeys.form.readOnly") },
+                { value: "full", label: t("apiKeys.form.full") },
+                { value: "custom", label: t("apiKeys.form.custom") },
               ]}
             />
           </div>
-          <div className="rounded-md border border-line">
+          <div className="overflow-hidden rounded-md border border-line">
             {scopeGroups.map((g) => (
               <div key={g.resource} className="flex h-10 items-center gap-3 border-b border-line-soft px-3 last:border-0">
                 <span className="flex-1 text-[12.5px] text-fg">{g.label}</span>
@@ -327,17 +398,17 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
             ))}
           </div>
         </div>
-        <Field label="Expires">
+        <Field label={t("apiKeys.form.expires")}>
           {(p) => (
             <Select<Expiry>
               id={p.id}
               value={expiry}
               onChange={setExpiry}
               options={[
-                { value: "30", label: "In 30 days" },
-                { value: "90", label: "In 90 days" },
-                { value: "365", label: "In a year" },
-                { value: "never", label: "Never" },
+                { value: "30", label: t("apiKeys.form.in30") },
+                { value: "90", label: t("apiKeys.form.in90") },
+                { value: "365", label: t("apiKeys.form.in365") },
+                { value: "never", label: t("apiKeys.form.never") },
               ]}
             />
           )}
