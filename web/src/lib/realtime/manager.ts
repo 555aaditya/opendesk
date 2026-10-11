@@ -3,6 +3,7 @@
 // (and, quietly, the tickets visible in the list).
 
 import type { QueryClient } from "@tanstack/react-query";
+import { getWorkspaceId } from "../api/client";
 import { api } from "../api/endpoints";
 import type { Envelope, Notification } from "../api/types";
 import { config } from "../config";
@@ -59,6 +60,9 @@ export class RealtimeManager {
   }
 
   private async fetchToken(): Promise<{ token: string; url: string }> {
+    // The token is for this manager's workspace; once the session has moved on
+    // (switched, left or deleted it, logged out) there is nothing to ask for.
+    if (this.stopped || getWorkspaceId() !== this.opts.workspaceId) throw new Error("realtime: workspace changed");
     const r = await api.realtimeToken();
     this.token = r.token;
     return r;

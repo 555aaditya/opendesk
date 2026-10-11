@@ -77,9 +77,10 @@ export function AppLayout() {
   const newTicketOpen = useShell((s) => s.newTicketOpen);
   const sidebarOpen = useShell((s) => s.sidebarOpen);
   const upgradeReason = useUpgrade((s) => s.reason);
-  // Logging out clears the session before the router leaves the app; render
-  // nothing in between rather than pages that read the signed-in user.
-  const authed = useSession((s) => s.status === "authed" && !!s.user);
+  // Logging out, or deleting or leaving the last workspace, clears the session
+  // before the router leaves the app; render nothing in between rather than
+  // pages that read the signed-in user and the current workspace.
+  const authed = useSession((s) => s.status === "authed" && !!s.user && !!s.workspaceId);
 
   useHotkeys({
     "mod+k": () => shell.palette(!useShell.getState().paletteOpen),
