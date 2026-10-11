@@ -1,0 +1,17 @@
+/* opendesk brand tokens: monochrome only. */
+:root {
+  --od-ink: #0a0a0a;      /* logo, primary text, primary buttons */
+  --od-coal: #171717;     /* dark surfaces */
+  --od-charcoal: #262626; /* raised dark surfaces, dark borders */
+  --od-graphite: #525252; /* secondary text */
+  --od-smoke: #8a8a8a;    /* muted text, icons */
+  --od-ash: #e4e4e4;      /* borders, dividers */
+  --od-mist: #f4f4f4;     /* subtle fills, hover */
+  --od-paper: #ffffff;    /* background */
+
+  --od-font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --od-font-mono: "Geist Mono", ui-monospace, monospace;
+  --od-tracking-display: -0.04em;
+  --od-tracking-label: 0.06em;
+  --od-radius: 12px;
+}
