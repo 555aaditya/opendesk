@@ -1,7 +1,7 @@
 SCRATCH ?= ./data
 export DATABASE_URL ?= postgres://opendesk:opendesk@localhost:55432/opendesk?sslmode=disable
 
-.PHONY: dev-db dev api realtime web site docs build test lint web-embed
+.PHONY: dev-db dev api realtime web site docs build test lint web-embed e2e
 
 dev-db: ## start local Postgres
 	docker compose -f docker-compose.dev.yml -p opendesk-dev up -d --wait
@@ -30,6 +30,9 @@ web-embed: ## build the web app into the Go binary's embed dir
 
 test:
 	go test ./...
+
+e2e: ## end-to-end browser run against a running stack (see scripts/e2e/run.sh for the env)
+	scripts/e2e/run.sh
 
 lint:
 	test -z "$$(gofmt -l .)"
