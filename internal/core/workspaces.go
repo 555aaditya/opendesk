@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -21,6 +22,7 @@ import (
 	"github.com/opendesk/opendesk/internal/crypto"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/displayname"
+	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/events"
 	"github.com/opendesk/opendesk/internal/httpx"
 	"github.com/opendesk/opendesk/internal/ids"
@@ -38,6 +40,44 @@ type CoreWorkspaceSettings struct {
 	CSATEnabled       *bool   `json:"csat_enabled,omitempty"`
 	AutoAssign        *string `json:"auto_assign,omitempty" enum:"none,round_robin"`
 	Locale            *string `json:"locale,omitempty" maxLength:"35" doc:"Default language (BCP 47) of customer-facing pages: help center, CSAT, widget"`
+	LabelCreation     *string `json:"label_creation,omitempty" enum:"anyone,admins" doc:"Who may create labels by applying a new name"`
+	// StatusLabels and PriorityLabels rename and recolour the fixed values for display only.
+	StatusLabels   map[string]DisplayOverride `json:"status_labels,omitempty"`
+	PriorityLabels map[string]DisplayOverride `json:"priority_labels,omitempty"`
+}
+
+// DisplayOverride is a workspace's display name and colour for a status or priority.
+type DisplayOverride struct {
+	Label string `json:"label,omitempty" maxLength:"40"`
+	Color string `json:"color,omitempty" enum:"gray,red,orange,amber,yellow,lime,green,teal,cyan,blue,indigo,violet,purple,pink,rose"`
+}
+
+func validOverrides(field string, in map[string]DisplayOverride, allowed []string) (map[string]any, error) {
+	out := map[string]any{}
+	for k, v := range in {
+		if !slices.Contains(allowed, k) {
+			return nil, httpx.Validation(field + " keys must be one of " + strings.Join(allowed, ", ") + ".")
+		}
+		label := displayname.Normalize(v.Label)
+		if utf8.RuneCountInString(label) > 40 || strings.ContainsAny(label, "<>`") || strings.IndexFunc(label, unicode.IsControl) >= 0 {
+			return nil, httpx.Validation(field + " labels must be 40 characters or less, without markup.")
+		}
+		if v.Color != "" && !slices.Contains(domain.LabelColors, v.Color) {
+			return nil, httpx.Validation(field + " colours must be one of " + strings.Join(domain.LabelColors, ", ") + ".")
+		}
+		if label == "" && v.Color == "" {
+			continue
+		}
+		o := map[string]any{}
+		if label != "" {
+			o["label"] = label
+		}
+		if v.Color != "" {
+			o["color"] = v.Color
+		}
+		out[k] = o
+	}
+	return out, nil
 }
 
 type CoreWorkspace struct {
@@ -129,6 +169,26 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 			return nil, httpx.Validation("locale must be a language tag like en or pt-BR.")
 		}
 		out["locale"] = *s.Locale
+	}
+	if s.LabelCreation != nil {
+		if *s.LabelCreation != "anyone" && *s.LabelCreation != "admins" {
+			return nil, httpx.Validation("label_creation must be anyone or admins.")
+		}
+		out["label_creation"] = *s.LabelCreation
+	}
+	if s.StatusLabels != nil {
+		m, err := validOverrides("status_labels", s.StatusLabels, domain.Statuses)
+		if err != nil {
+			return nil, err
+		}
+		out["status_labels"] = m
+	}
+	if s.PriorityLabels != nil {
+		m, err := validOverrides("priority_labels", s.PriorityLabels, domain.Priorities)
+		if err != nil {
+			return nil, err
+		}
+		out["priority_labels"] = m
 	}
 	if s.AutoAssign != nil {
 		if *s.AutoAssign != "none" && *s.AutoAssign != "round_robin" {
@@ -222,8 +282,29 @@ func (s *svc) createWorkspace(ctx context.Context, tx pgx.Tx, p *auth.Principal,
 			return CoreWorkspace{}, err
 		}
 	}
-	for _, t := range []string{"billing", "bug", "feature request", "question"} {
-		if _, err := tx.Exec(ctx, `INSERT INTO tags (id, workspace_id, name) VALUES ($1, $2, $3)`, ids.New(), wid, t); err != nil {
+	typeGroup := ids.New()
+	if _, err := tx.Exec(ctx, `INSERT INTO tag_groups (id, workspace_id, name, exclusive, position) VALUES ($1, $2, 'Type', true, 0)`,
+		typeGroup, wid); err != nil {
+		return CoreWorkspace{}, err
+	}
+	for i, t := range []struct {
+		name, color, desc string
+		grouped           bool
+	}{
+		{"Question", "blue", "How do I, can I, where is", true},
+		{"Problem", "orange", "Something is not working as expected", true},
+		{"Bug", "red", "A defect in the product", true},
+		{"Feature request", "violet", "Asks for something new", true},
+		{"Billing", "green", "Invoices, payments and plans", true},
+		{"VIP", "amber", "A customer to look after closely", false},
+		{"Feedback", "teal", "Praise, complaints and suggestions", false},
+	} {
+		var group *uuid.UUID
+		if t.grouped {
+			group = &typeGroup
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO tags (id, workspace_id, name, color, description, group_id, position) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			ids.New(), wid, t.name, t.color, t.desc, group, i); err != nil {
 			return CoreWorkspace{}, err
 		}
 	}

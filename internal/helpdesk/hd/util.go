@@ -10,11 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/text/unicode/norm"
 
+	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/crypto"
 	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/events"
+	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/ids"
 )
 
 // ParseID parses a path or body id; a malformed id is answered as not found.
@@ -67,55 +67,24 @@ func CheckMember(ctx context.Context, q db.Querier, wid, uid uuid.UUID) error {
 	return err
 }
 
-// EnsureTags returns tag ids for names, creating missing tags (and publishing tag.created).
+// EnsureTags returns label ids for names, creating missing labels (and publishing tag.created).
 func EnsureTags(ctx context.Context, tx pgx.Tx, wid uuid.UUID, names []string) ([]uuid.UUID, error) {
-	out := make([]uuid.UUID, 0, len(names))
-	seen := map[string]bool{}
-	for _, raw := range names {
-		name, err := CleanTagName(raw)
-		if err != nil {
-			return nil, err
-		}
-		key := strings.ToLower(name)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		var id uuid.UUID
-		err = tx.QueryRow(ctx, `SELECT id FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2)`, wid, name).Scan(&id)
-		if db.IsNotFound(err) {
-			id = ids.New()
-			var created bool
-			err = tx.QueryRow(ctx, `INSERT INTO tags (id, workspace_id, name) VALUES ($1, $2, $3)
-				ON CONFLICT (workspace_id, name) DO UPDATE SET name = EXCLUDED.name RETURNING id, (xmax = 0)`, id, wid, name).Scan(&id, &created)
-			if err == nil && created {
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "tag.created",
-					Data: map[string]any{"tag": map[string]any{"id": id, "name": name}}})
-			}
-		}
-		if err != nil {
-			return nil, fmt.Errorf("ensure tag: %w", err)
-		}
-		out = append(out, id)
-	}
-	return out, nil
+	return domain.EnsureTags(ctx, tx, wid, names)
 }
 
-var tagChars = regexp.MustCompile(`^[\p{L}\p{N} _\-./:&+#]+$`)
+// CleanTagName normalizes a label name: 1..50 characters, no markup.
+func CleanTagName(s string) (string, error) { return domain.CleanTagName(s) }
 
-// CleanTagName normalizes a tag name: 1..50 characters, no markup.
-func CleanTagName(s string) (string, error) {
-	s = strings.Join(strings.Fields(norm.NFC.String(s)), " ")
-	if s == "" {
-		return "", httpx.Validation("tag name is required")
+// CanCreateLabels reports whether p may create labels by applying a new name:
+// always, unless settings.label_creation is "admins" (then admins and keys with settings:write).
+func CanCreateLabels(ctx context.Context, q db.Querier, p *auth.Principal) (bool, error) {
+	switch {
+	case p.Kind == auth.KindUser && p.Role.AtLeast(auth.RoleAdmin):
+		return true, nil
+	case p.Kind == auth.KindAPIKey && p.HasScope(auth.ScopeSettingsWrite):
+		return true, nil
 	}
-	if len([]rune(s)) > 50 {
-		return "", httpx.Validation("tag names must be 50 characters or less")
-	}
-	if !tagChars.MatchString(s) {
-		return "", httpx.Validation("tag names may contain letters, numbers, spaces and - _ . / : & + #")
-	}
-	return s, nil
+	return domain.LabelCreationOpen(ctx, q, p.WorkspaceID)
 }
 
 var slugStrip = regexp.MustCompile(`[^a-z0-9]+`)

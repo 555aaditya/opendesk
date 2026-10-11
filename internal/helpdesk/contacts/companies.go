@@ -2,6 +2,7 @@ package contacts
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/events"
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
 	"github.com/opendesk/opendesk/internal/httpx"
@@ -21,25 +23,36 @@ import (
 
 // Company is the contract shape.
 type Company struct {
-	ID           uuid.UUID      `json:"id"`
-	Name         string         `json:"name"`
-	Domain       string         `json:"domain"`
-	Notes        string         `json:"notes"`
-	Custom       map[string]any `json:"custom"`
-	ContactCount int            `json:"contact_count"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID           uuid.UUID       `json:"id"`
+	Name         string          `json:"name"`
+	Domain       string          `json:"domain"`
+	Notes        string          `json:"notes"`
+	Custom       map[string]any  `json:"custom"`
+	Tags         []domain.TagRef `json:"tags"`
+	Fields       map[string]any  `json:"fields"`
+	ContactCount int             `json:"contact_count"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
-const companySelect = `SELECT co.id, co.name, co.domain, co.notes, co.custom,
-	(SELECT count(*) FROM contacts c WHERE c.workspace_id = co.workspace_id AND c.company_id = co.id), co.created_at, co.updated_at
+var companySelect = `SELECT co.id, co.name, co.domain, co.notes, co.custom,
+	(SELECT count(*) FROM contacts c WHERE c.workspace_id = co.workspace_id AND c.company_id = co.id), co.created_at, co.updated_at,
+	co.fields, ` + domain.TagRefsSQL("company_tags", "lt.company_id = co.id") + `
 FROM companies co`
 
 func scanCompany(r pgx.Row) (Company, error) {
 	var c Company
-	err := r.Scan(&c.ID, &c.Name, &c.Domain, &c.Notes, &c.Custom, &c.ContactCount, &c.CreatedAt, &c.UpdatedAt)
+	var tags []byte
+	err := r.Scan(&c.ID, &c.Name, &c.Domain, &c.Notes, &c.Custom, &c.ContactCount, &c.CreatedAt, &c.UpdatedAt, &c.Fields, &tags)
 	if c.Custom == nil {
 		c.Custom = map[string]any{}
+	}
+	if c.Fields == nil {
+		c.Fields = map[string]any{}
+	}
+	c.Tags = []domain.TagRef{}
+	if err == nil {
+		err = json.Unmarshal(tags, &c.Tags)
 	}
 	return c, err
 }
@@ -53,15 +66,20 @@ func loadCompany(ctx context.Context, q db.Querier, wid, id uuid.UUID) (Company,
 }
 
 type companyWriteBody struct {
-	Name   *string        `json:"name,omitempty" maxLength:"200"`
-	Domain *string        `json:"domain,omitempty" maxLength:"253"`
-	Notes  *string        `json:"notes,omitempty" maxLength:"10000"`
-	Custom map[string]any `json:"custom,omitempty"`
+	Name       *string        `json:"name,omitempty" maxLength:"200"`
+	Domain     *string        `json:"domain,omitempty" maxLength:"253"`
+	Notes      *string        `json:"notes,omitempty" maxLength:"10000"`
+	Custom     map[string]any `json:"custom,omitempty"`
+	Tags       *[]string      `json:"tags,omitempty" maxItems:"50" doc:"Replaces the labels, by name"`
+	AddTags    []string       `json:"add_tags,omitempty" maxItems:"50" doc:"Adds these labels, by name"`
+	RemoveTags []string       `json:"remove_tags,omitempty" maxItems:"50" doc:"Removes these labels, by name"`
+	Fields     map[string]any `json:"fields,omitempty" doc:"Custom field values by key, merged; null clears a field"`
 }
 
 type companyRow struct {
 	Name, Domain, Notes string
 	Custom              map[string]any
+	Fields              map[string]any
 }
 
 func (b *companyWriteBody) apply(row *companyRow) error {
@@ -121,13 +139,14 @@ type companyCursor struct {
 
 func registerCompanies(d *deps.Deps, api huma.API) {
 	huma.Register(api, op("list-companies", http.MethodGet, "/v1/companies", "List companies", "Companies", 0),
-		func(ctx context.Context, in *struct {
-			httpx.ListParams
-			Q string `query:"q" maxLength:"200" doc:"Search name and domain"`
-		}) (*struct{ Body httpx.Page[Company] }, error) {
+		func(ctx context.Context, in *companyListIn) (*struct{ Body httpx.Page[Company] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeContactsRead)
 			if err != nil {
 				return nil, httpx.Wrap(err)
+			}
+			extra, args, err := recordFilters(ctx, d.DB.Pool, p, domain.CompanyLabels, domain.FieldEntityCompany, "co", in.Tag, in.fields, in.fieldsErr, 7)
+			if err != nil {
+				return nil, err
 			}
 			var cur companyCursor
 			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
@@ -136,9 +155,9 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 			q := strings.TrimSpace(in.Q)
 			like := "%" + strings.TrimSuffix(likePrefix(q), "%") + "%"
 			rows, err := d.DB.Pool.Query(ctx, companySelect+` WHERE co.workspace_id = $1
-				AND ($2 = '' OR co.name ILIKE $3 OR co.domain::text ILIKE $3)
-				AND (NOT $4 OR (co.name, co.id) > ($5, $6))
-				ORDER BY co.name, co.id LIMIT $7`, p.WorkspaceID, q, like, in.Cursor != "", cur.Name, cur.ID, in.Limit+1)
+				AND ($2 = '' OR co.name ILIKE $3 OR co.domain::text ILIKE $3 OR co.fields_search @@ websearch_to_tsquery('simple', $2))
+				AND (NOT $4 OR (co.name, co.id) > ($5, $6))`+extra+`
+				ORDER BY co.name, co.id LIMIT $7`, append([]any{p.WorkspaceID, q, like, in.Cursor != "", cur.Name, cur.ID, in.Limit + 1}, args...)...)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -162,10 +181,16 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 			}
 			var c Company
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityCompany, &row.Fields, in.Body.Fields); err != nil {
+					return err
+				}
 				id := ids.New()
-				if _, err := tx.Exec(ctx, `INSERT INTO companies (id, workspace_id, name, domain, notes, custom) VALUES ($1,$2,$3,$4,$5,$6)`,
-					id, p.WorkspaceID, row.Name, row.Domain, row.Notes, row.Custom); err != nil {
+				if _, err := tx.Exec(ctx, `INSERT INTO companies (id, workspace_id, name, domain, notes, custom, fields) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+					id, p.WorkspaceID, row.Name, row.Domain, row.Notes, row.Custom, row.Fields); err != nil {
 					return companyUniqueErr(err)
+				}
+				if err := applyLabels(ctx, tx, p, domain.CompanyLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
+					return err
 				}
 				var err error
 				if c, err = loadCompany(ctx, tx, p.WorkspaceID, id); err != nil {
@@ -215,8 +240,8 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 			var c Company
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				var row companyRow
-				err := tx.QueryRow(ctx, `SELECT name, domain, notes, custom FROM companies WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
-					p.WorkspaceID, id).Scan(&row.Name, &row.Domain, &row.Notes, &row.Custom)
+				err := tx.QueryRow(ctx, `SELECT name, domain, notes, custom, fields FROM companies WHERE workspace_id = $1 AND id = $2 FOR UPDATE`,
+					p.WorkspaceID, id).Scan(&row.Name, &row.Domain, &row.Notes, &row.Custom, &row.Fields)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Company")
 				}
@@ -226,9 +251,15 @@ func registerCompanies(d *deps.Deps, api huma.API) {
 				if err := in.Body.apply(&row); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `UPDATE companies SET name = $3, domain = $4, notes = $5, custom = $6, updated_at = now()
-					WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, row.Name, row.Domain, row.Notes, row.Custom); err != nil {
+				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityCompany, &row.Fields, in.Body.Fields); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, `UPDATE companies SET name = $3, domain = $4, notes = $5, custom = $6, fields = $7, updated_at = now()
+					WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, row.Name, row.Domain, row.Notes, row.Custom, row.Fields); err != nil {
 					return companyUniqueErr(err)
+				}
+				if err := applyLabels(ctx, tx, p, domain.CompanyLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
+					return err
 				}
 				if c, err = loadCompany(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err

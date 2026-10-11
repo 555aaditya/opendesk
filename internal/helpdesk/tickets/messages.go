@@ -245,7 +245,7 @@ func postMessage(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principal
 		}
 	}
 	if b.Status != nil {
-		if _, err := applyPatch(ctx, tx, d, wid, tid, actor, Patch{Status: b.Status}, applyOpts{Enqueue: true}); err != nil {
+		if _, err := applyPatch(ctx, tx, d, wid, tid, actor, Patch{Status: b.Status}, applyOpts{Enqueue: true, RequireFields: true}); err != nil {
 			return domain.Message{}, err
 		}
 	}

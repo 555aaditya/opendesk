@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -38,8 +39,17 @@ type listIn struct {
 	ViewID    string `query:"view_id" doc:"Apply a saved view's filters; explicit filters override it"`
 	Q         string `query:"q" maxLength:"200" doc:"Full text over subjects and messages, or #number"`
 	Spam      string `query:"spam" enum:"true,false,any," doc:"Default false (spam hidden); true lists only spam"`
-	Sort      string `query:"sort" enum:"last_message_at,created_at,priority,due," doc:"Default last_message_at"`
+	Sort      string `query:"sort" maxLength:"60" doc:"last_message_at (default), created_at, priority, due or field.<key>"`
 	Order     string `query:"order" enum:"asc,desc," doc:"Default desc, asc for due"`
+
+	fields    []hd.FieldFilter
+	fieldsErr error
+}
+
+// Resolve reads the field.<key> and field.<key>[op] parameters (custom field filters).
+func (in *listIn) Resolve(ctx huma.Context) []error {
+	in.fields, in.fieldsErr = hd.FieldFiltersFromQuery(queryOf(ctx))
+	return nil
 }
 
 type ticketContactInput struct {
@@ -64,6 +74,7 @@ type ticketCreateBody struct {
 	Bcc           []string            `json:"bcc,omitempty" maxItems:"20"`
 	AttachmentIDs []string            `json:"attachment_ids,omitempty" maxItems:"20"`
 	Custom        map[string]any      `json:"custom,omitempty"`
+	Fields        map[string]any      `json:"fields,omitempty" doc:"Custom field values by key"`
 }
 
 type ticketPatchBody struct {
@@ -78,11 +89,12 @@ type ticketPatchBody struct {
 	AddTags      []string       `json:"add_tags,omitempty" maxItems:"50" doc:"Adds these tags, by name, keeping the others; missing tags are created"`
 	RemoveTags   []string       `json:"remove_tags,omitempty" maxItems:"50" doc:"Removes these tags, by name"`
 	Custom       map[string]any `json:"custom,omitempty" doc:"Merged into custom; null values remove keys"`
+	Fields       map[string]any `json:"fields,omitempty" doc:"Custom field values by key, merged; null clears a field"`
 }
 
 func (b ticketPatchBody) toPatch() (Patch, error) {
 	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
-		RemoveTags: b.RemoveTags, Custom: b.Custom, Snooze: b.SnoozedUntil}
+		RemoveTags: b.RemoveTags, Custom: b.Custom, Fields: b.Fields, Snooze: b.SnoozedUntil}
 	var err error
 	if p.Assignee, err = optID(b.AssigneeID, "assignee_id"); err != nil {
 		return p, err
@@ -150,8 +162,11 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
+			if in.fieldsErr != nil {
+				return nil, in.fieldsErr
+			}
 			req := hd.TicketFilters{Status: hd.SplitCSV(in.Status), Priority: hd.SplitCSV(in.Priority), Assignee: in.Assignee,
-				TeamID: in.TeamID, MailboxID: in.MailboxID, Tag: in.Tag, Channel: in.Channel, Q: in.Q}
+				TeamID: in.TeamID, MailboxID: in.MailboxID, Tag: in.Tag, Channel: in.Channel, Q: in.Q, Fields: in.fields}
 			f := req
 			if in.ViewID != "" {
 				view, err := loadView(ctx, d.DB.Pool, p, in.ViewID)
@@ -242,13 +257,16 @@ func registerTickets(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, err
 			}
+			if patch.CreateLabels, err = hd.CanCreateLabels(ctx, d.DB.Pool, p); err != nil {
+				return nil, httpx.Wrap(err)
+			}
 			var t domain.Ticket
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				id, err := resolveTicket(ctx, tx, p.WorkspaceID, in.ID)
 				if err != nil {
 					return err
 				}
-				if _, err := applyPatch(ctx, tx, d, p.WorkspaceID, id, actorOf(p), patch, applyOpts{Enqueue: true}); err != nil {
+				if _, err := applyPatch(ctx, tx, d, p.WorkspaceID, id, actorOf(p), patch, applyOpts{Enqueue: true, RequireFields: true}); err != nil {
 					return err
 				}
 				t, err = domain.LoadTicket(ctx, tx, p.WorkspaceID, id)
@@ -308,6 +326,9 @@ func registerTickets(d *deps.Deps, api huma.API) {
 				if patch, err = in.Body.Patch.toPatch(); err != nil {
 					return nil, err
 				}
+				if patch.CreateLabels, err = hd.CanCreateLabels(ctx, d.DB.Pool, p); err != nil {
+					return nil, httpx.Wrap(err)
+				}
 			}
 			out := ticketBulkResult{Data: []domain.Ticket{}}
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
@@ -328,7 +349,7 @@ func registerTickets(d *deps.Deps, api huma.API) {
 						out.Deleted++
 						continue
 					}
-					changes, err := applyPatch(ctx, tx, d, p.WorkspaceID, id, actorOf(p), patch, applyOpts{Enqueue: true})
+					changes, err := applyPatch(ctx, tx, d, p.WorkspaceID, id, actorOf(p), patch, applyOpts{Enqueue: true, RequireFields: true})
 					if err != nil {
 						return err
 					}
@@ -411,6 +432,22 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		if err := checkCustom(b.Custom); err != nil {
 			return domain.Ticket{}, err
 		}
+	}
+	if b.Fields != nil || nt.Status == domain.StatusSolved || nt.Status == domain.StatusClosed {
+		defs, err := domain.LoadFieldDefs(ctx, tx, wid, domain.FieldEntityTicket)
+		if err != nil {
+			return domain.Ticket{}, err
+		}
+		fields, _, err := domain.MergeFields(defs, map[string]any{}, b.Fields, domain.MemberChecker(ctx, tx, wid))
+		if err != nil {
+			return domain.Ticket{}, err
+		}
+		if closing(nt.Status) {
+			if err := domain.CheckRequiredOnSolve(defs, fields); err != nil {
+				return domain.Ticket{}, err
+			}
+		}
+		nt.Fields = fields
 	}
 
 	// Contact.
@@ -517,11 +554,11 @@ func createTicket(ctx context.Context, tx pgx.Tx, d *deps.Deps, p *auth.Principa
 		return domain.Ticket{}, err
 	}
 	if len(b.Tags) > 0 {
-		ids, err := hd.EnsureTags(ctx, tx, wid, b.Tags)
+		create, err := hd.CanCreateLabels(ctx, tx, p)
 		if err != nil {
 			return domain.Ticket{}, err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`, t.ID, ids); err != nil {
+		if _, _, err := domain.ApplyTags(ctx, tx, wid, domain.TicketLabels, t.ID, domain.TagOps{Add: b.Tags, Create: create}); err != nil {
 			return domain.Ticket{}, err
 		}
 	}
@@ -657,4 +694,9 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 		return err
 	}
 	return domain.PublishTicketUpdated(ctx, tx, wid, dst, []string{"messages", "tags", "last_message_at"})
+}
+
+func queryOf(ctx huma.Context) url.Values {
+	u := ctx.URL()
+	return u.Query()
 }

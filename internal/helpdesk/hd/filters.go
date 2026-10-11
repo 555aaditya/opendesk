@@ -23,6 +23,8 @@ type TicketFilters struct {
 	Tag       string   `json:"tag,omitempty"`
 	Channel   string   `json:"channel,omitempty" enum:"email,chat,api,portal"`
 	Q         string   `json:"q,omitempty" maxLength:"200"`
+	// Fields are custom field filters, ANDed.
+	Fields []FieldFilter `json:"fields,omitempty" maxItems:"20"`
 }
 
 // Normalize trims values and validates every field against the contract enums and the
@@ -80,6 +82,17 @@ func (f *TicketFilters) Normalize(ctx context.Context, q db.Querier, wid uuid.UU
 	f.Q = strings.TrimSpace(f.Q)
 	if len([]rune(f.Q)) > 200 {
 		return httpx.Validation("q must be 200 characters or less")
+	}
+	if len(f.Fields) > 0 {
+		defs, err := domain.LoadFieldDefs(ctx, q, wid, domain.FieldEntityTicket)
+		if err != nil {
+			return err
+		}
+		if f.Fields, err = NormalizeFieldFilters(defs, f.Fields); err != nil {
+			return err
+		}
+	} else {
+		f.Fields = nil
 	}
 	return nil
 }

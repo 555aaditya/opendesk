@@ -14,162 +14,19 @@ import (
 	"github.com/opendesk/opendesk/internal/auth"
 	"github.com/opendesk/opendesk/internal/db"
 	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/domain"
 	"github.com/opendesk/opendesk/internal/events"
 	"github.com/opendesk/opendesk/internal/helpdesk/hd"
 	"github.com/opendesk/opendesk/internal/httpx"
 	"github.com/opendesk/opendesk/internal/ids"
 )
 
-type tagWriteBody struct {
-	Name string `json:"name" maxLength:"100"`
-}
-
-type tagOut struct{ Body domain.Tag }
-
 type idPath struct {
 	ID string `path:"id"`
-}
-
-// tagNameTaken reports another tag with the same name, ignoring case.
-func tagNameTaken(ctx context.Context, q db.Querier, wid uuid.UUID, name string, exclude *uuid.UUID) error {
-	var taken bool
-	if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2)
-		AND ($3::uuid IS NULL OR id <> $3))`, wid, name, exclude).Scan(&taken); err != nil {
-		return err
-	}
-	if taken {
-		return httpx.Conflict("A tag with this name already exists.")
-	}
-	return nil
 }
 
 func lockKind(ctx context.Context, tx pgx.Tx, wid uuid.UUID, kind string) error {
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1::text || ':' || $2))`, wid, kind)
 	return err
-}
-
-func registerTags(d *deps.Deps, api huma.API) {
-	huma.Register(api, op("list-tags", http.MethodGet, "/v1/tags", "List tags", "Tags", 0),
-		func(ctx context.Context, _ *struct{}) (*struct{ Body httpx.Page[domain.Tag] }, error) {
-			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeTicketsRead)
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			rows, err := d.DB.Pool.Query(ctx, `SELECT id, name FROM tags WHERE workspace_id = $1 ORDER BY lower(name), id`, p.WorkspaceID)
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			tags, err := pgx.CollectRows(rows, pgx.RowToStructByPos[domain.Tag])
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			return &struct{ Body httpx.Page[domain.Tag] }{list(tags)}, nil
-		})
-
-	huma.Register(api, op("create-tag", http.MethodPost, "/v1/tags", "Create a tag", "Tags", http.StatusCreated),
-		func(ctx context.Context, in *struct{ Body tagWriteBody }) (*tagOut, error) {
-			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeTicketsWrite)
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			name, err := hd.CleanTagName(in.Body.Name)
-			if err != nil {
-				return nil, err
-			}
-			t := domain.Tag{ID: ids.New(), Name: name}
-			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				if err := lockKind(ctx, tx, p.WorkspaceID, "tag"); err != nil {
-					return err
-				}
-				if err := tagNameTaken(ctx, tx, p.WorkspaceID, name, nil); err != nil {
-					return err
-				}
-				if _, err := tx.Exec(ctx, `INSERT INTO tags (id, workspace_id, name) VALUES ($1, $2, $3)`, t.ID, p.WorkspaceID, name); err != nil {
-					if db.IsUniqueViolation(err, "") {
-						return httpx.Conflict("A tag with this name already exists.")
-					}
-					return err
-				}
-				_, err := events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "tag.created", Data: map[string]any{"tag": t}})
-				return err
-			})
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			return &tagOut{t}, nil
-		})
-
-	huma.Register(api, op("update-tag", http.MethodPatch, "/v1/tags/{id}", "Rename a tag", "Tags", 0),
-		func(ctx context.Context, in *struct {
-			ID   string `path:"id"`
-			Body tagWriteBody
-		}) (*tagOut, error) {
-			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeTicketsWrite)
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			id, err := hd.ParseID(in.ID, "Tag")
-			if err != nil {
-				return nil, err
-			}
-			name, err := hd.CleanTagName(in.Body.Name)
-			if err != nil {
-				return nil, err
-			}
-			t := domain.Tag{ID: id, Name: name}
-			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				if err := lockKind(ctx, tx, p.WorkspaceID, "tag"); err != nil {
-					return err
-				}
-				if err := tagNameTaken(ctx, tx, p.WorkspaceID, name, &id); err != nil {
-					return err
-				}
-				tag, err := tx.Exec(ctx, `UPDATE tags SET name = $3 WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id, name)
-				if err != nil {
-					if db.IsUniqueViolation(err, "") {
-						return httpx.Conflict("A tag with this name already exists.")
-					}
-					return err
-				}
-				if tag.RowsAffected() == 0 {
-					return httpx.NotFound("Tag")
-				}
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "tag.updated", Data: map[string]any{"tag": t}})
-				return err
-			})
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			return &tagOut{t}, nil
-		})
-
-	huma.Register(api, op("delete-tag", http.MethodDelete, "/v1/tags/{id}", "Delete a tag", "Tags", http.StatusNoContent),
-		func(ctx context.Context, in *idPath) (*struct{}, error) {
-			p, err := auth.RequireWorkspace(ctx, auth.RoleAgent, auth.ScopeTicketsWrite)
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			id, err := hd.ParseID(in.ID, "Tag")
-			if err != nil {
-				return nil, err
-			}
-			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
-				tag, err := tx.Exec(ctx, `DELETE FROM tags WHERE workspace_id = $1 AND id = $2`, p.WorkspaceID, id)
-				if err != nil {
-					return err
-				}
-				if tag.RowsAffected() == 0 {
-					return httpx.NotFound("Tag")
-				}
-				_, err = events.Publish(ctx, tx, events.Event{WorkspaceID: p.WorkspaceID, Type: "tag.deleted", Data: map[string]any{"tag_id": id}})
-				return err
-			})
-			if err != nil {
-				return nil, httpx.Wrap(err)
-			}
-			return nil, nil
-		})
 }
 
 // SavedReply is the contract shape.

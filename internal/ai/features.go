@@ -373,17 +373,33 @@ func (s *Service) triage(ctx context.Context, q db.Querier, wid uuid.UUID, userI
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := q.Query(ctx, `SELECT name FROM tags WHERE workspace_id = $1 ORDER BY name LIMIT 300`, wid)
+	rows, err := q.Query(ctx, `SELECT g.name, COALESCE(CASE WHEN tg.exclusive THEN tg.name END, '') FROM tags g
+		LEFT JOIN tag_groups tg ON tg.id = g.group_id AND tg.workspace_id = g.workspace_id
+		WHERE g.workspace_id = $1 AND NOT g.archived AND 'tickets' = ANY(g.applies_to)
+		ORDER BY g.name LIMIT 300`, wid)
 	if err != nil {
 		return nil, nil, err
 	}
-	tags, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
+	var tags, lines []string
+	for rows.Next() {
+		var name, group string
+		if err := rows.Scan(&name, &group); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		tags = append(tags, name)
+		if group != "" {
+			name += " (" + group + ": choose at most one)"
+		}
+		lines = append(lines, name)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
 	tagList := "(none)"
 	if len(tags) > 0 {
-		tagList = untrusted(strings.Join(tags, "\n"))
+		tagList = untrusted(strings.Join(lines, "\n"))
 	}
 	req := Request{Model: s.models.Fast, MaxTokens: 1500, Effort: "low", JSONSchema: triageSchema, SchemaName: "ticket_triage",
 		System: []Block{{Text: triageSystem, Cache: true}},
@@ -479,44 +495,34 @@ func applyTriage(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, t *Triage, 
 	}
 	names := slices.Clone(t.Tags)
 	if createSuggested {
-		names = append(names, t.SuggestedTags...)
-	}
-	var tagIDs []uuid.UUID
-	if createSuggested && len(t.SuggestedTags) > 0 {
-		ids, err := hd.EnsureTags(ctx, tx, wid, names)
+		open, err := domain.LabelCreationOpen(ctx, tx, wid)
 		if err != nil {
 			return nil, err
 		}
-		tagIDs = ids
-	} else {
-		for _, n := range names {
-			var id uuid.UUID
-			err := tx.QueryRow(ctx, `SELECT id FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2)`, wid, n).Scan(&id)
-			if db.IsNotFound(err) {
-				continue
-			}
-			if err != nil {
-				return nil, err
-			}
-			tagIDs = append(tagIDs, id)
+		if open {
+			names = append(names, t.SuggestedTags...)
+		} else {
+			createSuggested = false
 		}
 	}
-	for _, id := range tagIDs {
-		var name string
-		err := tx.QueryRow(ctx, `WITH ins AS (INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING tag_id)
-			SELECT g.name FROM ins JOIN tags g ON g.id = ins.tag_id`, tid, id).Scan(&name)
-		if db.IsNotFound(err) {
-			continue // already tagged
-		}
-		if err != nil {
-			return nil, err
-		}
+	// Labels go through the shared write so exclusive groups keep one label.
+	added, removed, err := domain.ApplyTags(ctx, tx, wid, domain.TicketLabels, tid,
+		domain.TagOps{Add: names, Create: createSuggested, Lenient: true})
+	if err != nil {
+		return nil, err
+	}
+	for _, name := range added {
 		if _, err := domain.LogActivity(ctx, tx, wid, tid, "ai", nil, "tagged", with(map[string]any{"tag": name})); err != nil {
 			return nil, err
 		}
-		if !slices.Contains(changes, "tags") {
-			changes = append(changes, "tags")
+	}
+	for _, name := range removed {
+		if _, err := domain.LogActivity(ctx, tx, wid, tid, "ai", nil, "untagged", with(map[string]any{"tag": name})); err != nil {
+			return nil, err
 		}
+	}
+	if len(added)+len(removed) > 0 {
+		changes = append(changes, "tags")
 	}
 	custom := map[string]any{"ai_sentiment": t.Sentiment, "language": t.Language, "ai_category": t.Category,
 		"ai_triaged_at": time.Now().UTC().Format(time.RFC3339)}

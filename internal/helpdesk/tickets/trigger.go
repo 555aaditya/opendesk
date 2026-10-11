@@ -130,6 +130,7 @@ type triggerRun struct {
 	wid   uuid.UUID
 	tid   uuid.UUID
 	fired map[uuid.UUID]bool
+	defs  map[string]domain.FieldDefs
 }
 
 // automations evaluates the enabled automations for trigger in position order.
@@ -195,6 +196,8 @@ type facts struct {
 	tags                                                           []string
 	spam                                                           bool
 	contactEmail                                                   *string
+	fields, contactFields                                          map[string]any
+	defs                                                           map[string]domain.FieldDefs // by entity
 }
 
 func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, error) {
@@ -202,12 +205,24 @@ func (r *triggerRun) facts(ctx context.Context, messageID *uuid.UUID) (facts, er
 	var mailbox *uuid.UUID
 	err := r.tx.QueryRow(ctx, `SELECT t.subject, t.channel, t.mailbox_id, t.priority, t.status, t.spam, c.email,
 		COALESCE(t.custom->>'ai_sentiment', ''),
-		COALESCE((SELECT array_agg(g.name) FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = t.id), '{}')
-		FROM tickets t LEFT JOIN contacts c ON c.id = t.contact_id WHERE t.workspace_id = $1 AND t.id = $2`, r.wid, r.tid).
-		Scan(&f.subject, &f.channel, &mailbox, &f.priority, &f.status, &f.spam, &f.contactEmail, &f.sentiment, &f.tags)
+		COALESCE((SELECT array_agg(g.name) FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = t.id), '{}'),
+		t.fields, COALESCE(c.fields, '{}')
+		FROM tickets t LEFT JOIN contacts c ON c.id = t.contact_id AND c.workspace_id = t.workspace_id
+		WHERE t.workspace_id = $1 AND t.id = $2`, r.wid, r.tid).
+		Scan(&f.subject, &f.channel, &mailbox, &f.priority, &f.status, &f.spam, &f.contactEmail, &f.sentiment, &f.tags,
+			&f.fields, &f.contactFields)
 	if err != nil {
 		return f, err
 	}
+	if r.defs == nil {
+		r.defs = map[string]domain.FieldDefs{}
+		for _, e := range []string{domain.FieldEntityTicket, domain.FieldEntityContact} {
+			if r.defs[e], err = domain.LoadFieldDefs(ctx, r.tx, r.wid, e); err != nil {
+				return f, err
+			}
+		}
+	}
+	f.defs = r.defs
 	if mailbox != nil {
 		f.mailboxID = mailbox.String()
 	}
@@ -241,6 +256,17 @@ func matchAll(cs []hd.Condition, f facts) bool {
 }
 
 func match(c hd.Condition, f facts) bool {
+	if entity, key, ok := hd.ConditionFieldKey(c.Field); ok {
+		def, ok := f.defs[entity][key]
+		if !ok {
+			return false // the field was deleted since the automation was saved
+		}
+		values := f.fields
+		if entity == domain.FieldEntityContact {
+			values = f.contactFields
+		}
+		return domain.MatchField(def, domain.NormalizeOp(c.Op), c.Value, values[key])
+	}
 	if c.Field == "tag" {
 		if c.Op == "not_contains" || c.Op == "not_equals" {
 			// "tag not_equals x" holds when no tag equals x.
@@ -329,6 +355,20 @@ func (r *triggerRun) apply(ctx context.Context, a automation, f facts) ([]string
 			patch.Team = Opt[uuid.UUID]{Set: true, Value: id}
 		case "add_tag":
 			patch.AddTags = append(patch.AddTags, act.Value)
+			patch.CreateLabels = true
+		case "set_field":
+			def, ok := f.defs[domain.FieldEntityTicket][act.Field]
+			if !ok || def.Archived {
+				continue // removed or archived since the automation was saved
+			}
+			v, err := domain.ParseFieldString(def, act.Value, domain.MemberChecker(ctx, r.tx, r.wid))
+			if err != nil {
+				continue
+			}
+			if patch.Fields == nil {
+				patch.Fields = map[string]any{}
+			}
+			patch.Fields[act.Field] = v
 		case "remove_tag":
 			patch.RemoveTags = append(patch.RemoveTags, act.Value)
 		case "mark_spam":
@@ -352,7 +392,7 @@ func (r *triggerRun) apply(ctx context.Context, a automation, f facts) ([]string
 		}
 	}
 	if !patch.empty() {
-		c, err := applyPatch(ctx, r.tx, r.d, r.wid, r.tid, actor, patch, applyOpts{})
+		c, err := applyPatch(ctx, r.tx, r.d, r.wid, r.tid, actor, patch, applyOpts{Lenient: true})
 		if err != nil {
 			return nil, fmt.Errorf("automation %s: %w", a.ID, err)
 		}

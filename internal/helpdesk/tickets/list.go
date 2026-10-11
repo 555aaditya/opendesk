@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ type listQuery struct {
 	hd.TicketFilters
 	ContactID string
 	Spam      string // "", "true", "false", "any"
+	// Defs are the ticket field definitions (needed for Fields filters and field sorts).
+	Defs domain.FieldDefs
 }
 
 // sqlBuilder accumulates WHERE clauses and positional args.
@@ -101,6 +104,13 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 	if f.Channel != "" {
 		b.add("t.channel = " + b.arg(f.Channel))
 	}
+	for _, ff := range f.Fields {
+		def, ok := f.Defs[ff.Key]
+		if !ok {
+			return httpx.Validation("there is no custom field " + strconv.Quote(hd.Truncate(ff.Key, 40)))
+		}
+		b.add(hd.FieldClause(def, ff, "t.fields", b.arg, me))
+	}
 	if q := strings.TrimSpace(f.Q); q != "" {
 		var parts []string
 		if m := numberRef.FindStringSubmatch(q); m != nil {
@@ -108,10 +118,11 @@ func applyFilters(b *sqlBuilder, wid uuid.UUID, me *uuid.UUID, f listQuery) erro
 			parts = append(parts, "t.number = "+b.arg(n))
 		}
 		tsq := "websearch_to_tsquery('simple', " + b.arg(q) + ")"
-		parts = append(parts, "t.search @@ "+tsq,
+		parts = append(parts, "t.search @@ "+tsq, "t.fields_search @@ "+tsq,
 			`EXISTS (SELECT 1 FROM messages fm WHERE fm.workspace_id = t.workspace_id AND fm.ticket_id = t.id AND fm.search @@ `+tsq+`)`)
 		if pq := prefixQuery(q); pq != "" {
-			parts = append(parts, "t.search @@ to_tsquery('simple', "+b.arg(pq)+")")
+			ptsq := "to_tsquery('simple', " + b.arg(pq) + ")"
+			parts = append(parts, "t.search @@ "+ptsq, "t.fields_search @@ "+ptsq)
 		}
 		b.add("(" + strings.Join(parts, " OR ") + ")")
 	}
@@ -148,8 +159,17 @@ type sortSpec struct {
 	key  func(domain.Ticket) any
 }
 
-func parseSort(sort, order string) (sortSpec, error) {
+func parseSort(sort, order string, defs domain.FieldDefs, b *sqlBuilder) (sortSpec, error) {
 	var s sortSpec
+	if key, ok := strings.CutPrefix(sort, "field."); ok {
+		f, ok := defs[key]
+		if !ok || !hd.FieldSortable(f.Type) {
+			return s, httpx.Validation("sort field." + hd.Truncate(key, 40) + " must be a text, number, date, checkbox or select custom field")
+		}
+		expr, cast := hd.FieldSortExpr(f, "t.fields", b.arg)
+		s = sortSpec{expr: expr, cast: cast, desc: true, key: func(t domain.Ticket) any { return fieldSortKey(f, t.Fields[f.Key]) }}
+		return s, applyOrder(&s, order)
+	}
 	switch sort {
 	case "", "last_message_at":
 		s = sortSpec{expr: "t.last_message_at", cast: "timestamptz", desc: true,
@@ -167,8 +187,12 @@ func parseSort(sort, order string) (sortSpec, error) {
 			return "infinity"
 		}}
 	default:
-		return s, httpx.Validation("sort must be last_message_at, created_at, priority or due")
+		return s, httpx.Validation("sort must be last_message_at, created_at, priority, due or field.<key>")
 	}
+	return s, applyOrder(&s, order)
+}
+
+func applyOrder(s *sortSpec, order string) error {
 	switch order {
 	case "":
 	case "asc":
@@ -176,9 +200,38 @@ func parseSort(sort, order string) (sortSpec, error) {
 	case "desc":
 		s.desc = true
 	default:
-		return s, httpx.Validation("order must be asc or desc")
+		return httpx.Validation("order must be asc or desc")
 	}
-	return s, nil
+	return nil
+}
+
+// fieldSortKey mirrors hd.FieldSortExpr for the cursor.
+func fieldSortKey(f domain.CustomField, v any) any {
+	switch f.Type {
+	case domain.FieldNumber:
+		if n, ok := v.(float64); ok {
+			return strconv.FormatFloat(n, 'g', -1, 64)
+		}
+		return "-Infinity"
+	case domain.FieldCheckbox:
+		if b, _ := v.(bool); b {
+			return 1
+		}
+		return 0
+	case domain.FieldSelect:
+		s, _ := v.(string)
+		for i, o := range f.Options {
+			if o.ID == s {
+				return i + 1
+			}
+		}
+		return 0
+	case domain.FieldDate:
+		s, _ := v.(string)
+		return s
+	}
+	s, _ := v.(string)
+	return strings.ToLower(s)
 }
 
 // ticketDue mirrors dueExpr: the next SLA deadline that still matters.
@@ -210,12 +263,22 @@ type ticketCursor struct {
 // listTickets runs a filtered, sorted, keyset-paginated ticket query.
 func listTickets(ctx context.Context, q db.Querier, wid uuid.UUID, me *uuid.UUID, f listQuery, sort, order string, limit int, cursor string) (httpx.Page[domain.Ticket], error) {
 	var page httpx.Page[domain.Ticket]
-	s, err := parseSort(sort, order)
-	if err != nil {
-		return page, err
+	if f.Defs == nil && (len(f.Fields) > 0 || strings.HasPrefix(sort, "field.")) {
+		defs, err := domain.LoadFieldDefs(ctx, q, wid, domain.FieldEntityTicket)
+		if err != nil {
+			return page, err
+		}
+		f.Defs = defs
+		if f.Fields, err = hd.NormalizeFieldFilters(defs, f.Fields); err != nil {
+			return page, err
+		}
 	}
 	b := &sqlBuilder{}
 	if err := applyFilters(b, wid, me, f); err != nil {
+		return page, err
+	}
+	s, err := parseSort(sort, order, f.Defs, b)
+	if err != nil {
 		return page, err
 	}
 	cmp, dir := "<", "DESC"
@@ -238,6 +301,11 @@ func listTickets(ctx context.Context, q db.Querier, wid uuid.UUID, me *uuid.UUID
 			k = int(k.(float64))
 		} else if str, ok := k.(string); !ok {
 			return page, httpx.BadRequest("invalid cursor")
+		} else if s.cast == "float8" {
+			if _, err := strconv.ParseFloat(str, 64); err != nil && str != "-Infinity" {
+				return page, httpx.BadRequest("invalid cursor")
+			}
+		} else if s.cast == "text" {
 		} else if str != "infinity" {
 			if _, err := time.Parse(time.RFC3339Nano, str); err != nil {
 				return page, httpx.BadRequest("invalid cursor")
@@ -295,6 +363,8 @@ func mergeFilters(view, req hd.TicketFilters) hd.TicketFilters {
 			*f.dst = *f.src
 		}
 	}
+	// Field filters add up: the view's and the request's all apply.
+	out.Fields = append(slices.Clone(view.Fields), req.Fields...)
 	return out
 }
 
@@ -376,9 +446,21 @@ func ticketCounts(ctx context.Context, q db.Querier, p *auth.Principal) (TicketC
 	if err := rows.Err(); err != nil {
 		return c, err
 	}
+	var defs domain.FieldDefs
 	for _, v := range views {
+		if len(v.f.Fields) > 0 && defs == nil {
+			if defs, err = domain.LoadFieldDefs(ctx, q, p.WorkspaceID, domain.FieldEntityTicket); err != nil {
+				return c, err
+			}
+		}
+		lq := listQuery{TicketFilters: v.f, Defs: defs}
+		if len(v.f.Fields) > 0 {
+			if lq.Fields, err = hd.NormalizeFieldFilters(defs, v.f.Fields); err != nil {
+				continue // a view whose filters no longer parse counts as zero
+			}
+		}
 		b := &sqlBuilder{}
-		if err := applyFilters(b, p.WorkspaceID, p.ActorUserID(), listQuery{TicketFilters: v.f}); err != nil {
+		if err := applyFilters(b, p.WorkspaceID, p.ActorUserID(), lq); err != nil {
 			continue // a view whose filters no longer parse counts as zero
 		}
 		var n int

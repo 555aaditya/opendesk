@@ -59,6 +59,7 @@ type NewTicket struct {
 	AssigneeID  *uuid.UUID
 	TeamID      *uuid.UUID
 	Custom      map[string]any
+	Fields      map[string]any // custom field values, validated by the caller
 }
 
 // CreateTicket inserts a ticket and publishes ticket.created. Add the first message with
@@ -73,6 +74,9 @@ func CreateTicket(ctx context.Context, tx pgx.Tx, nt NewTicket) (Ticket, error) 
 	if nt.Custom == nil {
 		nt.Custom = map[string]any{}
 	}
+	if nt.Fields == nil {
+		nt.Fields = map[string]any{}
+	}
 	subject := truncateRunes(strings.TrimSpace(nt.Subject), 500)
 	var number int64
 	if err := tx.QueryRow(ctx, `UPDATE workspaces SET ticket_seq = ticket_seq + 1 WHERE id = $1 RETURNING ticket_seq`,
@@ -81,8 +85,8 @@ func CreateTicket(ctx context.Context, tx pgx.Tx, nt NewTicket) (Ticket, error) 
 	}
 	id := ids.New()
 	_, err := tx.Exec(ctx, `INSERT INTO tickets (id, workspace_id, number, subject, status, priority, channel,
-		mailbox_id, contact_id, assignee_id, team_id, custom) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-		id, nt.WorkspaceID, number, subject, nt.Status, nt.Priority, nt.Channel, nt.MailboxID, nt.ContactID, nt.AssigneeID, nt.TeamID, nt.Custom)
+		mailbox_id, contact_id, assignee_id, team_id, custom, fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		id, nt.WorkspaceID, number, subject, nt.Status, nt.Priority, nt.Channel, nt.MailboxID, nt.ContactID, nt.AssigneeID, nt.TeamID, nt.Custom, nt.Fields)
 	if err != nil {
 		return Ticket{}, fmt.Errorf("insert ticket: %w", err)
 	}

@@ -38,15 +38,45 @@ type Contact struct {
 	ExternalID  *string        `json:"external_id"`
 	Notes       string         `json:"notes"`
 	Custom      map[string]any `json:"custom"`
+	Tags        []TagRef       `json:"tags"`
+	Fields      map[string]any `json:"fields"`
 	Blocked     bool           `json:"blocked"`
 	TicketCount int            `json:"ticket_count"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
+// Tag is a label definition (contracts/api.md Tag).
 type Tag struct {
-	ID   uuid.UUID `json:"id"`
-	Name string    `json:"name"`
+	ID          uuid.UUID  `json:"id"`
+	Name        string     `json:"name"`
+	Color       string     `json:"color" enum:"gray,red,orange,amber,yellow,lime,green,teal,cyan,blue,indigo,violet,purple,pink,rose"`
+	Description string     `json:"description"`
+	GroupID     *uuid.UUID `json:"group_id"`
+	Position    int        `json:"position"`
+	Archived    bool       `json:"archived"`
+	AppliesTo   []string   `json:"applies_to"`
+	Usage       TagUsage   `json:"usage"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+type TagUsage struct {
+	Tickets   int `json:"tickets"`
+	Contacts  int `json:"contacts"`
+	Companies int `json:"companies"`
+}
+
+// TagGroup is a label group; exclusive groups allow one label per record.
+type TagGroup struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Color     *string   `json:"color"`
+	Exclusive bool      `json:"exclusive"`
+	Position  int       `json:"position"`
+	TagCount  int       `json:"tag_count"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type TicketSLA struct {
@@ -92,7 +122,8 @@ type Ticket struct {
 	Contact               *ContactRef    `json:"contact"`
 	Assignee              *UserRef       `json:"assignee"`
 	TeamID                *uuid.UUID     `json:"team_id"`
-	Tags                  []Tag          `json:"tags"`
+	Tags                  []TagRef       `json:"tags"`
+	Fields                map[string]any `json:"fields"`
 	SLA                   *TicketSLA     `json:"sla"`
 	FirstRespondedAt      *time.Time     `json:"first_responded_at"`
 	SolvedAt              *time.Time     `json:"solved_at"`

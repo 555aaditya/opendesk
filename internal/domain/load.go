@@ -46,14 +46,13 @@ func VerifyAttachmentSig(id uuid.UUID, exp, sig string) bool {
 }
 
 // TicketSelect is the column list ScanTicket reads. Append WHERE/ORDER clauses using alias t.
-const TicketSelect = `SELECT t.id, t.number, t.subject, t.status, t.priority, t.channel, t.mailbox_id, t.team_id,
+var TicketSelect = `SELECT t.id, t.number, t.subject, t.status, t.priority, t.channel, t.mailbox_id, t.team_id,
 	t.sla_policy_id, t.first_response_due_at, t.resolution_due_at, t.first_responded_at, t.solved_at, t.snoozed_until,
 	t.last_message_at, t.last_customer_message_at, t.last_message_preview, t.message_count, t.spam,
-	t.csat_score, t.csat_comment, t.custom, t.created_at, t.updated_at,
+	t.csat_score, t.csat_comment, t.custom, t.fields, t.created_at, t.updated_at,
 	c.id, c.email, c.name, c.avatar_url,
 	u.id, u.name, u.email, u.avatar_url,
-	COALESCE((SELECT json_agg(json_build_object('id', g.id, 'name', g.name) ORDER BY g.name)
-		FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = t.id), '[]')
+	` + TagRefsSQL("ticket_tags", "lt.ticket_id = t.id") + `
 FROM tickets t
 LEFT JOIN contacts c ON c.id = t.contact_id
 LEFT JOIN users u ON u.id = t.assignee_id`
@@ -73,7 +72,7 @@ func ScanTicket(row pgx.Row) (Ticket, error) {
 	err := row.Scan(&t.ID, &t.Number, &t.Subject, &t.Status, &t.Priority, &t.Channel, &t.MailboxID, &t.TeamID,
 		&slaID, &frDue, &resDue, &t.FirstRespondedAt, &t.SolvedAt, &t.SnoozedUntil,
 		&t.LastMessageAt, &t.LastCustomerMessageAt, &t.LastMessagePreview, &t.MessageCount, &t.Spam,
-		&csatScore, &csatComment, &t.Custom, &t.CreatedAt, &t.UpdatedAt,
+		&csatScore, &csatComment, &t.Custom, &t.Fields, &t.CreatedAt, &t.UpdatedAt,
 		&cID, &cEmail, &cName, &cAvatar, &uID, &uName, &uEmail, &uAvatar, &tags)
 	if err != nil {
 		return t, err
@@ -97,7 +96,10 @@ func ScanTicket(row pgx.Row) (Ticket, error) {
 	if t.Custom == nil {
 		t.Custom = map[string]any{}
 	}
-	t.Tags = []Tag{}
+	if t.Fields == nil {
+		t.Fields = map[string]any{}
+	}
+	t.Tags = []TagRef{}
 	if err := json.Unmarshal(tags, &t.Tags); err != nil {
 		return t, err
 	}
@@ -174,18 +176,27 @@ func ListMessages(ctx context.Context, q db.Querier, wid, ticketID uuid.UUID, pu
 	return out, err
 }
 
-const ContactSelect = `SELECT ct.id, ct.email, ct.name, ct.phone, ct.avatar_url, ct.external_id, ct.notes, ct.custom,
+var ContactSelect = `SELECT ct.id, ct.email, ct.name, ct.phone, ct.avatar_url, ct.external_id, ct.notes, ct.custom,
 	ct.blocked, ct.created_at, ct.updated_at, co.id, co.name, co.domain,
-	(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL)
+	(SELECT count(*) FROM tickets tk WHERE tk.contact_id = ct.id AND tk.deleted_at IS NULL),
+	ct.fields, ` + TagRefsSQL("contact_tags", "lt.contact_id = ct.id") + `
 FROM contacts ct LEFT JOIN companies co ON co.id = ct.company_id`
 
 func ScanContact(row pgx.Row) (Contact, error) {
 	var c Contact
 	var coID *uuid.UUID
 	var coName, coDomain *string
+	var tags []byte
 	err := row.Scan(&c.ID, &c.Email, &c.Name, &c.Phone, &c.AvatarURL, &c.ExternalID, &c.Notes, &c.Custom,
-		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &c.TicketCount)
+		&c.Blocked, &c.CreatedAt, &c.UpdatedAt, &coID, &coName, &coDomain, &c.TicketCount, &c.Fields, &tags)
 	if err != nil {
+		return c, err
+	}
+	if c.Fields == nil {
+		c.Fields = map[string]any{}
+	}
+	c.Tags = []TagRef{}
+	if err := json.Unmarshal(tags, &c.Tags); err != nil {
 		return c, err
 	}
 	if coID != nil {

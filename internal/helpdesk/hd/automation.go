@@ -2,7 +2,9 @@ package hd
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -18,7 +20,7 @@ var (
 	AutomationTriggers = []string{jobs.TriggerTicketCreated, jobs.TriggerCustomerReplied, jobs.TriggerAgentReplied, jobs.TriggerTicketUpdated}
 	ConditionFields    = []string{"subject", "body", "from_email", "channel", "mailbox_id", "priority", "status", "tag", "sentiment"}
 	ConditionOps       = []string{"contains", "not_contains", "equals", "not_equals"}
-	ActionTypes        = []string{"set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam", "ai_triage"}
+	ActionTypes        = []string{"set_status", "set_priority", "assign_user", "assign_team", "add_tag", "remove_tag", "send_reply", "add_note", "mark_spam", "ai_triage", "set_field"}
 	// Sentiments are the values triage writes to custom.ai_sentiment (contracts/ai.md).
 	Sentiments = []string{"positive", "neutral", "negative", "frustrated"}
 )
@@ -29,14 +31,27 @@ const (
 )
 
 type Condition struct {
-	Field string `json:"field" enum:"subject,body,from_email,channel,mailbox_id,priority,status,tag,sentiment"`
-	Op    string `json:"op" enum:"contains,not_contains,equals,not_equals,eq" doc:"eq is an alias of equals"`
+	Field string `json:"field" maxLength:"60" doc:"subject, body, from_email, channel, mailbox_id, priority, status, tag, sentiment, field.<key> (ticket custom field) or contact.field.<key>"`
+	Op    string `json:"op" enum:"contains,not_contains,equals,not_equals,eq,ne,gt,gte,lt,lte,any,all,none,set,not_set" doc:"eq is an alias of equals, ne of not_equals; custom fields take the ops of their type"`
 	Value string `json:"value" maxLength:"500"`
 }
 
 type Action struct {
-	Type  string `json:"type" enum:"set_status,set_priority,assign_user,assign_team,add_tag,remove_tag,send_reply,add_note,mark_spam,ai_triage"`
+	Type  string `json:"type" enum:"set_status,set_priority,assign_user,assign_team,add_tag,remove_tag,send_reply,add_note,mark_spam,ai_triage,set_field"`
 	Value string `json:"value" maxLength:"20000"`
+	// Field is the ticket custom field key of set_field.
+	Field string `json:"field,omitempty" maxLength:"40"`
+}
+
+// ConditionFieldKey splits "field.<key>" (ticket) and "contact.field.<key>" (contact) conditions.
+func ConditionFieldKey(field string) (entity, key string, ok bool) {
+	if k, found := strings.CutPrefix(field, "contact.field."); found {
+		return domain.FieldEntityContact, k, true
+	}
+	if k, found := strings.CutPrefix(field, "field."); found {
+		return domain.FieldEntityTicket, k, true
+	}
+	return "", "", false
 }
 
 // ValidateConditions checks conditions against the enums and the workspace.
@@ -45,10 +60,34 @@ func ValidateConditions(ctx context.Context, q db.Querier, wid uuid.UUID, cs []C
 		return nil, httpx.Validation("an automation can have at most 20 conditions")
 	}
 	out := make([]Condition, 0, len(cs))
+	defs := map[string]domain.FieldDefs{}
 	for _, c := range cs {
 		c.Field, c.Op = strings.TrimSpace(c.Field), strings.TrimSpace(c.Op)
-		if c.Op == "eq" {
+		if entity, key, ok := ConditionFieldKey(c.Field); ok {
+			if defs[entity] == nil {
+				d, err := domain.LoadFieldDefs(ctx, q, wid, entity)
+				if err != nil {
+					return nil, err
+				}
+				defs[entity] = d
+			}
+			f, ok := defs[entity][key]
+			if !ok {
+				return nil, httpx.Validation(fmt.Sprintf("condition field %q is not a custom field of %ss", Truncate(c.Field, 60), entity))
+			}
+			v, err := domain.CheckFieldOperand(f, domain.NormalizeOp(c.Op), c.Value, false)
+			if err != nil {
+				return nil, err
+			}
+			c.Op, c.Value = domain.NormalizeOp(c.Op), v
+			out = append(out, c)
+			continue
+		}
+		switch c.Op {
+		case "eq":
 			c.Op = "equals"
+		case "ne":
+			c.Op = "not_equals"
 		}
 		if !slices.Contains(ConditionFields, c.Field) {
 			return nil, httpx.Validation("condition field must be one of " + strings.Join(ConditionFields, ", "))
@@ -145,6 +184,21 @@ func ValidateActions(ctx context.Context, q db.Querier, wid uuid.UUID, as []Acti
 			}
 		case "ai_triage":
 			a.Value = ""
+		case "set_field":
+			a.Field = strings.TrimSpace(a.Field)
+			defs, err := domain.LoadFieldDefs(ctx, q, wid, domain.FieldEntityTicket)
+			if err != nil {
+				return nil, err
+			}
+			f, ok := defs[a.Field]
+			if !ok || f.Archived {
+				return nil, httpx.Validation("set_field needs field, the key of an active ticket custom field")
+			}
+			v, err := domain.ParseFieldString(f, a.Value, domain.MemberChecker(ctx, q, wid))
+			if err != nil {
+				return nil, err
+			}
+			a.Value = FieldString(v)
 		case "mark_spam":
 			switch a.Value {
 			case "", "true":
@@ -156,7 +210,33 @@ func ValidateActions(ctx context.Context, q db.Querier, wid uuid.UUID, as []Acti
 		default:
 			return nil, httpx.Validation("action type must be one of " + strings.Join(ActionTypes, ", "))
 		}
+		if a.Type != "set_field" {
+			a.Field = ""
+		}
 		out = append(out, a)
 	}
 	return out, nil
+}
+
+// FieldString is the string form of a stored field value (set_field action values).
+func FieldString(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case bool:
+		return strconv.FormatBool(x)
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case []string:
+		return strings.Join(x, ",")
+	case []any:
+		parts := make([]string, 0, len(x))
+		for _, e := range x {
+			parts = append(parts, fmt.Sprint(e))
+		}
+		return strings.Join(parts, ",")
+	}
+	return fmt.Sprint(v)
 }

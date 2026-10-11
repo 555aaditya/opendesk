@@ -51,11 +51,14 @@ type Patch struct {
 	AddTags    []string
 	RemoveTags []string
 	Custom     map[string]any // shallow merge; a null value removes the key
+	Fields     map[string]any // custom field values, merged; null clears
+	// CreateLabels lets AddTags/Tags create missing labels (settings.label_creation).
+	CreateLabels bool
 }
 
 func (p Patch) empty() bool {
 	return p.Subject == nil && p.Status == nil && p.Priority == nil && !p.Assignee.Set && !p.Team.Set && !p.Snooze.Set &&
-		p.Spam == nil && p.Tags == nil && len(p.AddTags) == 0 && len(p.RemoveTags) == 0 && p.Custom == nil
+		p.Spam == nil && p.Tags == nil && len(p.AddTags) == 0 && len(p.RemoveTags) == 0 && p.Custom == nil && p.Fields == nil
 }
 
 type ticketState struct {
@@ -68,13 +71,14 @@ type ticketState struct {
 	Snoozed  *time.Time
 	Spam     bool
 	Custom   map[string]any
+	Fields   map[string]any
 }
 
 func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState, error) {
 	var s ticketState
-	err := tx.QueryRow(ctx, `SELECT number, subject, status, priority, assignee_id, team_id, snoozed_until, spam, custom
+	err := tx.QueryRow(ctx, `SELECT number, subject, status, priority, assignee_id, team_id, snoozed_until, spam, custom, fields
 		FROM tickets WHERE workspace_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, wid, tid).
-		Scan(&s.Number, &s.Subject, &s.Status, &s.Priority, &s.Assignee, &s.Team, &s.Snoozed, &s.Spam, &s.Custom)
+		Scan(&s.Number, &s.Subject, &s.Status, &s.Priority, &s.Assignee, &s.Team, &s.Snoozed, &s.Spam, &s.Custom, &s.Fields)
 	if err != nil {
 		if db.IsNotFound(err) {
 			return s, httpx.NotFound("Ticket")
@@ -84,6 +88,9 @@ func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState
 	if s.Custom == nil {
 		s.Custom = map[string]any{}
 	}
+	if s.Fields == nil {
+		s.Fields = map[string]any{}
+	}
 	return s, nil
 }
 
@@ -91,6 +98,12 @@ func lockTicket(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID) (ticketState
 type applyOpts struct {
 	// Enqueue queues the ticket_updated trigger (automations do not, to avoid loops).
 	Enqueue bool
+	// RequireFields refuses solving or closing while a required_on_solve field is empty
+	// (people and API keys; automations, merges and system jobs are not held back).
+	RequireFields bool
+	// Lenient skips unknown or not applicable labels and archived or removed fields
+	// instead of refusing (automations).
+	Lenient bool
 }
 
 // applyPatch validates and applies p in tx: it logs an activity per change, publishes
@@ -235,10 +248,45 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 		}
 	}
 
+	var defs domain.FieldDefs
+	if p.Fields != nil || (o.RequireFields && p.Status != nil && closing(next.Status) && !closing(cur.Status)) {
+		if defs, err = domain.LoadFieldDefs(ctx, tx, wid, domain.FieldEntityTicket); err != nil {
+			return nil, err
+		}
+	}
+	if p.Fields != nil {
+		patch := p.Fields
+		if o.Lenient {
+			patch = map[string]any{}
+			for k, v := range p.Fields {
+				if f, ok := defs[k]; ok && !f.Archived {
+					patch[k] = v
+				}
+			}
+		}
+		merged, fc, err := domain.MergeFields(defs, cur.Fields, patch, domain.MemberChecker(ctx, tx, wid))
+		if err != nil {
+			return nil, err
+		}
+		if len(fc) > 0 {
+			next.Fields = merged
+			changes = append(changes, "fields")
+			for _, c := range fc {
+				acts = append(acts, act{"field_changed", map[string]any{"key": c.Key, "name": c.Name, "from": c.From, "to": c.To}})
+			}
+		}
+	}
+	if o.RequireFields && p.Status != nil && closing(next.Status) && !closing(cur.Status) {
+		if err := domain.CheckRequiredOnSolve(defs, next.Fields); err != nil {
+			return nil, err
+		}
+	}
+
 	// Tags: replace, add, remove (by name).
 	tagChanged := false
 	if p.Tags != nil || len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
-		added, removed, err := applyTags(ctx, tx, wid, tid, p)
+		added, removed, err := domain.ApplyTags(ctx, tx, wid, domain.TicketLabels, tid, domain.TagOps{Replace: p.Tags,
+			Add: p.AddTags, Remove: p.RemoveTags, Create: p.CreateLabels, Lenient: o.Lenient})
 		if err != nil {
 			return nil, err
 		}
@@ -259,12 +307,12 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 	}
 	if len(changes) > 1 || !tagChanged {
 		_, err = tx.Exec(ctx, `UPDATE tickets SET subject = $3, status = $4, priority = $5, assignee_id = $6, team_id = $7,
-			snoozed_until = $8, spam = $9, custom = $10,
+			snoozed_until = $8, spam = $9, custom = $10, fields = $11,
 			solved_at = CASE WHEN $4 IN ('solved', 'closed') THEN COALESCE(solved_at, now()) ELSE NULL END,
 			closed_at = CASE WHEN $4 = 'closed' THEN COALESCE(closed_at, now()) ELSE NULL END,
 			updated_at = now()
 			WHERE workspace_id = $1 AND id = $2`,
-			wid, tid, next.Subject, next.Status, next.Priority, next.Assignee, next.Team, next.Snoozed, next.Spam, next.Custom)
+			wid, tid, next.Subject, next.Status, next.Priority, next.Assignee, next.Team, next.Snoozed, next.Spam, next.Custom, next.Fields)
 	} else {
 		_, err = tx.Exec(ctx, `UPDATE tickets SET updated_at = now() WHERE workspace_id = $1 AND id = $2`, wid, tid)
 	}
@@ -305,88 +353,9 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 	return changes, nil
 }
 
-// applyTags changes the ticket's tags and returns the names added and removed.
-func applyTags(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, p Patch) (added, removed []string, err error) {
-	rows, err := tx.Query(ctx, `SELECT g.id, g.name FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id
-		WHERE tt.ticket_id = $1 AND g.workspace_id = $2`, tid, wid)
-	if err != nil {
-		return nil, nil, err
-	}
-	current := map[uuid.UUID]string{}
-	for rows.Next() {
-		var id uuid.UUID
-		var name string
-		if err := rows.Scan(&id, &name); err != nil {
-			rows.Close()
-			return nil, nil, err
-		}
-		current[id] = name
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-
-	want := map[uuid.UUID]bool{}
-	if p.Tags != nil {
-		if len(*p.Tags) > 50 {
-			return nil, nil, httpx.Validation("a ticket can have at most 50 tags")
-		}
-		ids, err := hd.EnsureTags(ctx, tx, wid, *p.Tags)
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, id := range ids {
-			want[id] = true
-		}
-	} else {
-		for id := range current {
-			want[id] = true
-		}
-	}
-	if len(p.AddTags) > 0 {
-		ids, err := hd.EnsureTags(ctx, tx, wid, p.AddTags)
-		if err != nil {
-			return nil, nil, err
-		}
-		for _, id := range ids {
-			want[id] = true
-		}
-	}
-	for _, name := range p.RemoveTags {
-		var id uuid.UUID
-		err := tx.QueryRow(ctx, `SELECT id FROM tags WHERE workspace_id = $1 AND lower(name) = lower($2)`, wid, strings.TrimSpace(name)).Scan(&id)
-		if err == nil {
-			delete(want, id)
-		} else if !db.IsNotFound(err) {
-			return nil, nil, err
-		}
-	}
-	for id := range want {
-		if _, ok := current[id]; ok {
-			continue
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, tid, id); err != nil {
-			return nil, nil, err
-		}
-		var name string
-		if err := tx.QueryRow(ctx, `SELECT name FROM tags WHERE id = $1`, id).Scan(&name); err != nil {
-			return nil, nil, err
-		}
-		added = append(added, name)
-	}
-	for id, name := range current {
-		if want[id] {
-			continue
-		}
-		if _, err := tx.Exec(ctx, `DELETE FROM ticket_tags WHERE ticket_id = $1 AND tag_id = $2`, tid, id); err != nil {
-			return nil, nil, err
-		}
-		removed = append(removed, name)
-	}
-	slices.Sort(added)
-	slices.Sort(removed)
-	return added, removed, nil
+// closing reports a solved or closed status.
+func closing(status string) bool {
+	return status == domain.StatusSolved || status == domain.StatusClosed
 }
 
 func sameID(a, b *uuid.UUID) bool {

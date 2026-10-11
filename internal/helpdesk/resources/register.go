@@ -16,6 +16,8 @@ import (
 // Register adds this package's routes.
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	registerTags(d, api)
+	registerTagGroups(d, api)
+	registerCustomFields(d, api)
 	registerSavedReplies(d, api)
 	registerViews(d, api)
 	registerSLA(d, api)

@@ -16,27 +16,42 @@ type page[T any] struct {
 }
 
 type tag struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Color       string   `json:"color"`
+	Description string   `json:"description"`
+	GroupID     *string  `json:"group_id"`
+	Archived    bool     `json:"archived"`
+	AppliesTo   []string `json:"applies_to"`
+	Usage       struct {
+		Tickets int `json:"tickets"`
+	} `json:"usage"`
 }
 
 func TestTags(t *testing.T) {
 	e := hdtest.New(t, resources.Register)
 	ws := e.NewWorkspace()
 	other := e.NewWorkspace()
-	a := ws.Agent.As(ws)
+	a := ws.Admin.As(ws)
 
 	var bug tag
 	e.Do("POST", "/v1/tags", a, map[string]any{"name": "  bug  "}).Want(t, 201).JSON(t, &bug)
-	if bug.Name != "bug" {
+	if bug.Name != "bug" || bug.Color == "" || len(bug.AppliesTo) != 3 {
 		t.Fatal(bug)
 	}
 	e.Do("POST", "/v1/tags", a, map[string]any{"name": "BUG"}).Want(t, 409)
 	e.Do("POST", "/v1/tags", a, map[string]any{"name": "<b>x</b>"}).Want(t, 422)
 	e.Do("POST", "/v1/tags", a, map[string]any{"name": ""}).Want(t, 422)
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "x", "color": "chartreuse"}).Want(t, 422)
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "x", "description": "<script>"}).Want(t, 422)
 	e.Do("POST", "/v1/tags", ws.Viewer.As(ws), map[string]any{"name": "nope"}).Want(t, 403)
+	e.Do("POST", "/v1/tags", ws.Agent.As(ws), map[string]any{"name": "nope"}).Want(t, 403)
 	var vip tag
-	e.Do("POST", "/v1/tags", a, map[string]any{"name": "VIP"}).Want(t, 201).JSON(t, &vip)
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "VIP", "color": "amber", "description": "Look after", "applies_to": []string{"contacts", "tickets"}}).
+		Want(t, 201).JSON(t, &vip)
+	if vip.Color != "amber" || vip.Description != "Look after" || !slices.Equal(vip.AppliesTo, []string{"tickets", "contacts"}) {
+		t.Fatal(vip)
+	}
 
 	var p page[tag]
 	e.Do("GET", "/v1/tags", ws.Viewer.As(ws), nil).Want(t, 200).JSON(t, &p)
@@ -44,14 +59,23 @@ func TestTags(t *testing.T) {
 		t.Fatalf("list %+v", p)
 	}
 	e.Do("PATCH", "/v1/tags/"+vip.ID, a, map[string]any{"name": "Bug"}).Want(t, 409)
-	e.Do("PATCH", "/v1/tags/"+vip.ID, a, map[string]any{"name": "vip"}).Want(t, 200)
+	e.Do("PATCH", "/v1/tags/"+vip.ID, a, map[string]any{"name": "vip", "archived": true}).Want(t, 200)
+	e.Do("GET", "/v1/tags?archived=false", ws.Viewer.As(ws), nil).Want(t, 200).JSON(t, &p)
+	if len(p.Data) != 1 || p.Data[0].Name != "bug" {
+		t.Fatalf("unarchived %+v", p)
+	}
 	e.Do("PATCH", "/v1/tags/"+vip.ID, other.Owner.As(other), map[string]any{"name": "x"}).Want(t, 404)
 	e.Do("DELETE", "/v1/tags/"+vip.ID, other.Owner.As(other), nil).Want(t, 404)
 
-	// Delete cascades to tickets.
+	// Usage counts, then delete cascades to tickets.
 	tid := ids.New()
 	e.Exec(`INSERT INTO tickets (id, workspace_id, number, channel) VALUES ($1, $2, 1, 'api')`, tid, ws.ID)
 	e.Exec(`INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2)`, tid, bug.ID)
+	var got tag
+	e.Do("GET", "/v1/tags/"+bug.ID, ws.Viewer.As(ws), nil).Want(t, 200).JSON(t, &got)
+	if got.Usage.Tickets != 1 {
+		t.Fatalf("usage %+v", got)
+	}
 	e.Do("DELETE", "/v1/tags/"+bug.ID, a, nil).Want(t, 204)
 	var n int
 	e.Scalar(`SELECT count(*) FROM ticket_tags WHERE ticket_id = $1`, &n, tid)
@@ -61,11 +85,205 @@ func TestTags(t *testing.T) {
 
 	key := e.APIKey(ws, "tickets:read")
 	e.Do("GET", "/v1/tags", hdtest.Auth{Bearer: key}, nil).Want(t, 200)
+	e.Do("GET", "/v1/tags", hdtest.Auth{Bearer: e.APIKey(ws, "settings:read")}, nil).Want(t, 200)
 	e.Do("POST", "/v1/tags", hdtest.Auth{Bearer: key}, map[string]any{"name": "k"}).Want(t, 403)
-	e.Do("POST", "/v1/tags", hdtest.Auth{Bearer: e.APIKey(ws, "tickets:write")}, map[string]any{"name": "k"}).Want(t, 201)
+	e.Do("POST", "/v1/tags", hdtest.Auth{Bearer: e.APIKey(ws, "tickets:write")}, map[string]any{"name": "k"}).Want(t, 403)
+	e.Do("POST", "/v1/tags", hdtest.Auth{Bearer: e.APIKey(ws, "settings:write")}, map[string]any{"name": "k"}).Want(t, 201)
 
 	types, _ := e.Events(ws.ID, 0)
 	for _, w := range []string{"tag.created", "tag.updated", "tag.deleted"} {
+		if !slices.Contains(types, w) {
+			t.Errorf("missing %s", w)
+		}
+	}
+	e.Scalar(`SELECT count(*) FROM audit_logs WHERE workspace_id = $1 AND action LIKE 'tag.%'`, &n, ws.ID)
+	if n < 4 {
+		t.Fatalf("audit entries %d", n)
+	}
+}
+
+type tagGroup struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Color     *string `json:"color"`
+	Exclusive bool    `json:"exclusive"`
+	Position  int     `json:"position"`
+	TagCount  int     `json:"tag_count"`
+}
+
+func TestTagGroupsReorderAndMerge(t *testing.T) {
+	e := hdtest.New(t, resources.Register)
+	ws := e.NewWorkspace()
+	a := ws.Admin.As(ws)
+
+	var g tagGroup
+	e.Do("POST", "/v1/tag-groups", a, map[string]any{"name": "Type", "exclusive": true, "color": "blue"}).Want(t, 201).JSON(t, &g)
+	if !g.Exclusive || g.Color == nil || *g.Color != "blue" {
+		t.Fatal(g)
+	}
+	e.Do("POST", "/v1/tag-groups", a, map[string]any{"name": "type"}).Want(t, 409)
+	e.Do("POST", "/v1/tag-groups", ws.Agent.As(ws), map[string]any{"name": "Nope"}).Want(t, 403)
+	var g2 tagGroup
+	e.Do("POST", "/v1/tag-groups", a, map[string]any{"name": "Area"}).Want(t, 201).JSON(t, &g2)
+	if g2.Position != 1 {
+		t.Fatal(g2)
+	}
+	var gp page[tagGroup]
+	e.Do("POST", "/v1/tag-groups/reorder", a, map[string]any{"ids": []string{g2.ID, g.ID}}).Want(t, 200).JSON(t, &gp)
+	if gp.Data[0].ID != g2.ID {
+		t.Fatalf("reorder %+v", gp)
+	}
+	e.Do("POST", "/v1/tag-groups/reorder", a, map[string]any{"ids": []string{ids.New().String()}}).Want(t, 422)
+
+	var bug, defect, question tag
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "Bug", "group_id": g.ID}).Want(t, 201).JSON(t, &bug)
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "Defect"}).Want(t, 201).JSON(t, &defect)
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "Question", "group_id": g.ID}).Want(t, 201).JSON(t, &question)
+	e.Do("POST", "/v1/tags", a, map[string]any{"name": "X", "group_id": ids.New().String()}).Want(t, 422)
+
+	var tp page[tag]
+	e.Do("POST", "/v1/tags/reorder", a, map[string]any{"ids": []string{question.ID, bug.ID}}).Want(t, 200).JSON(t, &tp)
+	e.Do("GET", "/v1/tags?group_id="+g.ID, ws.Viewer.As(ws), nil).Want(t, 200).JSON(t, &tp)
+	if len(tp.Data) != 2 || tp.Data[0].Name != "Question" {
+		t.Fatalf("group list %+v", tp)
+	}
+
+	// An automation and a view name "Defect"; merging into Bug rewrites them.
+	aid := ids.New()
+	e.Exec(`INSERT INTO automations (id, workspace_id, name, trigger, conditions, actions, enabled, position)
+		VALUES ($1, $2, 'a', 'ticket_created', '[{"field":"tag","op":"equals","value":"defect"}]', '[{"type":"add_tag","value":"Defect"}]', true, 0)`, aid, ws.ID)
+	vid := ids.New()
+	e.Exec(`INSERT INTO views (id, workspace_id, name, filters, position) VALUES ($1, $2, 'v', '{"tag":"Defect"}', 0)`, vid, ws.ID)
+	// A ticket with Defect and Question: after merging into Bug (exclusive Type), it keeps only Bug.
+	tid := ids.New()
+	e.Exec(`INSERT INTO tickets (id, workspace_id, number, channel) VALUES ($1, $2, 1, 'api')`, tid, ws.ID)
+	e.Exec(`INSERT INTO ticket_tags (ticket_id, tag_id) VALUES ($1, $2), ($1, $3)`, tid, defect.ID, question.ID)
+
+	e.Do("POST", "/v1/tags/"+defect.ID+"/merge", a, map[string]any{"into": defect.ID}).Want(t, 422)
+	var into tag
+	e.Do("POST", "/v1/tags/"+defect.ID+"/merge", a, map[string]any{"into": bug.ID}).Want(t, 200).JSON(t, &into)
+	if into.ID != bug.ID || into.Usage.Tickets != 1 {
+		t.Fatalf("merged %+v", into)
+	}
+	var names []string
+	rows, _ := e.D.DB.Pool.Query(e.Ctx, `SELECT g.name FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = $1`, tid)
+	for rows.Next() {
+		var s string
+		_ = rows.Scan(&s)
+		names = append(names, s)
+	}
+	rows.Close()
+	if !slices.Equal(names, []string{"Bug"}) {
+		t.Fatalf("ticket labels %v", names)
+	}
+	var conds, acts, filters string
+	e.Scalar(`SELECT conditions::text FROM automations WHERE id = $1`, &conds, aid)
+	e.Scalar(`SELECT actions::text FROM automations WHERE id = $1`, &acts, aid)
+	e.Scalar(`SELECT filters::text FROM views WHERE id = $1`, &filters, vid)
+	if !strings.Contains(conds, `"Bug"`) || !strings.Contains(acts, `"Bug"`) || !strings.Contains(filters, `"Bug"`) {
+		t.Fatalf("refs not rewritten: %s %s %s", conds, acts, filters)
+	}
+
+	// Deleting a group ungroups its labels.
+	e.Do("DELETE", "/v1/tag-groups/"+g.ID, a, nil).Want(t, 204)
+	var got tag
+	e.Do("GET", "/v1/tags/"+bug.ID, a, nil).Want(t, 200).JSON(t, &got)
+	if got.GroupID != nil {
+		t.Fatal("still grouped")
+	}
+	types, _ := e.Events(ws.ID, 0)
+	for _, w := range []string{"tag_group.created", "tag_group.updated", "tag_group.deleted", "tag.merged"} {
+		if !slices.Contains(types, w) {
+			t.Errorf("missing %s", w)
+		}
+	}
+}
+
+type customField struct {
+	ID              string `json:"id"`
+	Entity          string `json:"entity"`
+	Key             string `json:"key"`
+	Name            string `json:"name"`
+	Type            string `json:"type"`
+	RequiredOnSolve bool   `json:"required_on_solve"`
+	Archived        bool   `json:"archived"`
+	Position        int    `json:"position"`
+	Options         []struct {
+		ID    string `json:"id"`
+		Label string `json:"label"`
+		Color string `json:"color"`
+	} `json:"options"`
+}
+
+func TestCustomFields(t *testing.T) {
+	e := hdtest.New(t, resources.Register)
+	ws := e.NewWorkspace()
+	other := e.NewWorkspace()
+	a := ws.Admin.As(ws)
+
+	var plan customField
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "name": "Plan", "type": "select",
+		"options": []map[string]any{{"label": "Free"}, {"label": "Pro plan", "color": "violet"}}, "required_on_solve": true}).
+		Want(t, 201).JSON(t, &plan)
+	if plan.Key != "plan" || len(plan.Options) != 2 || plan.Options[1].ID != "pro-plan" || plan.Options[0].Color != "gray" {
+		t.Fatalf("%+v", plan)
+	}
+	var plan2 customField
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "name": "Plan", "type": "text"}).Want(t, 201).JSON(t, &plan2)
+	if plan2.Key != "plan_2" || plan2.Position != 1 {
+		t.Fatalf("%+v", plan2)
+	}
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "key": "plan", "name": "P", "type": "text"}).Want(t, 409)
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "key": "Bad Key", "name": "P", "type": "text"}).Want(t, 422)
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "name": "<b>", "type": "text"}).Want(t, 422)
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "name": "T", "type": "text", "options": []map[string]any{{"label": "x"}}}).Want(t, 422)
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "contact", "name": "Tier", "type": "text", "required_on_solve": true}).Want(t, 422)
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "name": "T", "type": "select",
+		"options": []map[string]any{{"id": "a", "label": "A"}, {"id": "a", "label": "B"}}}).Want(t, 422)
+	e.Do("POST", "/v1/custom-fields", ws.Agent.As(ws), map[string]any{"entity": "ticket", "name": "X", "type": "text"}).Want(t, 403)
+
+	// Removing an option clears it from stored values.
+	tid := ids.New()
+	e.Exec(`INSERT INTO tickets (id, workspace_id, number, channel, fields) VALUES ($1, $2, 1, 'api', '{"plan": "free"}')`, tid, ws.ID)
+	e.Do("PATCH", "/v1/custom-fields/"+plan.ID, a, map[string]any{"options": []map[string]any{{"id": "pro-plan", "label": "Pro"}}}).Want(t, 200)
+	var fields string
+	e.Scalar(`SELECT fields::text FROM tickets WHERE id = $1`, &fields, tid)
+	if fields != "{}" {
+		t.Fatalf("fields %s", fields)
+	}
+	e.Do("PATCH", "/v1/custom-fields/"+plan.ID, a, map[string]any{"type": "text"}).Want(t, 422)
+	e.Do("PATCH", "/v1/custom-fields/"+plan.ID, other.Owner.As(other), map[string]any{"name": "x"}).Want(t, 404)
+
+	var p page[customField]
+	e.Do("POST", "/v1/custom-fields/reorder", a, map[string]any{"entity": "ticket", "ids": []string{plan2.ID, plan.ID}}).Want(t, 200).JSON(t, &p)
+	if p.Data[0].ID != plan2.ID {
+		t.Fatalf("%+v", p)
+	}
+	e.Do("GET", "/v1/custom-fields?entity=ticket", ws.Viewer.As(ws), nil).Want(t, 200).JSON(t, &p)
+	if len(p.Data) != 2 {
+		t.Fatalf("%+v", p)
+	}
+	e.Do("GET", "/v1/custom-fields", other.Owner.As(other), nil).Want(t, 200).JSON(t, &p)
+	if len(p.Data) != 0 {
+		t.Fatal("leaked across workspaces")
+	}
+	e.Do("GET", "/v1/custom-fields", hdtest.Auth{Bearer: e.APIKey(ws, "contacts:read")}, nil).Want(t, 200)
+	e.Do("POST", "/v1/custom-fields", hdtest.Auth{Bearer: e.APIKey(ws, "tickets:write")}, map[string]any{"entity": "ticket", "name": "K", "type": "text"}).Want(t, 403)
+
+	// The 100 per entity limit.
+	for i := 0; i < 98; i++ {
+		e.Exec(`INSERT INTO custom_fields (workspace_id, entity, key, name, type) VALUES ($1, 'ticket', $2, 'F', 'text')`, ws.ID, hdtest.Fmt("f%d", i))
+	}
+	e.Do("POST", "/v1/custom-fields", a, map[string]any{"entity": "ticket", "name": "Over", "type": "text"}).Want(t, 422)
+
+	e.Exec(`UPDATE tickets SET fields = '{"plan_2": "x"}' WHERE id = $1`, tid)
+	e.Do("DELETE", "/v1/custom-fields/"+plan2.ID, a, nil).Want(t, 204)
+	e.Scalar(`SELECT fields::text FROM tickets WHERE id = $1`, &fields, tid)
+	if fields != "{}" {
+		t.Fatalf("fields after delete %s", fields)
+	}
+	types, _ := e.Events(ws.ID, 0)
+	for _, w := range []string{"custom_field.created", "custom_field.updated", "custom_field.deleted"} {
 		if !slices.Contains(types, w) {
 			t.Errorf("missing %s", w)
 		}

@@ -31,6 +31,10 @@ type contactWriteBody struct {
 	Notes      *string          `json:"notes,omitempty" maxLength:"10000"`
 	Custom     map[string]any   `json:"custom,omitempty"`
 	Blocked    *bool            `json:"blocked,omitempty"`
+	Tags       *[]string        `json:"tags,omitempty" maxItems:"50" doc:"Replaces the labels, by name"`
+	AddTags    []string         `json:"add_tags,omitempty" maxItems:"50" doc:"Adds these labels, by name"`
+	RemoveTags []string         `json:"remove_tags,omitempty" maxItems:"50" doc:"Removes these labels, by name"`
+	Fields     map[string]any   `json:"fields,omitempty" doc:"Custom field values by key, merged; null clears a field"`
 }
 
 type contactOut struct{ Body domain.Contact }
@@ -56,6 +60,7 @@ type contactRow struct {
 	Notes      string
 	Custom     map[string]any
 	Blocked    bool
+	Fields     map[string]any
 }
 
 // apply validates b and merges it into row.
@@ -160,14 +165,14 @@ func uniqueErr(err error) error {
 
 func registerContacts(d *deps.Deps, api huma.API) {
 	huma.Register(api, op("list-contacts", http.MethodGet, "/v1/contacts", "List contacts", "Contacts", 0),
-		func(ctx context.Context, in *struct {
-			httpx.ListParams
-			Q         string `query:"q" maxLength:"200" doc:"Search name, email and phone"`
-			CompanyID string `query:"company_id" doc:"Only contacts of this company"`
-		}) (*struct{ Body httpx.Page[domain.Contact] }, error) {
+		func(ctx context.Context, in *contactListIn) (*struct{ Body httpx.Page[domain.Contact] }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeContactsRead)
 			if err != nil {
 				return nil, httpx.Wrap(err)
+			}
+			extra, args, err := recordFilters(ctx, d.DB.Pool, p, domain.ContactLabels, domain.FieldEntityContact, "ct", in.Tag, in.fields, in.fieldsErr, 7)
+			if err != nil {
+				return nil, err
 			}
 			var cur contactCursor
 			if err := httpx.DecodeCursor(in.Cursor, &cur); err != nil {
@@ -187,11 +192,12 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			}
 			q := strings.TrimSpace(in.Q)
 			rows, err := d.DB.Pool.Query(ctx, domain.ContactSelect+` WHERE ct.workspace_id = $1
-				AND ($2 = '' OR ct.search @@ websearch_to_tsquery('simple', $2) OR ct.email::text ILIKE $3 OR ct.name ILIKE $3)
+				AND ($2 = '' OR ct.search @@ websearch_to_tsquery('simple', $2) OR ct.fields_search @@ websearch_to_tsquery('simple', $2)
+					OR ct.email::text ILIKE $3 OR ct.name ILIKE $3)
 				AND ($4::uuid IS NULL OR ct.company_id = $4)
-				AND ($5::timestamptz IS NULL OR (ct.created_at, ct.id) < ($5, $6))
+				AND ($5::timestamptz IS NULL OR (ct.created_at, ct.id) < ($5, $6))`+extra+`
 				ORDER BY ct.created_at DESC, ct.id DESC LIMIT $7`,
-				p.WorkspaceID, q, likePrefix(q), companyID, curT, cur.ID, in.Limit+1)
+				append([]any{p.WorkspaceID, q, likePrefix(q), companyID, curT, cur.ID, in.Limit + 1}, args...)...)
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
@@ -218,12 +224,18 @@ func registerContacts(d *deps.Deps, api huma.API) {
 				if row.Email == nil && row.Name == "" {
 					return httpx.Validation("a contact needs an email or a name")
 				}
+				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityContact, &row.Fields, in.Body.Fields); err != nil {
+					return err
+				}
 				id := ids.New()
 				if _, err := tx.Exec(ctx, `INSERT INTO contacts (id, workspace_id, email, name, phone, avatar_url, company_id,
-					external_id, notes, custom, blocked) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+					external_id, notes, custom, blocked, fields) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
 					id, p.WorkspaceID, row.Email, row.Name, row.Phone, row.AvatarURL, row.CompanyID, row.ExternalID,
-					row.Notes, row.Custom, row.Blocked); err != nil {
+					row.Notes, row.Custom, row.Blocked, row.Fields); err != nil {
 					return uniqueErr(err)
+				}
+				if err := applyLabels(ctx, tx, p, domain.ContactLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
+					return err
 				}
 				if c, err = domain.LoadContact(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err
@@ -275,9 +287,9 @@ func registerContacts(d *deps.Deps, api huma.API) {
 			var c domain.Contact
 			err = d.DB.Tx(ctx, func(tx pgx.Tx) error {
 				var row contactRow
-				err := tx.QueryRow(ctx, `SELECT email, name, phone, avatar_url, company_id, external_id, notes, custom, blocked
+				err := tx.QueryRow(ctx, `SELECT email, name, phone, avatar_url, company_id, external_id, notes, custom, blocked, fields
 					FROM contacts WHERE workspace_id = $1 AND id = $2 FOR UPDATE`, p.WorkspaceID, id).
-					Scan(&row.Email, &row.Name, &row.Phone, &row.AvatarURL, &row.CompanyID, &row.ExternalID, &row.Notes, &row.Custom, &row.Blocked)
+					Scan(&row.Email, &row.Name, &row.Phone, &row.AvatarURL, &row.CompanyID, &row.ExternalID, &row.Notes, &row.Custom, &row.Blocked, &row.Fields)
 				if db.IsNotFound(err) {
 					return httpx.NotFound("Contact")
 				}
@@ -290,11 +302,17 @@ func registerContacts(d *deps.Deps, api huma.API) {
 				if row.Email == nil && row.Name == "" {
 					return httpx.Validation("a contact needs an email or a name")
 				}
+				if err := applyFields(ctx, tx, p.WorkspaceID, domain.FieldEntityContact, &row.Fields, in.Body.Fields); err != nil {
+					return err
+				}
 				if _, err := tx.Exec(ctx, `UPDATE contacts SET email = $3, name = $4, phone = $5, avatar_url = $6, company_id = $7,
-					external_id = $8, notes = $9, custom = $10, blocked = $11, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
+					external_id = $8, notes = $9, custom = $10, blocked = $11, fields = $12, updated_at = now() WHERE workspace_id = $1 AND id = $2`,
 					p.WorkspaceID, id, row.Email, row.Name, row.Phone, row.AvatarURL, row.CompanyID, row.ExternalID,
-					row.Notes, row.Custom, row.Blocked); err != nil {
+					row.Notes, row.Custom, row.Blocked, row.Fields); err != nil {
 					return uniqueErr(err)
+				}
+				if err := applyLabels(ctx, tx, p, domain.ContactLabels, id, in.Body.Tags, in.Body.AddTags, in.Body.RemoveTags); err != nil {
+					return err
 				}
 				if c, err = domain.LoadContact(ctx, tx, p.WorkspaceID, id); err != nil {
 					return err

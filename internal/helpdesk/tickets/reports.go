@@ -212,10 +212,11 @@ func search(ctx context.Context, q db.Querier, p *auth.Principal, query string) 
 	}
 	if allowed(auth.ScopeContactsRead) {
 		args := []any{p.WorkspaceID, query, strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(query)) + "%"}
-		cond := `ct.search @@ websearch_to_tsquery('simple', $2) OR lower(ct.email::text) LIKE $3 OR lower(ct.name) LIKE $3`
+		cond := `ct.search @@ websearch_to_tsquery('simple', $2) OR ct.fields_search @@ websearch_to_tsquery('simple', $2)
+			OR lower(ct.email::text) LIKE $3 OR lower(ct.name) LIKE $3`
 		if pq := prefixQuery(query); pq != "" {
 			args = append(args, pq)
-			cond += ` OR ct.search @@ to_tsquery('simple', $4)`
+			cond += ` OR ct.search @@ to_tsquery('simple', $4) OR ct.fields_search @@ to_tsquery('simple', $4)`
 		}
 		rows, err := q.Query(ctx, domain.ContactSelect+` WHERE ct.workspace_id = $1 AND (`+cond+`) ORDER BY ct.updated_at DESC, ct.id LIMIT 5`, args...)
 		if err != nil {

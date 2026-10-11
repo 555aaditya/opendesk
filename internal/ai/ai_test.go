@@ -876,3 +876,22 @@ func TestMaintainBackfill(t *testing.T) {
 }
 
 var _ = http.MethodGet
+
+func TestTriageRespectsExclusiveGroups(t *testing.T) {
+	e := newEnv(t, opts{})
+	e.Exec(`INSERT INTO tag_groups (id, workspace_id, name, exclusive) VALUES ($2, $1, 'Type', true)`, e.WS.ID, e.WS.ID)
+	e.Exec(`INSERT INTO tags (workspace_id, name, group_id) VALUES ($1, 'Billing', $1), ($1, 'Question', $1)`, e.WS.ID)
+	e.Exec(`INSERT INTO tags (workspace_id, name, archived) VALUES ($1, 'Old', true)`, e.WS.ID)
+	tk := e.ticket("Invoice", "Where is my invoice?")
+	e.Exec(`INSERT INTO ticket_tags (ticket_id, tag_id) SELECT $1, id FROM tags WHERE workspace_id = $2 AND name = 'Question'`, tk.ID, e.WS.ID)
+	e.F.set("triage", `{"tags":["billing","old"],"suggested_tags":[],"priority":"normal","sentiment":"neutral","language":"en","category":"billing","summary":"x"}`)
+	var out Triage
+	e.Do("POST", "/v1/tickets/"+tk.ID.String()+"/ai/triage", e.agent(), map[string]any{"apply": true}).Want(t, 200).JSON(t, &out)
+	got := e.loadTicket(tk.ID)
+	if len(got.Tags) != 1 || got.Tags[0].Name != "Billing" {
+		t.Fatalf("labels %+v", got.Tags)
+	}
+	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND actor_type = 'ai' AND type = 'untagged'`, tk.ID); n != 1 {
+		t.Fatalf("untagged activities %d", n)
+	}
+}
