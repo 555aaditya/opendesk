@@ -2,23 +2,15 @@
 
 import type { ReactNode } from "react";
 import { TagChip } from "@/components/ui/badge";
+import type { TagRef } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { tone, toneFor } from "@/lib/tones";
 
-/**
- * Labels embedded on contacts and companies (contract: `tags: TagRef[]`).
- * Read defensively until the web types carry them.
- */
-export type LabelRef = { id: string; name: string; color?: string | null; group_id?: string | null };
-export function labelsOf(x: object): LabelRef[] {
-  const t = (x as { tags?: unknown }).tags;
-  return Array.isArray(t) ? (t as LabelRef[]) : [];
-}
-/** Custom field values (contract: `fields`), with the legacy `custom` map merged in. */
-export function fieldsOf(x: { custom?: Record<string, unknown> }): [string, unknown][] {
-  const f = (x as { fields?: unknown }).fields;
-  const merged = { ...(x.custom ?? {}), ...(f && typeof f === "object" ? (f as Record<string, unknown>) : {}) };
-  return Object.entries(merged).filter(([, v]) => v !== null && v !== undefined && v !== "");
+export type LabelRef = TagRef;
+export const labelsOf = (x: { tags?: TagRef[] }): TagRef[] => x.tags ?? [];
+/** Legacy `custom` values whose keys have no field definition (those render as editable fields). */
+export function fieldsOf(x: { custom?: Record<string, unknown> }, defined: Set<string> = new Set()): [string, unknown][] {
+  return Object.entries(x.custom ?? {}).filter(([k, v]) => !defined.has(k) && v !== null && v !== undefined && v !== "");
 }
 /** "plan_tier" -> "Plan tier", for field keys without a definition. */
 export function fieldLabel(key: string): string {

@@ -19,8 +19,9 @@ import type { Company } from "@/lib/api/types";
 import { fullDate, relShort, shortDate } from "@/lib/format";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
-import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, Labels, labelsOf, MiniStat, none } from "./bits";
+import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, MiniStat, none } from "./bits";
 import { DrawerSkeleton } from "./ContactDrawer";
+import { RecordFields, RecordLabels, useRecordFields } from "./LabelsAndFields";
 import { dropCompany, patchCompany, restore, snapshot } from "./cache";
 
 export { CompanyGlyph } from "./bits";
@@ -38,6 +39,8 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const { data: c, isLoading, error } = useQuery({ ...q.company(companyId ?? ""), enabled: !!companyId });
+  const { data: defs } = useRecordFields("company");
+  const definedKeys = new Set((defs ?? []).map((f) => f.key));
   useEffect(() => {
     setTab("overview");
     setEditing(false);
@@ -84,7 +87,9 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
             <div className="min-w-0 flex-1">
               <h2 className="truncate text-[16px] font-semibold tracking-[-0.015em]">{c.name}</h2>
               <div className="mono mt-1 truncate text-xs text-fg-3">{c.domain || t("noDomain")}</div>
-              {labelsOf(c).length > 0 && <Labels labels={labelsOf(c)} max={6} className="mt-2.5 flex-wrap" />}
+              <div className="mt-2.5">
+                <RecordLabels kind="company" record={c} />
+              </div>
             </div>
             {canEdit && !editing && (
               <Button size="sm" variant="secondary" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(true)}>
@@ -125,11 +130,12 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
                   </TabsList>
                   <TabsContent value="overview" className="outline-none">
                     <div className="flex flex-col gap-6 px-5 py-4">
+                      <RecordFields kind="company" record={c} />
                       <dl className="divide-y divide-line-soft">
                         <Detail label={t("field.domain")} mono>
                           {c.domain || none}
                         </Detail>
-                        {fieldsOf(c).map(([k, v]) => (
+                        {fieldsOf(c, definedKeys).map(([k, v]) => (
                           <Detail key={k} label={fieldLabel(k)} mono>
                             {fieldText(v)}
                           </Detail>

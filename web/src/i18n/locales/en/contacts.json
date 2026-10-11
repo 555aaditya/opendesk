@@ -126,5 +126,10 @@
     "companyCreated": "Company created",
     "companySaved": "Company saved",
     "companyDeleted": "Company deleted"
+  },
+  "labels": {
+    "add": "Add label",
+    "edit": "Labels",
+    "saveFailed": "Couldn't save that change"
   }
 }

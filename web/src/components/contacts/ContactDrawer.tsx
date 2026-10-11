@@ -24,7 +24,8 @@ import { fullDate, relShort, shortDate } from "@/lib/format";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { CompanyPicker } from "./CompanyPicker";
-import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, Labels, labelsOf, MiniStat, none } from "./bits";
+import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, MiniStat, none } from "./bits";
+import { RecordFields, RecordLabels, useRecordFields } from "./LabelsAndFields";
 import { dropContact, patchContact, restore, snapshot } from "./cache";
 
 type Tab = "overview" | "tickets";
@@ -116,7 +117,9 @@ export function ContactDrawer({ contactId, onClose }: { contactId: string | null
                   </Link>
                 )}
               </div>
-              {labelsOf(c).length > 0 && <Labels labels={labelsOf(c)} max={6} className="mt-2.5 flex-wrap" />}
+              <div className="mt-2.5">
+                <RecordLabels kind="contact" record={c} />
+              </div>
             </div>
             {canEdit && !editing && (
               <Button size="sm" variant="secondary" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(true)}>
@@ -201,9 +204,11 @@ export function DrawerSkeleton() {
 
 function Overview({ c, onEdit }: { c: Contact; onEdit?: () => void }) {
   const { t } = useTranslation("contacts");
-  const fields = fieldsOf(c);
+  const { data: defs } = useRecordFields("contact");
+  const fields = fieldsOf(c, new Set((defs ?? []).map((f) => f.key)));
   return (
     <div className="flex flex-col gap-6 px-5 py-4">
+      <RecordFields kind="contact" record={c} />
       <dl className="divide-y divide-line-soft">
         <Detail label={t("field.phone")} mono>
           <span data-ph-mask>{c.phone || none}</span>
