@@ -109,13 +109,16 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/me` | → `{user: User, memberships: Membership[]}` |
 | PATCH | `/v1/me` | `{name?, avatar_url?}` → `User` |
 | POST | `/v1/me/password` | `{current_password, new_password}` → 204 |
-| GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | sessions list / revoke |
+| GET | `/v1/me/sessions` / DELETE `/v1/me/sessions/{id}` | `[{id, user_agent, ip, created_at, last_used_at, current}]` / revoke |
+| DELETE | `/v1/me` | `{password?, code?}` → 204. Deletes the account (refused while sole owner of a workspace with other members) |
 
 ### Workspace (owner: backend-core)
 | method | path | notes |
 | --- | --- | --- |
 | POST | `/v1/workspaces` | `{name}` → `Workspace` (caller becomes owner; seeds default views, tags, SLA) |
 | GET/PATCH | `/v1/workspace` | current workspace (`OD-Workspace`) `{name?, settings?}` |
+| DELETE | `/v1/workspace` | owner + MFA, `{confirm_name}` → 204, removes all workspace data |
+| POST | `/v1/workspace/transfer` | owner + MFA, `{user_id}` |
 | POST | `/v1/workspace/widget-secret/rotate` | admin → `{secret}` (shown once) |
 | GET | `/v1/members` · PATCH/DELETE `/v1/members/{user_id}` | `{role}` |
 | GET/POST | `/v1/invitations` · DELETE `/v1/invitations/{id}` | `{email, role}` |
@@ -129,7 +132,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/audit-logs` | admin, list |
 | GET | `/v1/events?since=<seq>&limit=` | → `{data: Envelope[], latest_seq, resync: bool}` filtered by caller visibility |
 | POST | `/v1/realtime/token` | → `{token, url, expires_at}` (users and keys with `realtime`) |
-| GET | `/v1/notifications` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` |
+| GET | `/v1/notifications` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}`. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached) with a `notification.created` event to `user:<uid>` |
 
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
