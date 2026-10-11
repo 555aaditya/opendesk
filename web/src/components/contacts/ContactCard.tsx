@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Building2, Mail, Pencil, Phone } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +17,7 @@ import { q } from "@/lib/queries";
  * the ticket side panel and anywhere a contact needs summarising.
  */
 export function ContactCard({ contactId, compact, excludeTicketId }: { contactId: string; compact?: boolean; excludeTicketId?: string }) {
+  const { t } = useTranslation("inbox");
   const { data: c, isLoading } = useQuery(q.contact(contactId));
   const tickets = useQuery(q.contactTickets(contactId));
 
@@ -42,9 +44,9 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <span className="truncate text-[13px] font-medium" data-ph-mask>
-              {c.name || c.email || "Unnamed contact"}
+              {c.name || c.email || t("contact.unnamed")}
             </span>
-            {c.blocked && <Badge tone="danger">Blocked</Badge>}
+            {c.blocked && <Badge tone="danger">{t("contact.blocked")}</Badge>}
           </div>
           {c.company && (
             <Link
@@ -58,13 +60,13 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
             </Link>
           )}
         </div>
-        <Tooltip content="Open contact">
+        <Tooltip content={t("contact.open")}>
           <Link
             to="/contacts/{-$contactId}"
             params={{ contactId: c.id }}
             search={{ q: undefined, company: undefined }}
             aria-label="Edit contact"
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-fg-3 outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]"
           >
             <Pencil className="size-3.5" />
           </Link>
@@ -78,7 +80,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
             <span className="mono min-w-0 flex-1 truncate text-xs" data-ph-mask>
               {c.email}
             </span>
-            <CopyButton value={c.email} label="Copy email" className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
+            <CopyButton value={c.email} label={t("contact.copyEmail")} className="size-5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
           </div>
         )}
         {c.phone && (
@@ -99,8 +101,8 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
 
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <span className="label-caps">Past tickets</span>
-          <span className="mono text-[11px] text-fg-4">{c.ticket_count}</span>
+          <span className="label-caps">{t("contact.pastTickets")}</span>
+          <span className="mono text-[11px] text-fg-4 tabular-nums">{c.ticket_count}</span>
         </div>
         {tickets.isLoading ? (
           <div className="flex flex-col gap-2 py-1">
@@ -108,7 +110,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
             <Skeleton className="h-2.5 w-3/5" />
           </div>
         ) : past.length === 0 ? (
-          <p className="py-1 text-xs text-fg-4">No other tickets</p>
+          <p className="py-1 text-xs text-fg-4">{t("contact.noOther")}</p>
         ) : (
           <ul className="-mx-1.5 flex flex-col">
             {past.map((t) => (
@@ -116,7 +118,7 @@ export function ContactCard({ contactId, compact, excludeTicketId }: { contactId
                 <Link
                   to="/inbox/$folder/{-$ticketId}"
                   params={{ folder: "open", ticketId: t.id }}
-                  className="flex h-7 items-center gap-2 rounded-md px-1.5 text-[12.5px] hover:bg-hover"
+                  className="flex h-7 items-center gap-2 rounded-md px-1.5 text-[12.5px] outline-none transition-colors hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)]"
                 >
                   <StatusIcon status={t.status} />
                   <span className="min-w-0 flex-1 truncate text-fg-2" data-ph-mask>

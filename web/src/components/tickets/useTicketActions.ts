@@ -4,11 +4,13 @@
 
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/endpoints";
-import type { Member, Tag, Team, Ticket, TicketPatch } from "@/lib/api/types";
+import type { Member, Tag, TagGroup, TagRef, Team, Ticket, TicketPatch } from "@/lib/api/types";
 import { qk } from "@/lib/queries";
 import { cachedTicket, patchTicketEverywhere, removeTicketEverywhere } from "@/lib/ticketCache";
 import { useSession } from "@/lib/session";
 import { toast } from "@/components/ui/toast";
+import { isApiError } from "@/lib/api/client";
+import { focusField, isUnknownLabel, requiredFieldKeys } from "./fields";
 
 /** Apply a PATCH body to a ticket locally, resolving ids to the refs the server would return. */
 export function applyPatch(qc: QueryClient, t: Ticket, p: TicketPatch): Ticket {
@@ -29,9 +31,32 @@ export function applyPatch(qc: QueryClient, t: Ticket, p: TicketPatch): Ticket {
       next.assignee = m ? m.user : t.assignee;
     }
   }
-  if (p.tags !== undefined) {
+  const fp = p.fields;
+  if (fp) {
+    const cur = { ...(t.fields ?? {}) };
+    for (const [k, v] of Object.entries(fp)) {
+      if (v === null || v === "" || (Array.isArray(v) && !v.length)) delete cur[k];
+      else cur[k] = v;
+    }
+    next.fields = cur;
+  }
+  if (p.tags !== undefined || p.add_tags || p.remove_tags) {
     const known = qc.getQueryData<Tag[]>(qk.tags) ?? [];
-    next.tags = p.tags.map((name) => known.find((k) => k.name.toLowerCase() === name.toLowerCase()) ?? { id: `tmp-${name}`, name });
+    const groups = qc.getQueryData<TagGroup[]>(qk.tagGroups) ?? [];
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    const toRef = (name: string): TagRef => {
+      const k = known.find((x) => same(x.name, name));
+      return k ? { id: k.id, name: k.name, color: k.color, group_id: k.group_id } : { id: `tmp-${name}`, name, color: "gray", group_id: null };
+    };
+    let names = p.tags ?? t.tags.map((x) => x.name);
+    if (p.add_tags) names = [...names, ...p.add_tags.filter((n) => !names.some((x) => same(x, n)))];
+    if (p.remove_tags) names = names.filter((n) => !p.remove_tags!.some((x) => same(x, n)));
+    // Exclusive groups keep the label named last (as the server does).
+    const refs = names.map(toRef);
+    next.tags = refs.filter((r, i) => {
+      const g = r.group_id && groups.find((x) => x.id === r.group_id);
+      return !g || !g.exclusive || !refs.slice(i + 1).some((o) => o.group_id === r.group_id);
+    });
   }
   return next;
 }
@@ -49,6 +74,17 @@ export function useUpdateTicket() {
     },
     onError: (e, _v, ctx) => {
       if (ctx?.prev) patchTicketEverywhere(qc, ctx.prev, me);
+      // Solving with an empty required field: open that field instead of a bare error.
+      const missing = requiredFieldKeys(e);
+      if (missing.length) {
+        focusField(missing[0]);
+        toast.error(isApiError(e) && e.detail ? e.detail : "Fill in the required fields before solving");
+        return;
+      }
+      if (isUnknownLabel(e)) {
+        toast.error(isApiError(e) && e.detail ? e.detail : "Only admins can create labels. Pick an existing one.");
+        return;
+      }
       toast.error(e, "Couldn't update the ticket");
     },
     onSuccess: (t) => {
@@ -70,7 +106,7 @@ export function useBulkUpdate() {
         if (del) removeTicketEverywhere(qc, t.id);
         else if (patch) {
           // Bulk tags add to the existing set (see contracts); single edits replace.
-          const p = patch.tags ? { ...patch, tags: Array.from(new Set([...t.tags.map((x) => x.name), ...patch.tags])) } : patch;
+          const p = patch.tags ? { ...patch, add_tags: [...(patch.add_tags ?? []), ...patch.tags], tags: undefined } : patch;
           patchTicketEverywhere(qc, applyPatch(qc, t, p), me);
         }
       }
@@ -78,6 +114,9 @@ export function useBulkUpdate() {
     },
     onError: (e, _v, ctx) => {
       ctx?.prev.forEach((t) => patchTicketEverywhere(qc, t, me));
+      if (isUnknownLabel(e)) return void toast.error(isApiError(e) && e.detail ? e.detail : "Only admins can create labels. Pick an existing one.");
+      const missing = requiredFieldKeys(e);
+      if (missing.length) return void toast.error(isApiError(e) && e.detail ? e.detail : "Some tickets have required fields to fill in before solving");
       toast.error(e, "Couldn't update those tickets");
     },
     onSettled: () => {

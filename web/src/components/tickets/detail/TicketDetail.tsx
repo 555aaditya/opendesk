@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, CircleCheck, Copy, GitMerge, MoreHorizontal, PanelRight, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, X, MessageSquare, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronUp, CircleCheck, CircleDot, Signal, Copy, GitMerge, MoreHorizontal, PanelRight, RotateCcw, ShieldAlert, ShieldCheck, Trash2, UserRound, X, MessageSquare, StickyNote } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { tone } from "@/lib/tones";
+import { Badge } from "@/components/ui/badge";
 import { q } from "@/lib/queries";
 import { isApiError } from "@/lib/api/client";
 import { realtime } from "@/lib/realtime/manager";
@@ -21,12 +24,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { copyText } from "@/components/ui/copy-button";
-import { TicketNumber } from "../bits";
+import { ChannelIcon, channelLabel, SlaPill, StatusPill, TicketNumber } from "../bits";
+import { intent } from "../motion";
+import { focusField, missingForSolve, useDisplay, useTicketFields } from "../fields";
+import { usePageCrumb } from "@/app/useBreadcrumbs";
 import { useTicketViewers } from "../presence";
 import { useDeleteTicket, useUpdateTicket } from "../useTicketActions";
 import { Timeline } from "./Timeline";
 import { Composer, type ComposerHandle } from "./Composer";
-import { TicketProperties } from "./TicketProperties";
+import { TicketProperties, type PropPicker } from "./TicketProperties";
 import { MergeDialog } from "./MergeDialog";
 import { SnoozeMenu } from "./SnoozeMenu";
 
@@ -42,18 +48,19 @@ function readPanel() {
 }
 
 function SubjectEditor({ value, onSave, disabled }: { value: string; onSave: (v: string) => void; disabled?: boolean }) {
+  const { t } = useTranslation("inbox");
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   if (!editing || disabled)
     return (
       <h1
-        className={cn("min-w-0 truncate text-[14px] font-semibold tracking-[-0.01em]", !disabled && "cursor-text rounded px-1 -mx-1 hover:bg-hover")}
+        className={cn("min-w-0 truncate text-[14px] font-semibold tracking-[-0.01em]", !disabled && "-mx-1 cursor-text rounded-sm px-1 transition-colors hover:bg-hover")}
         onClick={() => !disabled && setEditing(true)}
-        title={disabled ? value : "Click to edit the subject"}
+        title={disabled ? value : t("detail.editSubject")}
         data-ph-mask
       >
-        {value || "(no subject)"}
+        {value || t("row.noSubject")}
       </h1>
     );
   const commit = () => {
@@ -75,8 +82,8 @@ function SubjectEditor({ value, onSave, disabled }: { value: string; onSave: (v:
           setEditing(false);
         }
       }}
-      aria-label="Subject"
-      className="-mx-1 h-7 min-w-0 flex-1 rounded border border-line bg-surface px-1 text-[14px] font-semibold tracking-[-0.01em] outline-none focus:border-fg-4"
+      aria-label={t("detail.subject")}
+      className="-mx-1 h-7 min-w-0 flex-1 rounded-sm border border-line bg-surface px-1 text-[14px] font-semibold tracking-[-0.01em] outline-none focus:border-fg-4 focus:shadow-[0_0_0_3px_var(--focus)]"
     />
   );
 }
@@ -109,11 +116,22 @@ export default function TicketDetail({
   const composer = useRef<ComposerHandle>(null);
   const aiOn = useAI().enabled;
   const { t: tAi } = useTranslation("aiTicket");
-  const [assignOpen, setAssignOpen] = useState(false);
+  const { t: tr } = useTranslation("inbox");
+  const [picker, setPicker] = useState<PropPicker>(null);
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [panel, setPanel] = useState(readPanel);
+  const display = useDisplay();
+  const { data: ticketFields } = useTicketFields();
+  const reduced = useReducedMotion();
   const t = ticket.data;
   useDocumentTitle(t ? `#${t.number} ${t.subject}` : null);
+  usePageCrumb(t ? `#${t.number}` : null);
+
+  // Opened with r from the list: start the reply right away.
+  useEffect(() => {
+    if (t && canEdit && intent.take(t.id, t.number)) composer.current?.focus("reply");
+  }, [t?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!realId) return;
@@ -135,34 +153,53 @@ export default function TicketDetail({
   const solved = t?.status === "solved" || t?.status === "closed";
   const solve = () => {
     if (!t || !canEdit) return;
+    // Required fields: point at the first empty one instead of a refused solve.
+    const missing = solved ? [] : missingForSolve(ticketFields, t);
+    if (missing.length) {
+      if (!panel) togglePanel();
+      focusField(missing[0].key);
+      toast.error(tr("fields.fill", { name: missing.map((f) => f.name).join(", ") }));
+      return;
+    }
     update.mutate({ id: t.id, patch: { status: solved ? "open" : "solved" } });
-    toast.success(solved ? `Reopened #${t.number}` : `Solved #${t.number}`, solved ? undefined : { action: { label: "Undo", onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } });
+    toast.success(
+      solved ? tr("toast.reopened", { number: t.number }) : tr("toast.solved", { number: t.number }),
+      solved ? undefined : { action: { label: tr("toast.undo"), onClick: () => update.mutate({ id: t.id, patch: { status: t.status } }) } },
+    );
     if (!solved && onNext) onNext();
   };
   const spam = () => {
     if (!t) return;
     update.mutate({ id: t.id, patch: { spam: !t.spam } });
-    toast.success(t.spam ? "Moved out of spam" : "Marked as spam");
+    toast.success(t.spam ? tr("toast.unspammed") : tr("toast.spammed"));
     if (!t.spam) onClose();
   };
   const remove = () =>
     t &&
     confirm.show(
-      "The ticket and its conversation will be deleted for everyone in the workspace.",
+      tr("detail.deleteBody"),
       async () => {
         await del.mutateAsync(t.id);
-        toast.success(`Deleted #${t.number}`);
+        toast.success(tr("toast.deleted", { number: t.number }));
         onClose();
       },
-      { title: `Delete #${t.number}?`, confirmLabel: "Delete", danger: true },
+      { title: tr("detail.deleteTitle", { number: t.number }), confirmLabel: tr("detail.delete"), danger: true },
     );
   const assignMe = () => t && update.mutate({ id: t.id, patch: { assignee_id: me } });
+  // Property pickers live in the details panel; show it first when hidden.
+  const openPicker = (p: Exclude<PropPicker, null>) => {
+    if (!panel) togglePanel();
+    setTimeout(() => setPicker(p), panel ? 0 : 60);
+  };
 
   useHotkeys(
     {
       r: () => composer.current?.focus("reply"),
       n: () => composer.current?.focus("note"),
-      a: () => setAssignOpen(true),
+      a: () => openPicker("assignee"),
+      s: () => openPicker("status"),
+      h: () => setSnoozeOpen(true),
+      p: () => openPicker("priority"),
       e: solve,
       i: () => assignMe(),
       "]": togglePanel,
@@ -176,14 +213,16 @@ export default function TicketDetail({
     if (!t || !canEdit) return;
     usePageCommands.setState({
       commands: [
-        { id: "reply", label: "Reply", shortcut: "r", icon: <MessageSquare />, run: () => composer.current?.focus("reply") },
-        { id: "note", label: "Add a note", shortcut: "n", icon: <StickyNote />, run: () => composer.current?.focus("note") },
+        { id: "reply", label: tr("commands.reply"), shortcut: "r", icon: <MessageSquare />, run: () => composer.current?.focus("reply") },
+        { id: "note", label: tr("commands.note"), shortcut: "n", icon: <StickyNote />, run: () => composer.current?.focus("note") },
         ...(aiOn ? [{ id: "ai-draft", label: tAi("composer.command"), shortcut: "mod j", icon: <AiIcon />, run: () => composer.current?.aiDraft() }] : []),
-        { id: "assign-me", label: "Assign to me", shortcut: "i", icon: <UserRound />, run: assignMe },
-        { id: "assign", label: "Assign to…", shortcut: "a", icon: <UserRound />, run: () => setAssignOpen(true) },
-        { id: "solve", label: solved ? "Reopen ticket" : "Solve ticket", shortcut: "e", icon: <CircleCheck />, run: solve },
-        { id: "merge", label: "Merge into another ticket", icon: <GitMerge />, run: () => setMergeOpen(true) },
-        { id: "spam", label: t.spam ? "Not spam" : "Mark as spam", icon: <ShieldAlert />, run: spam },
+        { id: "assign-me", label: tr("commands.assignMe"), shortcut: "i", icon: <UserRound />, run: assignMe },
+        { id: "assign", label: tr("commands.assign"), shortcut: "a", icon: <UserRound />, run: () => openPicker("assignee") },
+        { id: "status", label: tr("commands.status"), shortcut: "s", icon: <CircleDot />, run: () => openPicker("status") },
+        { id: "priority", label: tr("commands.priority"), shortcut: "p", icon: <Signal />, run: () => openPicker("priority") },
+        { id: "solve", label: solved ? tr("commands.reopen") : tr("commands.solve"), shortcut: "e", icon: <CircleCheck />, run: solve },
+        { id: "merge", label: tr("detail.merge"), icon: <GitMerge />, run: () => setMergeOpen(true) },
+        { id: "spam", label: t.spam ? tr("detail.notSpam") : tr("detail.markSpam"), icon: <ShieldAlert />, run: spam },
       ],
     });
     return () => usePageCommands.setState({ commands: [] });
@@ -192,12 +231,19 @@ export default function TicketDetail({
 
   if (ticket.isError) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full flex-col">
         <EmptyState
           lit={3}
-          title={isApiError(ticket.error, "not_found") ? "This ticket doesn't exist" : "Couldn't load this ticket"}
-          description={isApiError(ticket.error, "not_found") ? "It may have been deleted or merged." : "Check your connection and try again."}
-          action={<Button onClick={onClose}>Back to the list</Button>}
+          title={isApiError(ticket.error, "not_found") ? tr("detail.notFound") : tr("detail.loadError")}
+          description={isApiError(ticket.error, "not_found") ? tr("detail.notFoundHint") : tr("error.description")}
+          action={
+            <>
+              {!isApiError(ticket.error, "not_found") && <Button onClick={() => void ticket.refetch()}>{tr("error.retry")}</Button>}
+              <Button variant="ghost" onClick={onClose}>
+                {tr("detail.back")}
+              </Button>
+            </>
+          }
         />
       </div>
     );
@@ -206,14 +252,14 @@ export default function TicketDetail({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-3">
-        <Tooltip content="Close" shortcut="esc">
+        <Tooltip content={tr("detail.close")} shortcut="esc">
           <Button variant="ghost" size="sm" square aria-label="Close ticket" icon={<X className="size-4" />} onClick={onClose} />
         </Tooltip>
-        <div className="flex items-center">
-          <Tooltip content="Previous" shortcut="k">
+        <div className="hidden items-center sm:flex">
+          <Tooltip content={tr("detail.previous")} shortcut="k">
             <Button variant="ghost" size="sm" square aria-label="Previous ticket" disabled={!onPrev} onClick={onPrev} icon={<ChevronUp className="size-4" />} />
           </Tooltip>
-          <Tooltip content="Next" shortcut="j">
+          <Tooltip content={tr("detail.next")} shortcut="j">
             <Button variant="ghost" size="sm" square aria-label="Next ticket" disabled={!onNext} onClick={onNext} icon={<ChevronDown className="size-4" />} />
           </Tooltip>
           {position && (
@@ -222,13 +268,22 @@ export default function TicketDetail({
             </span>
           )}
         </div>
-        <span className="mx-1 h-5 w-px bg-line" />
+        <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {t ? (
             <>
+              <Tooltip content={channelLabel[t.channel]}>
+                <span className="hidden shrink-0 sm:flex">
+                  <ChannelIcon channel={t.channel} />
+                </span>
+              </Tooltip>
               <TicketNumber n={t.number} className="shrink-0" />
               <SubjectEditor value={t.subject} disabled={!canEdit} onSave={(subject) => update.mutate({ id: t.id, patch: { subject } })} />
-              {t.spam && <span className="shrink-0 rounded-sm bg-hover px-1.5 py-0.5 text-[11px] font-medium text-fg-2">Spam</span>}
+              <span className="hidden shrink-0 items-center gap-1.5 md:flex">
+                <StatusPill status={t.status} label={display.status(t.status)} hue={display.statusTone(t.status)} />
+                <SlaPill ticket={t} />
+                {t.spam && <Badge tone="red">{tr("detail.spam")}</Badge>}
+              </span>
             </>
           ) : (
             <Skeleton className="h-3 w-64" />
@@ -243,57 +298,64 @@ export default function TicketDetail({
         )}
         {t && canEdit && (
           <div className="flex items-center gap-1">
-            <Tooltip content={solved ? "Reopen" : "Solve"} shortcut="e">
-              <Button size="sm" variant="secondary" icon={solved ? <RotateCcw className="size-3.5" /> : <CircleCheck className="size-3.5" />} onClick={solve}>
-                {solved ? "Reopen" : "Solve"}
+            <Tooltip content={solved ? tr("detail.reopen") : tr("detail.solve")} shortcut="e">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={solved ? <RotateCcw className="size-3.5" /> : <CircleCheck className={cn("size-3.5", tone.green.text)} />}
+                onClick={solve}
+              >
+                <span className="max-sm:sr-only">{solved ? tr("detail.reopen") : tr("detail.solve")}</span>
               </Button>
             </Tooltip>
             <SnoozeMenu
+              open={snoozeOpen}
+              onOpenChange={setSnoozeOpen}
               onSnooze={(at) => {
                 update.mutate({ id: t.id, patch: { snoozed_until: at.toISOString(), status: "on_hold" } });
-                toast.success("Snoozed");
+                toast.success(tr("toast.snoozed"));
                 if (onNext) onNext();
               }}
             />
             <Menu>
-              <Tooltip content="More">
+              <Tooltip content={tr("detail.more")}>
                 <MenuTrigger asChild>
                   <Button variant="ghost" size="sm" square aria-label="More actions" icon={<MoreHorizontal className="size-4" />} />
                 </MenuTrigger>
               </Tooltip>
               <MenuContent align="end" className="w-[210px]">
                 <MenuItem icon={<UserRound />} shortcut="i" onSelect={assignMe}>
-                  Assign to me
+                  {tr("commands.assignMe")}
                 </MenuItem>
                 <MenuItem icon={<GitMerge />} onSelect={() => setMergeOpen(true)}>
-                  Merge into another ticket
+                  {tr("detail.merge")}
                 </MenuItem>
                 <MenuItem
                   icon={<Copy />}
                   onSelect={async () => {
-                    if (await copyText(`${location.origin}/inbox/open/${t.id}`)) toast.success("Link copied");
+                    if (await copyText(`${location.origin}/inbox/open/${t.id}`)) toast.success(tr("toast.linkCopied"));
                   }}
                 >
-                  Copy link
+                  {tr("props.copyLink")}
                 </MenuItem>
                 <MenuSeparator />
                 <MenuItem icon={t.spam ? <ShieldCheck /> : <ShieldAlert />} onSelect={spam}>
-                  {t.spam ? "Not spam" : "Mark as spam"}
+                  {t.spam ? tr("detail.notSpam") : tr("detail.markSpam")}
                 </MenuItem>
                 <MenuItem icon={<Trash2 />} danger onSelect={remove}>
-                  Delete ticket
+                  {tr("detail.deleteTicket")}
                 </MenuItem>
               </MenuContent>
             </Menu>
           </div>
         )}
-        <Tooltip content={panel ? "Hide details" : "Show details"} shortcut="]">
-          <Button variant="ghost" size="sm" square aria-label="Toggle details" aria-pressed={panel} onClick={togglePanel} icon={<PanelRight className="size-4" />} className={cn(panel && "text-fg")} />
+        <Tooltip content={panel ? tr("detail.hideDetails") : tr("detail.showDetails")} shortcut="]">
+          <Button variant="ghost" size="sm" square aria-label="Toggle details" aria-pressed={panel} onClick={togglePanel} icon={<PanelRight className="size-4" />} className={cn("hidden lg:inline-flex", panel && "text-fg")} />
         </Tooltip>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col bg-canvas/40 dark:bg-transparent">
+        <div className="flex min-w-0 flex-1 flex-col">
           <Timeline
             ticketId={realId}
             messages={messages.data}
@@ -304,19 +366,34 @@ export default function TicketDetail({
           />
           {t && canEdit && <Composer ref={composer} ticket={t} />}
         </div>
-        {panel && (
-          <aside aria-label="Ticket details" className="hidden w-[300px] shrink-0 overflow-y-auto border-l border-line lg:block">
-            {t ? (
-              <TicketProperties t={t} assignOpen={assignOpen} onAssignOpenChange={setAssignOpen} />
-            ) : (
-              <div className="flex flex-col gap-3 p-4">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-3" style={{ width: `${50 + i * 8}%` }} />
-                ))}
+        <AnimatePresence initial={false}>
+          {panel && (
+            <motion.aside
+              key="panel"
+              aria-label="Ticket details"
+              initial={reduced ? { opacity: 0 } : { width: 0, opacity: 0 }}
+              animate={reduced ? { opacity: 1 } : { width: 300, opacity: 1 }}
+              exit={reduced ? { opacity: 0 } : { width: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="hidden shrink-0 overflow-hidden border-l border-line lg:block"
+            >
+              <div className="h-full w-[300px] overflow-y-auto">
+                {t ? (
+                  <TicketProperties t={t} picker={picker} onPicker={setPicker} />
+                ) : (
+                  <div className="flex flex-col gap-3.5 p-4">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <Skeleton className="h-2.5 w-14" />
+                        <Skeleton className="h-2.5" style={{ width: `${40 + i * 7}%` }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </aside>
-        )}
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </div>
       {t && <MergeDialog ticket={t} open={mergeOpen} onOpenChange={setMergeOpen} />}
     </div>

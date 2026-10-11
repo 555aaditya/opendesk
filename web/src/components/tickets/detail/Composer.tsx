@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Loader2, MessageSquareText, Paperclip, X } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useTranslation } from "react-i18next";
+import { tone } from "@/lib/tones";
 import { create } from "zustand";
 import { DropdownMenu as M } from "radix-ui";
 import type { Attachment, Member, Message, SavedReply, Ticket, TicketStatus } from "@/lib/api/types";
@@ -52,9 +55,9 @@ function EmailChips({ label, values, onChange }: { label: string; values: string
       <span className="w-7 shrink-0 text-xs text-fg-3">{label}</span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 py-1">
         {values.map((v) => (
-          <span key={v} className="mono inline-flex h-5 items-center gap-1 rounded-sm bg-hover pl-1.5 pr-0.5 text-[11.5px]" data-ph-mask>
+          <span key={v} className="mono inline-flex h-5 items-center gap-1 rounded-sm bg-hover pl-1.5 pr-0.5 text-[11.5px] animate-pop-in motion-reduce:animate-none" data-ph-mask>
             {v}
-            <button type="button" aria-label={`Remove ${v}`} onClick={() => onChange(values.filter((x) => x !== v))} className="flex size-4 items-center justify-center rounded text-fg-4 hover:text-fg">
+            <button type="button" aria-label={`Remove ${v}`} onClick={() => onChange(values.filter((x) => x !== v))} className="flex size-4 items-center justify-center rounded-xs text-fg-4 hover:text-fg">
               <X className="size-3" />
             </button>
           </span>
@@ -134,6 +137,9 @@ function useSend(ticket: Ticket) {
 }
 
 export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: boolean }>(function Composer({ ticket, disabled }, ref) {
+  const { t } = useTranslation("inbox");
+  const reduced = useReducedMotion();
+  const [focused, setFocused] = useState(false);
   const draft = useDrafts((s) => s[ticket.id]) ?? emptyDraft;
   const setDraft = useCallback((p: Partial<Draft>) => useDrafts.setState((s) => ({ [ticket.id]: { ...(s[ticket.id] ?? emptyDraft), ...p } })), [ticket.id]);
   const { mode } = draft;
@@ -192,7 +198,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
   const upload = (files: FileList | File[]) => {
     for (const file of Array.from(files)) {
       if (file.size > 25 * 1024 * 1024) {
-        toast.error(`${file.name} is larger than 25 MB`);
+        toast.error(t("composer.tooLarge", { name: file.name }));
         continue;
       }
       const key = `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`;
@@ -203,7 +209,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
         .then((attachment) => setUploads((u) => u.map((x) => (x.key === key ? { ...x, status: "done", attachment } : x))))
         .catch((e) => {
           setUploads((u) => u.map((x) => (x.key === key ? { ...x, status: "error" } : x)));
-          toast.error(e, `Couldn't upload ${file.name}`);
+          toast.error(e, t("composer.uploadFailed", { name: file.name }));
         });
     }
   };
@@ -229,7 +235,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
     setDraft({ html: "", cc: [], bcc: [], showCc: false });
     editor.current?.clear();
     ai.dismissSources();
-    if (status) toast.success(`${mode === "note" ? "Note added" : "Reply sent"} and marked ${statusLabel[status].toLowerCase()}`);
+    if (status) toast.success(t(mode === "note" ? "composer.noteAndMarked" : "composer.sentAndMarked", { status: statusLabel[status].toLowerCase() }));
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -244,23 +250,34 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
   };
 
   const note = mode === "note";
-  const recipient = ticket.contact?.email ?? ticket.contact?.name ?? "the customer";
+  const recipient = ticket.contact?.email ?? ticket.contact?.name ?? t("composer.theCustomer");
+  // The editor opens up while in use or holding a draft, and rests small otherwise.
+  const open = focused || !!draft.html || uploads.length > 0;
 
   return (
     <div className="shrink-0 px-5 pb-4">
       <div className="mx-auto w-full max-w-[820px]">
-        {others.length > 0 && mode === "reply" && (
-          <div role="status" className="mb-2 flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-[12.5px] text-fg-2 animate-pop-in">
-            <span className="size-1.5 shrink-0 rounded-full bg-warn" />
-            <Avatar name={others[0].name} src={others[0].avatar} size="xs" />
-            <span className="min-w-0 flex-1 truncate">
-              <span className="font-medium text-fg">{others.map((o) => o.name.split(" ")[0]).join(", ")}</span> {others.length > 1 ? "are" : "is"} replying to this ticket right now.
-            </span>
-            <button type="button" onClick={() => setDraft({ mode: "note" })} className="shrink-0 text-xs text-fg-3 underline-offset-2 hover:text-fg hover:underline">
-              Leave a note instead
-            </button>
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {others.length > 0 && mode === "reply" && (
+            <motion.div
+              role="status"
+              initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduced ? { opacity: 0 } : { opacity: 0, y: 4 }}
+              transition={{ duration: 0.18 }}
+              className={cn("mb-2 flex items-center gap-2 rounded-md px-3 py-2 text-[12.5px]", tone.amber.soft)}
+            >
+              <span className={cn("size-1.5 shrink-0 rounded-full animate-pulse-soft motion-reduce:animate-none", tone.amber.solid)} />
+              <Avatar name={others[0].name} src={others[0].avatar} size="xs" />
+              <span className="min-w-0 flex-1 truncate text-fg-2">
+                {t("composer.othersReplying", { names: others.map((o) => o.name.split(" ")[0]).join(", "), count: others.length })}
+              </span>
+              <button type="button" onClick={() => setDraft({ mode: "note" })} className={cn("shrink-0 text-xs font-medium underline-offset-2 hover:underline", tone.amber.text)}>
+                {t("composer.noteInstead")}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         <div
           onDragOver={(e) => {
             if (e.dataTransfer.types.includes("Files")) {
@@ -276,6 +293,10 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
             setDragging(false);
             if (e.dataTransfer.files.length) upload(e.dataTransfer.files);
           }}
+          onFocus={() => setFocused(true)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) setFocused(false);
+          }}
           onPaste={(e) => {
             const files = Array.from(e.clipboardData.files);
             if (files.length) {
@@ -284,7 +305,7 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
             }
           }}
           className={cn(
-            "relative rounded-lg border shadow-[0_1px_2px_rgb(0_0_0/0.04)] transition-[border-color,box-shadow,background-color] duration-150 focus-within:border-fg-4 focus-within:shadow-[0_0_0_3px_var(--focus)]",
+            "relative rounded-lg border shadow-xs transition-[border-color,box-shadow,background-color] duration-200 focus-within:border-fg-4 focus-within:shadow-[0_0_0_3px_var(--focus)]",
             note ? "border-dashed border-note-line bg-note" : "border-line bg-surface",
           )}
         >
@@ -294,15 +315,15 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
               value={mode}
               onChange={(m) => setDraft({ mode: m })}
               options={[
-                { value: "reply", label: "Reply" },
-                { value: "note", label: "Note" },
+                { value: "reply", label: t("composer.reply") },
+                { value: "note", label: t("composer.note") },
               ]}
             />
             {note ? (
-              <span className="truncate text-xs text-fg-3">Only your team sees notes. Type @ to mention someone.</span>
+              <span className="truncate text-xs text-fg-3">{t("composer.noteHint")}</span>
             ) : (
               <span className="min-w-0 flex-1 truncate text-xs text-fg-3">
-                To <span className="mono text-fg-2" data-ph-mask>{recipient}</span>
+                {t("composer.to")} <span className="mono text-fg-2" data-ph-mask>{recipient}</span>
               </span>
             )}
             {!note && (
@@ -310,39 +331,48 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
                 type="button"
                 onClick={() => setDraft({ showCc: !draft.showCc })}
                 aria-expanded={draft.showCc}
-                className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-xs text-fg-3 hover:bg-hover hover:text-fg", draft.showCc && "text-fg")}
+                className={cn("ml-auto shrink-0 rounded-sm px-1.5 py-0.5 text-xs text-fg-3 transition-colors hover:bg-hover hover:text-fg", draft.showCc && "bg-hover text-fg")}
               >
-                Cc / Bcc
+                {t("composer.ccBcc")}
               </button>
             )}
           </div>
-          {!note && draft.showCc && (
-            <>
-              <EmailChips label="Cc" values={draft.cc} onChange={(cc) => setDraft({ cc })} />
-              <EmailChips label="Bcc" values={draft.bcc} onChange={(bcc) => setDraft({ bcc })} />
-            </>
-          )}
+          <AnimatePresence initial={false}>
+            {!note && draft.showCc && (
+              <motion.div
+                key="cc"
+                initial={reduced ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                animate={reduced ? { opacity: 1 } : { height: "auto", opacity: 1 }}
+                exit={reduced ? { opacity: 0 } : { height: 0, opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className="overflow-hidden"
+              >
+                <EmailChips label="Cc" values={draft.cc} onChange={(cc) => setDraft({ cc })} />
+                <EmailChips label="Bcc" values={draft.bcc} onChange={(bcc) => setDraft({ bcc })} />
+              </motion.div>
+            )}
+          </AnimatePresence>
           <RichEditor
             ref={editor}
             value={draft.html}
             onChange={(html) => setDraft({ html })}
-            placeholder={note ? "Write a note for your team" : "Write a reply. Type / for saved replies."}
+            placeholder={note ? t("composer.notePlaceholder") : t("composer.replyPlaceholder")}
             extensions={extensions}
             onSubmit={() => submit()}
             onKeyDown={onKeyDown}
             editable={!disabled && !ai.busy}
-            contentClassName="min-h-[84px] max-h-[40vh]"
+            contentClassName={cn("max-h-[40vh] transition-[min-height] duration-200 ease-out motion-reduce:transition-none", open ? "min-h-[96px]" : "min-h-[44px]")}
             ariaLabel={note ? "Note" : "Reply"}
             toolbarEnd={
               <>
                 <ComposerAiMenu ai={ai} hasDraft={!!draft.html} disabled={disabled} />
                 <input ref={fileInput} type="file" multiple hidden onChange={(e) => e.target.files && upload(e.target.files)} />
-                <Tooltip content="Attach files">
+                <Tooltip content={t("composer.attach")}>
                   <button
                     type="button"
                     aria-label="Attach files"
                     onClick={() => fileInput.current?.click()}
-                    className="flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+                    className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg active:scale-95"
                   >
                     <Paperclip className="size-[15px]" />
                   </button>
@@ -351,8 +381,8 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
                   side="top"
                   align="end"
                   width={300}
-                  placeholder="Search saved replies"
-                  emptyText="No saved replies"
+                  placeholder={t("composer.searchReplies")}
+                  emptyText={t("composer.noReplies")}
                   value={null}
                   items={(replies ?? []).map((r) => ({ value: r.id, label: r.title, hint: r.shortcut ? `/${r.shortcut.replace(/^\//, "")}` : undefined }))}
                   onSelect={(id) => {
@@ -360,8 +390,8 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
                     if (r) editor.current?.insertHtml(r.body_html);
                   }}
                   trigger={
-                    <Tooltip content="Saved replies">
-                      <button type="button" aria-label="Saved replies" className="flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg">
+                    <Tooltip content={t("composer.savedReplies")}>
+                      <button type="button" aria-label="Saved replies" className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg active:scale-95">
                         <MessageSquareText className="size-[15px]" />
                       </button>
                     </Tooltip>
@@ -377,16 +407,16 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
           {uploads.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pb-2.5">
               {uploads.map((u) => (
-                <span key={u.key} className={cn("flex h-8 max-w-[220px] items-center gap-2 rounded-md border bg-surface pl-1 pr-1", u.status === "error" ? "border-[color-mix(in_srgb,var(--danger)_40%,var(--line))]" : "border-line")}>
+                <span key={u.key} className={cn("flex h-8 max-w-[220px] items-center gap-2 rounded-md border bg-surface pl-1 pr-1 animate-pop-in motion-reduce:animate-none", u.status === "error" ? tone.red.line : "border-line")}>
                   {u.preview ? <img src={u.preview} alt="" className="size-6 rounded-sm object-cover" /> : <span className="flex size-6 items-center justify-center rounded-sm bg-hover"><Paperclip className="size-3 text-fg-3" /></span>}
                   <span className="min-w-0">
                     <span className="block truncate text-[11.5px]">{u.file.name}</span>
-                    <span className="mono block text-[10px] text-fg-4">{u.status === "uploading" ? "Uploading" : u.status === "error" ? "Failed" : bytes(u.file.size)}</span>
+                    <span className="mono block text-[10px] text-fg-4">{u.status === "uploading" ? t("composer.uploading") : u.status === "error" ? t("composer.failed") : bytes(u.file.size)}</span>
                   </span>
                   {u.status === "uploading" ? (
                     <Loader2 className="size-3.5 shrink-0 animate-spin text-fg-4" />
                   ) : (
-                    <button type="button" aria-label={`Remove ${u.file.name}`} onClick={() => setUploads((x) => x.filter((y) => y.key !== u.key))} className="flex size-5 shrink-0 items-center justify-center rounded text-fg-4 hover:bg-hover hover:text-fg">
+                    <button type="button" aria-label={`Remove ${u.file.name}`} onClick={() => setUploads((x) => x.filter((y) => y.key !== u.key))} className="flex size-5 shrink-0 items-center justify-center rounded-sm text-fg-4 hover:bg-hover hover:text-fg">
                       <X className="size-3" />
                     </button>
                   )}
@@ -395,8 +425,8 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
             </div>
           )}
           {dragging && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg border-2 border-dashed border-fg-3 bg-surface/90 text-[13px] font-medium text-fg-2">
-              Drop files to attach
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg border-2 border-dashed border-fg-3 bg-surface/90 text-[13px] font-medium text-fg-2 animate-fade-in">
+              {t("composer.drop")}
             </div>
           )}
         </div>
@@ -407,28 +437,27 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
 });
 
 function SendButton({ note, disabled, busy, onSend, current }: { note: boolean; disabled: boolean; busy: boolean; onSend: (s?: TicketStatus) => void; current: TicketStatus }) {
-  const label = note ? "Add note" : "Send";
+  const { t } = useTranslation("inbox");
+  const label = note ? t("composer.addNote") : t("composer.send");
   const options: TicketStatus[] = (["pending", "on_hold", "solved"] as TicketStatus[]).filter((s) => s !== current);
   return (
     <div className="flex items-center">
-      <Tooltip content={busy ? "Waiting for uploads" : note ? "Add note" : "Send reply"} shortcut="mod enter">
+      <Tooltip content={busy ? t("composer.waitUploads") : note ? t("composer.addNote") : t("composer.sendReply")} shortcut="mod enter">
         <Button variant="primary" size="sm" disabled={disabled} onClick={() => onSend()} className="rounded-r-none">
           {label}
         </Button>
       </Tooltip>
       <M.Root>
         <M.Trigger asChild disabled={disabled}>
-          <Button variant="primary" size="sm" square aria-label={`${label} and set status`} className="rounded-l-none border-l border-white/15 dark:border-black/15" icon={<ChevronDown className="size-3.5" />} />
+          <Button variant="primary" size="sm" square aria-label={t("composer.andStatus", { label })} className="rounded-l-none border-l border-white/15 dark:border-black/15" icon={<ChevronDown className="size-3.5" />} />
         </M.Trigger>
         <M.Portal>
           <M.Content side="top" align="end" sideOffset={6} className={cn(floatingPanel, "w-[230px] p-1")}>
-            <div className="label-caps px-2 pb-1 pt-1.5">{label} and set status</div>
+            <div className="label-caps px-2 pb-1 pt-1.5">{t("composer.andStatus", { label })}</div>
             {options.map((s) => (
               <M.Item key={s} onSelect={() => onSend(s)} className="flex h-8 cursor-default items-center gap-2 rounded-md px-2 text-[12.5px] outline-none data-[highlighted]:bg-hover">
                 <StatusIcon status={s} />
-                <span className="flex-1">
-                  {label} and mark {statusLabel[s].toLowerCase()}
-                </span>
+                <span className="flex-1">{t("composer.andMark", { label, status: statusLabel[s].toLowerCase() })}</span>
                 {s === "solved" && <Kbd>mod shift enter</Kbd>}
               </M.Item>
             ))}

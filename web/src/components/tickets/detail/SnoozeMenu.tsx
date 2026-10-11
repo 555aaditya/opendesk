@@ -1,6 +1,7 @@
 import { addDays, addHours, nextMonday, setHours, setMinutes, startOfHour, format } from "date-fns";
 import { AlarmClock } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Popover } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/input";
@@ -12,15 +13,21 @@ function at9(d: Date) {
 
 export function snoozeOptions(now = new Date()) {
   return [
-    { label: "In 1 hour", at: startOfHour(addHours(now, 2)) },
-    { label: "In 4 hours", at: startOfHour(addHours(now, 5)) },
-    { label: "Tomorrow", at: at9(addDays(now, 1)) },
-    { label: "Next week", at: at9(nextMonday(now)) },
-  ];
+    { key: "hour", label: "In 1 hour", at: startOfHour(addHours(now, 2)) },
+    { key: "hours", label: "In 4 hours", at: startOfHour(addHours(now, 5)) },
+    { key: "tomorrow", label: "Tomorrow", at: at9(addDays(now, 1)) },
+    { key: "week", label: "Next week", at: at9(nextMonday(now)) },
+  ] as const;
 }
 
-export function SnoozeMenu({ onSnooze, disabled }: { onSnooze: (at: Date) => void; disabled?: boolean }) {
-  const [open, setOpen] = useState(false);
+export function SnoozeMenu({ onSnooze, disabled, open: openProp, onOpenChange }: { onSnooze: (at: Date) => void; disabled?: boolean; open?: boolean; onOpenChange?: (o: boolean) => void }) {
+  const { t } = useTranslation("inbox");
+  const [innerOpen, setInnerOpen] = useState(false);
+  const open = openProp ?? innerOpen;
+  const setOpen = (o: boolean) => {
+    setInnerOpen(o);
+    onOpenChange?.(o);
+  };
   const [custom, setCustom] = useState("");
   const opts = snoozeOptions();
   return (
@@ -30,12 +37,12 @@ export function SnoozeMenu({ onSnooze, disabled }: { onSnooze: (at: Date) => voi
       align="end"
       className="w-[240px] p-1"
       trigger={
-        <Tooltip content="Snooze">
+        <Tooltip content={t("snooze.title")} shortcut="h">
           <Button variant="ghost" size="sm" square aria-label="Snooze" disabled={disabled} icon={<AlarmClock className="size-3.5" />} />
         </Tooltip>
       }
     >
-      <div className="label-caps px-2 pb-1 pt-1.5">Snooze until</div>
+      <div className="label-caps px-2 pb-1 pt-1.5">{t("snooze.until")}</div>
       {opts.map((o) => (
         <button
           key={o.label}
@@ -44,9 +51,9 @@ export function SnoozeMenu({ onSnooze, disabled }: { onSnooze: (at: Date) => voi
             onSnooze(o.at);
             setOpen(false);
           }}
-          className="flex h-8 w-full items-center justify-between rounded-md px-2 text-[12.5px] hover:bg-hover"
+          className="flex h-8 w-full items-center justify-between rounded-md px-2 text-[12.5px] outline-none transition-colors hover:bg-hover focus-visible:bg-hover"
         >
-          {o.label}
+          {t(`snooze.${o.key}`)}
           <span className="mono text-[11px] text-fg-4">{format(o.at, "EEE HH:mm")}</span>
         </button>
       ))}
@@ -62,9 +69,9 @@ export function SnoozeMenu({ onSnooze, disabled }: { onSnooze: (at: Date) => voi
             }
           }}
         >
-          <TextInput type="datetime-local" inputSize="sm" value={custom} onChange={(e) => setCustom(e.target.value)} aria-label="Snooze until" className="mono text-[11.5px]" />
+          <TextInput type="datetime-local" inputSize="sm" value={custom} onChange={(e) => setCustom(e.target.value)} aria-label={t("snooze.until")} className="mono text-[11.5px]" />
           <Button type="submit" size="sm" disabled={!custom}>
-            Set
+            {t("snooze.set")}
           </Button>
         </form>
       </div>

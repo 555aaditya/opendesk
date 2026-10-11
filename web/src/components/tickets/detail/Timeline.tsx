@@ -1,14 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Star, Tag as TagIcon, TimerOff, Users, UserRound, Signal } from "lucide-react";
+import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, PencilLine, Star, Tag as TagIcon, TimerOff, Users, UserRound } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
-import type { Activity, Member, Message, Priority, Team, TicketStatus, UserRef } from "@/lib/api/types";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import type { Activity, Member, Message, Priority, Tag, Team, TicketStatus, UserRef } from "@/lib/api/types";
 import { dayLabel, fullDate, relShort, shortDate } from "@/lib/format";
 import { q } from "@/lib/queries";
 import { useRealtime, isCustomerTyping } from "@/lib/realtime/store";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TagChip } from "@/components/ui/badge";
+import { cn } from "@/lib/cn";
+import { AI_TONE, tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
-import { priorityLabel, StatusIcon, statusLabel } from "../bits";
+import { PriorityIcon, priorityLabel, StatusIcon, statusLabel } from "../bits";
 import { MessageItem } from "./MessageItem";
+import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
 
 type Item = { kind: "message"; at: string; m: Message } | { kind: "activity"; at: string; a: Activity };
 
@@ -19,108 +25,100 @@ function ref(v: unknown, members: Member[] | undefined): UserRef | null {
   return null;
 }
 
-function actorName(a: Activity) {
+function actorName(a: Activity, t: TFunction<"inbox">) {
   if (a.actor.user) return a.actor.user.name;
-  if (typeof a.data.automation_name === "string") return `Automation “${a.data.automation_name}”`;
-  if (a.actor.type === "automation") return "An automation";
-  if (a.actor.type === "contact") return "The customer";
-  if (a.actor.type === "ai") return "AI";
+  if (typeof a.data.automation_name === "string") return t("activity.automationNamed", { name: a.data.automation_name });
+  if (a.actor.type === "automation") return t("activity.automation");
+  if (a.actor.type === "contact") return t("activity.customer");
+  if (a.actor.type === "ai") return t("activity.ai");
   return "opendesk";
 }
 
-function describe(a: Activity, teams: Team[] | undefined, members: Member[] | undefined): { icon: ReactNode; text: ReactNode; tone?: "danger" } {
-  const who = <span className="font-medium text-fg-2">{actorName(a)}</span>;
+const B = <span className="font-medium text-fg-2" />;
+const M = <span className="mono text-fg-2" />;
+
+type Line = { icon: ReactNode; text: ReactNode; hue?: "red" | "ai" };
+
+type Ctx = { teams?: Team[]; members?: Member[]; tags?: Tag[]; fields?: CustomField[]; display: ReturnType<typeof useDisplay> };
+
+function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fields, display }: Ctx): Line {
+  const who = actorName(a, t);
   const d = a.data;
+  const line = (key: Parameters<TFunction<"inbox">>[0], values: Record<string, unknown> = {}) => (
+    <Trans t={t} i18nKey={key as never} values={{ who, ...values }} components={{ b: B, m: M }} />
+  );
   switch (a.type) {
     case "status_changed": {
       const to = d.to as TicketStatus;
       return {
         icon: statusLabel[to] ? <StatusIcon status={to} className="size-3" /> : <CircleDot />,
-        text: (
-          <>
-            {who} marked this <span className="font-medium text-fg-2">{(statusLabel[to] ?? String(d.to)).toLowerCase()}</span>
-          </>
-        ),
+        text: line("activity.status", { status: (statusLabel[to] ? display.status(to) : String(d.to)).toLowerCase() }),
       };
     }
-    case "priority_changed":
+    case "priority_changed": {
+      const to = d.to as Priority;
       return {
-        icon: <Signal />,
-        text: (
-          <>
-            {who} set priority to <span className="font-medium text-fg-2">{priorityLabel[d.to as Priority] ?? String(d.to)}</span>
-          </>
-        ),
+        icon: priorityLabel[to] ? <PriorityIcon priority={to} className="size-3" /> : <CircleDot />,
+        text: line("activity.priority", { priority: priorityLabel[to] ? display.priority(to) : String(d.to) }),
       };
+    }
     case "assigned": {
       const to = ref(d.to, members);
       return {
         icon: <UserRound />,
-        text: to ? (
-          a.actor.user?.id === to.id ? (
-            <>{who} took this ticket</>
-          ) : (
-            <>
-              {who} assigned this to <span className="font-medium text-fg-2">{to.name}</span>
-            </>
-          )
-        ) : (
-          <>{who} unassigned this ticket</>
-        ),
+        text: to ? (a.actor.user?.id === to.id ? line("activity.took") : line("activity.assigned", { to: to.name })) : line("activity.unassigned"),
       };
     }
     case "team_changed": {
-      const name = typeof d.to === "string" ? (teams?.find((t) => t.id === d.to)?.name ?? d.to) : null;
-      return { icon: <Users />, text: name ? <>{who} moved this to <span className="font-medium text-fg-2">{name}</span></> : <>{who} removed the team</> };
+      const name = typeof d.to === "string" ? (teams?.find((x) => x.id === d.to)?.name ?? d.to) : null;
+      return { icon: <Users />, text: name ? line("activity.team", { team: name }) : line("activity.teamRemoved") };
     }
     case "tagged":
     case "untagged": {
-      const tag = typeof d.tag === "string" ? d.tag : (d.tag as { name?: string } | undefined)?.name;
+      const raw = d.tag as string | { name?: string; color?: string | null } | undefined;
+      const name = typeof raw === "string" ? raw : (raw?.name ?? "");
+      const color = (typeof raw === "object" ? raw?.color : null) ?? tags?.find((x) => x.name === name)?.color;
       return {
         icon: <TagIcon />,
         text: (
-          <>
-            {who} {a.type === "tagged" ? "added" : "removed"} <span className="font-medium text-fg-2">{tag}</span>
-          </>
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            {line(a.type === "tagged" ? "activity.tagged" : "activity.untagged")}
+            <TagChip name={name} color={color} className={cn(a.type === "untagged" && "opacity-60")} />
+          </span>
         ),
       };
     }
+    case "field_changed": {
+      const f = fields?.find((x) => x.key === d.key);
+      const name = f?.name ?? (typeof d.name === "string" ? d.name : typeof d.key === "string" ? d.key : "");
+      const to = fieldText(f, d.to, (id) => members?.find((m) => m.user.id === id)?.user.name) || null;
+      return { icon: <PencilLine />, text: to ? line("activity.fieldSet", { field: name, value: to }) : line("activity.fieldCleared", { field: name }) };
+    }
     case "sla_breached":
-      return { icon: <TimerOff />, tone: "danger", text: <>{d.kind === "first_response" ? "First response" : "Resolution"} target was missed</> };
+      return { icon: <TimerOff />, hue: "red", text: line(d.kind === "first_response" ? "activity.slaFirst" : "activity.slaResolution") };
     case "subject_changed":
-      return { icon: <ArrowRightLeft />, text: <>{who} changed the subject</> };
+      return { icon: <ArrowRightLeft />, text: line("activity.subject") };
     case "snoozed":
-      return { icon: <AlarmClock />, text: <>{who} snoozed this{typeof d.until === "string" ? <> until <span className="mono text-fg-2">{shortDate(d.until)}</span></> : null}</> };
+      return { icon: <AlarmClock />, text: typeof d.until === "string" ? line("activity.snoozedUntil", { when: shortDate(d.until) }) : line("activity.snoozed") };
     case "unsnoozed":
-      return { icon: <AlarmClock />, text: <>Snooze ended</> };
+      return { icon: <AlarmClock />, text: line("activity.unsnoozed") };
     case "marked_spam":
-      return { icon: <ShieldAlert />, text: <>{who} marked this as spam</> };
+      return { icon: <ShieldAlert />, text: line("activity.spam") };
     case "unmarked_spam":
-      return { icon: <ShieldAlert />, text: <>{who} moved this out of spam</> };
+      return { icon: <ShieldAlert />, text: line("activity.unspam") };
     case "custom_updated":
-      return { icon: <ArrowRightLeft />, text: <>{who} updated {Array.isArray(d.keys) ? <span className="mono text-fg-2">{(d.keys as string[]).join(", ")}</span> : "custom fields"}</> };
+      return { icon: <ArrowRightLeft />, text: Array.isArray(d.keys) ? line("activity.customKeys", { keys: (d.keys as string[]).join(", ") }) : line("activity.custom") };
     case "merged": {
       const into = typeof d.into_number === "number" ? { number: d.into_number } : typeof d.into === "object" ? (d.into as { number?: number }) : undefined;
       const from = typeof d.from_number === "number" ? { number: d.from_number } : (d.from as { number?: number } | undefined);
-      return {
-        icon: <GitMerge />,
-        text: into ? (
-          <>
-            {who} merged this into <span className="mono text-fg-2">#{into.number}</span>
-          </>
-        ) : (
-          <>
-            {who} merged <span className="mono text-fg-2">#{from?.number}</span> into this ticket
-          </>
-        ),
-      };
+      return { icon: <GitMerge />, text: into ? line("activity.mergedInto", { number: into.number }) : line("activity.mergedFrom", { number: from?.number }) };
     }
     case "csat_received":
       return {
-        icon: <Star />,
+        icon: <Star className={tone.amber.text} />,
         text: (
           <>
-            The customer rated this <span className="mono font-medium text-fg-2">{String(d.score)}/5</span>
+            {line("activity.csat", { score: String(d.score) })}
             {typeof d.comment === "string" && d.comment ? <span className="text-fg-3"> · “{d.comment}”</span> : null}
           </>
         ),
@@ -128,28 +126,34 @@ function describe(a: Activity, teams: Team[] | undefined, members: Member[] | un
     case "ai_triaged":
       return {
         icon: <Sparkles />,
-        text: (
-          <>
-            {who} triaged this{typeof d.category === "string" ? <> as <span className="font-medium text-fg-2">{d.category.replace(/_/g, " ")}</span></> : null}
-          </>
-        ),
+        hue: "ai",
+        text: typeof d.category === "string" ? line("activity.triagedAs", { category: d.category.replace(/_/g, " ") }) : line("activity.triaged"),
       };
     case "ai_answered":
-      return { icon: <Sparkles />, text: <>{who} answered from the knowledge base</> };
+      return { icon: <Sparkles />, hue: "ai", text: line("activity.aiAnswered") };
     case "ai_handoff":
-      return { icon: <Hand />, text: <>{a.actor.type === "contact" ? "The customer asked for a person" : "AI handed this to the team"}</> };
+      return { icon: <Hand />, text: line(a.actor.type === "contact" ? "activity.handoffCustomer" : "activity.handoffAi") };
     default:
-      return { icon: <ArrowRightLeft />, text: <>{who} updated this ticket <span className="mono text-fg-4">{a.type}</span></> };
+      return { icon: <ArrowRightLeft />, text: line("activity.other", { type: a.type }) };
   }
 }
 
 function ActivityLine({ a }: { a: Activity }) {
+  const { t } = useTranslation("inbox");
   const { data: teams } = useQuery(q.teams());
   const { data: members } = useQuery(q.members());
-  const { icon, text, tone } = describe(a, teams, members);
+  const { data: tags } = useQuery(q.tags());
+  const { data: fields } = useTicketFields();
+  const display = useDisplay();
+  const { icon, text, hue } = describe(a, t, { teams, members, tags, fields, display });
   return (
     <div className="flex items-center gap-2.5 py-1 pl-[18px] text-[12px] text-fg-3">
-      <span className={`flex size-5 shrink-0 items-center justify-center rounded-sm border bg-surface [&_svg]:size-3 ${tone === "danger" ? "border-[color-mix(in_srgb,var(--danger)_35%,var(--line))] text-danger-fg" : "border-line text-fg-3"}`}>
+      <span
+        className={cn(
+          "flex size-5 shrink-0 items-center justify-center rounded-sm [&_svg]:size-3",
+          hue === "red" ? tone.red.chip : hue === "ai" ? tone[AI_TONE].chip : "bg-sunken text-fg-3",
+        )}
+      >
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{text}</span>
@@ -173,18 +177,19 @@ function TypingDots() {
 }
 
 export function TypingIndicator({ ticketId, contactName }: { ticketId: string; contactName?: string }) {
+  const { t } = useTranslation("inbox");
   const typing = useRealtime((s) => s.typing[ticketId]);
   const customerAt = useRealtime((s) => s.customerTyping[ticketId]);
   const agents = (typing ?? []).filter((t) => Date.now() - t.at < 5000);
   const customer = isCustomerTyping(customerAt);
   if (!agents.length && !customer) return null;
-  const who = customer ? (contactName ?? "The customer") : agents.map((a) => a.name.split(" ")[0]).join(", ");
+  const who = customer ? (contactName ?? t("activity.customer")) : agents.map((a) => a.name.split(" ")[0]).join(", ");
   return (
-    <div aria-live="polite" className="flex items-center gap-2 py-1 pl-[18px] text-[12px] text-fg-3">
-      <span className="flex size-5 items-center justify-center rounded-sm border border-line bg-surface">
+    <div aria-live="polite" className="flex items-center gap-2.5 py-1 pl-[18px] text-[12px] text-fg-3 animate-rise-in motion-reduce:animate-none">
+      <span className="flex size-5 items-center justify-center rounded-sm bg-sunken">
         <TypingDots />
       </span>
-      {who} {agents.length > 1 && !customer ? "are" : "is"} typing
+      {t("typing", { who, count: customer ? 1 : agents.length })}
     </div>
   );
 }
@@ -215,6 +220,10 @@ export function Timeline({
   const scroller = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const count = items.length;
+  // Items present when the conversation first showed stay still; later ones rise in.
+  const seen = useRef<Set<string> | null>(null);
+  const sentBodies = useRef(new Set<string>());
+  if (!seen.current && !loading) seen.current = new Set(items.map((it) => (it.kind === "message" ? it.m.id : it.a.id)));
 
   // Open at the latest message; follow new ones only if already at the bottom.
   useLayoutEffect(() => {
@@ -252,19 +261,26 @@ export function Timeline({
           </div>
         ) : (
           items.map((it) => {
+            const id = it.kind === "message" ? it.m.id : it.a.id;
+            // A sent message swaps its temporary id for the real one; it has already risen.
+            const swapped = it.kind === "message" && !id.startsWith("tmp-") && sentBodies.current.has(it.m.body_html);
+            const fresh = !!seen.current && !seen.current.has(id) && !swapped;
+            if (it.kind === "message" && id.startsWith("tmp-")) sentBodies.current.add(it.m.body_html);
             const day = dayLabel(it.at);
             const sep = day !== lastDay;
             lastDay = day;
             return (
-              <Fragment key={it.kind === "message" ? it.m.id : it.a.id}>
+              <Fragment key={id}>
                 {sep && (
                   <div className="flex items-center gap-3 py-2" role="separator">
                     <span className="h-px flex-1 bg-line-soft" />
-                    <span className="text-[11px] font-medium text-fg-4">{day}</span>
+                    <span className="label-caps">{day}</span>
                     <span className="h-px flex-1 bg-line-soft" />
                   </div>
                 )}
-                {it.kind === "message" ? <MessageItem m={it.m} onRetry={onRetry} /> : <ActivityLine a={it.a} />}
+                <div className={cn(fresh && "animate-rise-in motion-reduce:animate-none")}>
+                  {it.kind === "message" ? <MessageItem m={it.m} onRetry={onRetry} /> : <ActivityLine a={it.a} />}
+                </div>
               </Fragment>
             );
           })

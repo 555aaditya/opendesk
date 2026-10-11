@@ -1,4 +1,6 @@
-import { memo } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { forwardRef, memo } from "react";
+import { useTranslation } from "react-i18next";
 import type { Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { relShort, fullDate } from "@/lib/format";
@@ -8,6 +10,7 @@ import { TagChip } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PriorityIcon, priorityLabel, SlaBadge, StatusIcon, statusLabel } from "./bits";
 import { useTicketViewers } from "./presence";
+import { rowMotion } from "./motion";
 
 export type RowProps = {
   ticket: Ticket;
@@ -16,6 +19,8 @@ export type RowProps = {
   selected: boolean;
   selecting: boolean;
   compact: boolean;
+  /** Hide the assignee (a folder where everyone is the same person). */
+  hideAssignee?: boolean;
   onOpen: (t: Ticket) => void;
   onToggle: (t: Ticket, shift: boolean) => void;
   onHover?: (t: Ticket) => void;
@@ -31,144 +36,175 @@ export function awaitingReply(t: Ticket) {
 }
 
 function Viewers({ ticketId }: { ticketId: string }) {
+  const { t } = useTranslation("inbox");
   const v = useTicketViewers(ticketId);
   if (!v.length) return null;
-  const label = v.map((x) => `${x.name} ${x.state === "replying" ? "is replying" : "is viewing"}`).join(", ");
+  const label = v.map((x) => t(x.state === "replying" ? "presence.replying" : "presence.viewing", { name: x.name })).join(", ");
   return (
     <Tooltip content={label}>
-      <span className="flex">
+      <span className="flex animate-pop-in motion-reduce:animate-none">
         <AvatarStack size="xs" max={3} people={v.map((x) => ({ id: x.user_id, name: x.name, avatar: x.avatar, state: x.state }))} />
       </span>
     </Tooltip>
   );
 }
 
-export const TicketRow = memo(function TicketRow({ ticket: t, active, focused, selected, selecting, compact, onOpen, onToggle, onHover }: RowProps) {
+const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
+  { ticket: t, active, focused, selected, selecting, compact, hideAssignee, onOpen, onToggle, onHover },
+  ref,
+) {
+  const { t: tr } = useTranslation("inbox");
+  const reduced = useReducedMotion();
   const unread = awaitingReply(t);
-  const contactName = t.contact?.name || t.contact?.email || "Unknown";
+  const contactName = t.contact?.name || t.contact?.email || tr("row.unknown");
+  const subject = t.subject || tr("row.noSubject");
+  const showCheck = selecting || selected;
   const check = (
-    <span
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center transition-opacity",
-        selecting || selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100",
-      )}
-    >
-      <Checkbox
-        checked={selected}
-        aria-label={`Select ticket ${t.number}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (e.shiftKey) {
-            e.preventDefault();
-            onToggle(t, true);
-          }
-        }}
-        onCheckedChange={() => onToggle(t, false)}
-      />
-    </span>
+    <Checkbox
+      checked={selected}
+      aria-label={tr("row.select", { number: t.number })}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (e.shiftKey) {
+          e.preventDefault();
+          onToggle(t, true);
+        }
+      }}
+      onCheckedChange={() => onToggle(t, false)}
+    />
   );
 
-  if (compact) {
-    return (
-      <div
-        role="option"
-        aria-selected={active}
-        data-ticket-id={t.id}
-        tabIndex={-1}
-        onClick={() => onOpen(t)}
-        onMouseEnter={() => onHover?.(t)}
-        className={cn(
-          "group relative flex cursor-pointer gap-2.5 border-b border-line-soft px-3 py-2.5 outline-none transition-colors duration-75",
-          active ? "bg-active" : selected ? "bg-hover" : "hover:bg-hover/70",
-          focused && !active && "shadow-[inset_2px_0_0_var(--fg-3)]",
-          active && "shadow-[inset_2px_0_0_var(--fg)]",
-        )}
-      >
-        <div className="flex w-5 shrink-0 flex-col items-center gap-2 pt-0.5">
-          {selecting || selected ? check : <StatusIcon status={t.status} />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
-              {contactName}
-            </span>
-            <Viewers ticketId={t.id} />
-            <span className="mono shrink-0 text-[10.5px] text-fg-4" title={fullDate(t.last_message_at)}>
-              {relShort(t.last_message_at)}
-            </span>
-          </div>
-          <div className={cn("mt-0.5 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg")} data-ph-mask>
-            {t.subject || "(no subject)"}
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5">
-            <span className="min-w-0 flex-1 truncate text-xs text-fg-3" data-ph-mask>
-              {t.last_message_preview}
-            </span>
-            {t.priority === "urgent" || t.priority === "high" ? <PriorityIcon priority={t.priority} className="size-3" /> : null}
-            <SlaBadge ticket={t} />
-            {t.assignee && <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="xs" />}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // The focus marker: a short ink bar at the row's left edge.
+  const marker = (focused || active) && (
+    <span
+      aria-hidden
+      className={cn("absolute inset-y-2 left-0 w-[2px] rounded-r-xs transition-colors", active ? "bg-fg" : "bg-fg-4")}
+    />
+  );
 
   return (
-    <div
+    <motion.div
+      ref={ref}
       role="option"
       aria-selected={active}
       data-ticket-id={t.id}
       tabIndex={-1}
       onClick={() => onOpen(t)}
       onMouseEnter={() => onHover?.(t)}
-      className={cn(
-        "group relative flex h-11 cursor-pointer items-center gap-3 border-b border-line-soft pl-3 pr-4 outline-none transition-colors duration-75",
-        selected ? "bg-hover" : "hover:bg-hover/70",
-        focused && "shadow-[inset_2px_0_0_var(--fg-3)]",
-      )}
+      {...rowMotion(reduced)}
+      className="relative shrink-0 overflow-hidden outline-none"
     >
-      {check}
-      <Tooltip content={statusLabel[t.status]}>
-        <span className="flex">
-          <StatusIcon status={t.status} />
-        </span>
-      </Tooltip>
-      <Tooltip content={`${priorityLabel[t.priority]} priority`}>
-        <span className="flex w-4 shrink-0 justify-center">
-          <PriorityIcon priority={t.priority} muted={t.priority === "low"} />
-        </span>
-      </Tooltip>
-      <span className={cn("w-[168px] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
-        {contactName}
-      </span>
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">
-        <span className={cn("shrink-0 truncate text-[13px] max-w-[60%]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
-          {t.subject || "(no subject)"}
-        </span>
-        <span className="min-w-0 truncate text-[12.5px] text-fg-3" data-ph-mask>
-          {t.last_message_preview}
-        </span>
-      </span>
-      <span className="hidden shrink-0 items-center gap-1 lg:flex">
-        {t.tags.slice(0, 2).map((tag) => (
-          <TagChip key={tag.id} name={tag.name} color={tag.color} />
-        ))}
-        {t.tags.length > 2 && <span className="text-[11px] text-fg-4">+{t.tags.length - 2}</span>}
-      </span>
-      <Viewers ticketId={t.id} />
-      <SlaBadge ticket={t} />
-      <span className="flex w-5 shrink-0 justify-center">
-        {t.assignee && (
-          <Tooltip content={t.assignee.name}>
+      {compact ? (
+        <div
+          className={cn(
+            "group relative flex cursor-pointer gap-2.5 border-b border-line-soft py-2.5 pl-3.5 pr-3 transition-colors duration-100",
+            active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken",
+          )}
+        >
+          {marker}
+          <div className="relative flex size-5 shrink-0 items-center justify-center">
+            {/* The status, swapped for a checkbox on hover or while selecting. */}
+            <span className={cn("flex transition-opacity duration-100", showCheck ? "opacity-0" : "md:group-hover:opacity-0")}>
+              <StatusIcon status={t.status} />
+            </span>
+            <span
+              className={cn(
+                "absolute inset-0 flex items-center justify-center transition-opacity duration-100",
+                showCheck ? "opacity-100" : "pointer-events-none opacity-0 md:group-hover:pointer-events-auto md:group-hover:opacity-100",
+              )}
+            >
+              {check}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
+                {contactName}
+              </span>
+              <Viewers ticketId={t.id} />
+              <span className="mono shrink-0 text-[10.5px] text-fg-4 tabular-nums" title={fullDate(t.last_message_at)}>
+                {relShort(t.last_message_at)}
+              </span>
+            </div>
+            <div className={cn("mt-0.5 flex items-center gap-1.5 text-[12.5px]", unread ? "font-medium text-fg" : "text-fg")}>
+              <span className="min-w-0 truncate" data-ph-mask>
+                {subject}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center gap-1.5">
+              <span className="min-w-0 flex-1 truncate text-xs text-fg-3" data-ph-mask>
+                {t.last_message_preview}
+              </span>
+              {t.priority === "urgent" || t.priority === "high" ? (
+                <Tooltip content={tr("row.priority", { priority: priorityLabel[t.priority] })}>
+                  <span className="flex">
+                    <PriorityIcon priority={t.priority} className="size-3" />
+                  </span>
+                </Tooltip>
+              ) : null}
+              <SlaBadge ticket={t} />
+              {t.assignee && !hideAssignee && <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="xs" />}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "group relative flex h-11 cursor-pointer items-center gap-3 border-b border-line-soft pl-3.5 pr-5 transition-colors duration-100",
+            selected ? "bg-hover" : "hover:bg-sunken",
+          )}
+        >
+          {marker}
+          <span className={cn("flex size-5 shrink-0 items-center justify-center transition-opacity duration-100", showCheck ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100")}>
+            {check}
+          </span>
+          <Tooltip content={statusLabel[t.status]}>
             <span className="flex">
-              <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="sm" />
+              <StatusIcon status={t.status} />
             </span>
           </Tooltip>
-        )}
-      </span>
-      <span className="mono w-10 shrink-0 text-right text-[11px] text-fg-3 tabular-nums" title={fullDate(t.last_message_at)}>
-        {relShort(t.last_message_at)}
-      </span>
-    </div>
+          <Tooltip content={tr("row.priority", { priority: priorityLabel[t.priority] })}>
+            <span className="flex w-4 shrink-0 justify-center">
+              <PriorityIcon priority={t.priority} muted={t.priority === "low"} />
+            </span>
+          </Tooltip>
+          <span className={cn("w-[168px] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
+            {contactName}
+          </span>
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className={cn("max-w-[60%] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
+              {subject}
+            </span>
+            <span className="min-w-0 truncate text-[12.5px] text-fg-4" data-ph-mask>
+              {t.last_message_preview}
+            </span>
+          </span>
+          <span className="hidden shrink-0 items-center gap-1 lg:flex">
+            {t.tags.slice(0, 2).map((tag) => (
+              <TagChip key={tag.id} name={tag.name} color={tag.color} />
+            ))}
+            {t.tags.length > 2 && <span className="mono text-[10.5px] text-fg-4">+{t.tags.length - 2}</span>}
+          </span>
+          <Viewers ticketId={t.id} />
+          <SlaBadge ticket={t} />
+          {!hideAssignee && (
+            <span className="flex w-5 shrink-0 justify-center">
+              {t.assignee && (
+                <Tooltip content={t.assignee.name}>
+                  <span className="flex">
+                    <Avatar name={t.assignee.name} src={t.assignee.avatar_url} size="sm" />
+                  </span>
+                </Tooltip>
+              )}
+            </span>
+          )}
+          <span className="mono w-11 shrink-0 text-right text-[11px] text-fg-3 tabular-nums" title={fullDate(t.last_message_at)}>
+            {relShort(t.last_message_at)}
+          </span>
+        </div>
+      )}
+    </motion.div>
   );
 });
+
+export const TicketRow = memo(Row);

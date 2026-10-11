@@ -33,7 +33,7 @@ export async function run(t) {
   });
 
   await t.step("add a new tag", async () => {
-    const tagBtn = owner.getByRole("button", { name: /add tags?/i }).or(owner.getByPlaceholder("Add tags")).first();
+    const tagBtn = owner.getByRole("button", { name: /add (tags?|labels?)/i }).or(owner.getByPlaceholder("Add tags")).first();
     await tagBtn.click();
     const input = owner.getByPlaceholder("Add or create a tag");
     await input.fill("vip");

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Check, Download, FileText, Lock, MoreHorizontal, RotateCw } from "lucide-react";
 import { memo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { tone } from "@/lib/tones";
 import type { Attachment, Message } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -26,14 +28,15 @@ function Body({ html, className }: { html: string; className?: string }) {
 }
 
 function Original({ id }: { id: string }) {
+  const { t } = useTranslation("inbox");
   const { data, isPending, isError } = useQuery({ queryKey: ["message-original", id], queryFn: () => api.messages.original(id), staleTime: Infinity });
   if (isPending)
     return (
       <div className="mt-3 flex items-center gap-2 text-xs text-fg-3">
-        <Spinner className="size-3" /> Loading the original
+        <Spinner className="size-3" /> {t("message.loadingOriginal")}
       </div>
     );
-  if (isError) return <p className="mt-3 text-xs text-fg-3">The original message isn't available.</p>;
+  if (isError) return <p className="mt-3 text-xs text-fg-3">{t("message.originalMissing")}</p>;
   return <Body html={data.full_html} className="mt-3 border-l-2 border-line pl-3 text-[13px] text-fg-2" />;
 }
 
@@ -42,6 +45,7 @@ function isImage(a: Attachment) {
 }
 
 export function Attachments({ items }: { items: Attachment[] }) {
+  const { t } = useTranslation("inbox");
   const [preview, setPreview] = useState<Attachment | null>(null);
   const visible = items.filter((a) => !a.inline);
   if (!visible.length) return null;
@@ -57,7 +61,7 @@ export function Attachments({ items }: { items: Attachment[] }) {
               type="button"
               onClick={() => setPreview(a)}
               className="group relative h-[88px] w-[124px] overflow-hidden rounded-md border border-line bg-sunken"
-              aria-label={`Preview ${a.filename}`}
+              aria-label={t("message.preview", { name: a.filename })}
             >
               <img src={a.url} alt="" loading="lazy" className="ph-no-capture size-full object-cover transition-transform duration-200 group-hover:scale-[1.03]" />
               <span className="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/55 to-transparent px-1.5 pb-1 pt-4 text-left text-[10.5px] text-white">
@@ -92,7 +96,7 @@ export function Attachments({ items }: { items: Attachment[] }) {
           <div className="flex flex-col items-center gap-3 pb-2">
             <img src={preview.url} alt={preview.filename} className="ph-no-capture max-h-[60vh] max-w-full rounded-md border border-line" />
             <a href={preview.url} target="_blank" rel="noopener noreferrer" className="text-xs text-fg-3 underline underline-offset-2 hover:text-fg">
-              Open full size
+              {t("message.fullSize")}
             </a>
           </div>
         )}
@@ -102,32 +106,33 @@ export function Attachments({ items }: { items: Attachment[] }) {
 }
 
 function Delivery({ m, onRetry }: { m: Message; onRetry?: () => void }) {
+  const { t } = useTranslation("inbox");
   if (m.kind === "note" || m.direction === "inbound" || m.delivery_status === "none") return null;
   if (m.delivery_status === "pending")
     return (
       <span className="flex items-center gap-1 text-[11px] text-fg-4">
-        <Spinner className="size-3" /> Sending
+        <Spinner className="size-3" /> {t("message.sending")}
       </span>
     );
   if (m.delivery_status === "sent")
     return (
-      <Tooltip content={`Delivered to ${m.to.join(", ") || "the customer"}`}>
-        <span className="flex items-center gap-1 text-[11px] text-fg-4">
-          <Check className="size-3" /> Sent
+      <Tooltip content={t("message.deliveredTo", { to: m.to.join(", ") || t("composer.theCustomer") })}>
+        <span className="flex items-center gap-1 text-[11px] text-fg-4 animate-fade-in">
+          <Check className={`size-3 ${tone.green.text}`} /> {t("message.sent")}
         </span>
       </Tooltip>
     );
   return (
     <span className="flex items-center gap-2">
-      <Tooltip content={m.delivery_error || "The mail server refused this message"}>
-        <span className="flex items-center gap-1.5 text-[11px] font-medium text-danger-fg">
-          <span className="size-1.5 rounded-full bg-danger" />
-          {m.delivery_status === "bounced" ? "Bounced" : "Not delivered"}
+      <Tooltip content={m.delivery_error || t("message.refused")}>
+        <span className={`inline-flex h-5 items-center gap-1.5 rounded-sm px-1.5 text-[11px] font-medium ${tone.red.chip}`}>
+          <span className={`size-1.5 rounded-full ${tone.red.solid}`} />
+          {m.delivery_status === "bounced" ? t("message.bounced") : t("message.notDelivered")}
         </span>
       </Tooltip>
       {onRetry && (
         <Button size="xs" variant="secondary" icon={<RotateCw className="size-3" />} onClick={onRetry}>
-          Retry
+          {t("error.retry")}
         </Button>
       )}
     </span>
@@ -142,17 +147,18 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
   const failed = m.delivery_status === "failed" || m.delivery_status === "bounced";
   const avatar = m.author.user?.avatar_url ?? m.author.contact?.avatar_url;
   const tr = useMessageTranslation(m);
+  const { t } = useTranslation("inbox");
 
   return (
     <article
       id={`m-${m.id}`}
-      aria-label={`${note ? "Note" : "Message"} from ${name}`}
+      aria-label={t(note ? "message.noteFrom" : "message.from", { name })}
       className={cn(
         "group/msg relative rounded-lg border transition-shadow duration-300",
         note
           ? "border-dashed border-note-line bg-note"
           : failed
-            ? "border-[color-mix(in_srgb,var(--danger)_30%,var(--line))] bg-surface"
+            ? cn(tone.red.line, "bg-surface")
             : "border-line bg-surface",
         highlight && "shadow-[0_0_0_3px_var(--focus)]",
       )}
@@ -166,11 +172,11 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
           <AiAuthorLabel m={m} />
           {note ? (
             <span className="flex shrink-0 items-center gap-1 text-[11.5px] text-fg-3">
-              <Lock className="size-3" /> Internal note
+              <Lock className="size-3" /> {t("message.internalNote")}
             </span>
           ) : outbound ? (
             <span className="min-w-0 truncate text-[11.5px] text-fg-3" data-ph-mask>
-              to {m.to.join(", ") || "customer"}
+              {t("message.to", { to: m.to.join(", ") || t("composer.theCustomer") })}
               {m.cc.length > 0 && `, cc ${m.cc.join(", ")}`}
             </span>
           ) : (
@@ -192,13 +198,13 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
         <Body html={tr.showing && tr.html ? tr.html : m.body_html || `<p>${m.body_text}</p>`} />
         {m.has_quoted && (
           <div>
-            <Tooltip content={showOriginal ? "Hide quoted text" : "Show original"}>
+            <Tooltip content={showOriginal ? t("message.hideQuoted") : t("message.showOriginal")}>
               <button
                 type="button"
                 aria-expanded={showOriginal}
                 onClick={() => setShowOriginal((v) => !v)}
-                className="mt-2 inline-flex h-4 items-center rounded-full bg-hover px-1.5 text-fg-3 hover:bg-active hover:text-fg"
-                aria-label={showOriginal ? "Hide quoted text" : "Show original"}
+                className="mt-2 inline-flex h-4 items-center rounded-sm bg-hover px-1.5 text-fg-3 transition-colors hover:bg-active hover:text-fg"
+                aria-label={showOriginal ? t("message.hideQuoted") : t("message.showOriginal")}
               >
                 <MoreHorizontal className="size-3.5" />
               </button>
@@ -209,7 +215,7 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
         <Attachments items={m.attachments} />
         {failed && m.delivery_error && (
           <p className="mt-3 flex items-start gap-1.5 rounded-md bg-sunken px-2.5 py-2 text-xs text-fg-2">
-            <AlertCircle className="mt-px size-3.5 shrink-0 text-danger-fg" />
+            <AlertCircle className={`mt-px size-3.5 shrink-0 ${tone.red.text}`} />
             <span className="mono">{m.delivery_error}</span>
           </p>
         )}

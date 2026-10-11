@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/input";
@@ -18,12 +19,13 @@ import { patchTicketEverywhere } from "@/lib/ticketCache";
 import { useSession } from "@/lib/session";
 import { useConfirm } from "@/components/ui/confirm";
 import { shell } from "@/app/shellStore";
-import { PriorityIcon, priorityLabel, priorityOrder } from "./bits";
+import { ChannelIcon, PriorityIcon, priorityLabel, priorityOrder } from "./bits";
 import { ChevronDown } from "lucide-react";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function NewTicketDialog() {
+  const { t: tr } = useTranslation("inbox");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -56,7 +58,7 @@ export default function NewTicketDialog() {
   const close = () => shell.newTicket(false);
   const requestClose = () => {
     if (!dirty) return close();
-    confirm.show("Your draft will be lost.", close, { title: "Discard this ticket?", confirmLabel: "Discard", danger: true });
+    confirm.show(tr("newTicket.discardBody"), close, { title: tr("newTicket.discardTitle"), confirmLabel: tr("newTicket.discard"), danger: true });
   };
 
   const create = useMutation({
@@ -77,7 +79,7 @@ export default function NewTicketDialog() {
     onSuccess: (t) => {
       patchTicketEverywhere(qc, t, me);
       void qc.invalidateQueries({ queryKey: qk.counts });
-      toast.success(`Ticket #${t.number} created`);
+      toast.success(tr("newTicket.created", { number: t.number }));
       close();
       void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: t.assignee?.id === me ? "mine" : "open", ticketId: t.id } });
     },
@@ -86,16 +88,16 @@ export default function NewTicketDialog() {
 
   const submit = () => {
     setError(null);
-    if (!to) return setError("Add a recipient.");
-    if (!subject.trim()) return setError("Add a subject.");
-    if (!body) return setError("Write a message.");
+    if (!to) return setError(tr("newTicket.needTo"));
+    if (!subject.trim()) return setError(tr("newTicket.needSubject"));
+    if (!body) return setError(tr("newTicket.needBody"));
     create.mutate();
   };
 
   const toItems = [
     ...(contacts.data?.data ?? []).map((c) => ({
       value: c.id,
-      label: c.name || c.email || "Unnamed",
+      label: c.name || c.email || tr("newTicket.unnamed"),
       hint: c.email ?? undefined,
       icon: <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="xs" />,
     })),
@@ -106,7 +108,7 @@ export default function NewTicketDialog() {
     <Dialog
       open
       onOpenChange={(o) => !o && requestClose()}
-      title="New ticket"
+      title={tr("newTicket.title")}
       size="lg"
       onEscapeKeyDown={(e) => {
         if (dirty) {
@@ -120,12 +122,16 @@ export default function NewTicketDialog() {
       }}
       footer={
         <>
-          {error && <p className="mr-auto text-xs text-danger-fg">{error}</p>}
+          {error && (
+            <p role="alert" className="mr-auto text-xs text-danger-fg animate-fade-in">
+              {error}
+            </p>
+          )}
           <Button variant="ghost" onClick={requestClose}>
-            Cancel
+            {tr("common.cancel")}
           </Button>
           <Button variant="primary" loading={create.isPending} onClick={submit}>
-            {kind === "reply" ? "Create and send" : "Create ticket"}
+            {kind === "reply" ? tr("newTicket.createSend") : tr("newTicket.create")}
           </Button>
         </>
       }
@@ -135,19 +141,19 @@ export default function NewTicketDialog() {
           value={kind}
           onChange={setKind}
           options={[
-            { value: "reply", label: "Email the customer" },
-            { value: "note", label: "Log internally" },
+            { value: "reply", label: tr("newTicket.email") },
+            { value: "note", label: tr("newTicket.internal") },
           ]}
         />
         <div className="grid grid-cols-[1fr_200px] gap-3">
-          <Field label="To">
+          <Field label={tr("newTicket.to")}>
             {({ id }) =>
               to ? (
                 <div className="flex h-8 items-center gap-2 rounded-md border border-line bg-surface pl-2 pr-1 text-sm">
                   <Avatar name={to.contact?.name || to.email || "?"} size="xs" />
                   <span className="min-w-0 flex-1 truncate">{to.contact ? `${to.contact.name} ` : ""}<span className="text-fg-3">{to.contact?.email ?? to.email}</span></span>
                   <Button size="xs" variant="ghost" onClick={() => setTo(null)}>
-                    Change
+                    {tr("newTicket.change")}
                   </Button>
                 </div>
               ) : (
@@ -155,14 +161,18 @@ export default function NewTicketDialog() {
                   items={toItems}
                   value={null}
                   width={380}
-                  placeholder="Search contacts or type an email"
-                  emptyText={toQuery ? "No contacts. Type a full email to use it." : "Start typing"}
+                  placeholder={tr("newTicket.toPlaceholder")}
+                  emptyText={toQuery ? tr("newTicket.noContacts") : tr("newTicket.startTyping")}
                   onSelect={(v) => setTo({ contact: contacts.data?.data.find((c) => c.id === v) })}
                   onCreate={(v) => emailRe.test(v) && setTo({ email: v })}
-                  createLabel="Use"
+                  createLabel={tr("newTicket.use")}
                   trigger={
-                    <button id={id} type="button" className="flex h-8 w-full items-center rounded-md border border-line bg-surface px-2.5 text-left text-sm text-fg-4 hover:border-line-strong">
-                      Search contacts or type an email
+                    <button
+                      id={id}
+                      type="button"
+                      className="flex h-8 w-full items-center rounded-md border border-line bg-surface px-2.5 text-left text-sm text-fg-4 outline-none transition-colors hover:border-line-strong focus-visible:border-fg-4 focus-visible:shadow-[0_0_0_3px_var(--focus)]"
+                    >
+                      {tr("newTicket.toPlaceholder")}
                     </button>
                   }
                   onQueryChange={setToQuery}
@@ -170,31 +180,31 @@ export default function NewTicketDialog() {
               )
             }
           </Field>
-          <Field label="From">
+          <Field label={tr("newTicket.from")}>
             {({ id }) => (
               <Select
                 id={id}
                 value={mailbox}
                 onChange={setMailbox}
                 disabled={kind === "note" || !mailboxes?.length}
-                placeholder="No mailbox"
-                options={(mailboxes ?? []).map((m) => ({ value: m.id, label: m.email }))}
+                placeholder={tr("newTicket.noMailbox")}
+                options={(mailboxes ?? []).map((m) => ({ value: m.id, label: m.email, icon: <ChannelIcon channel="email" /> }))}
               />
             )}
           </Field>
         </div>
-        <Field label="Subject">
-          {({ id }) => <TextInput id={id} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="What is this about?" />}
+        <Field label={tr("newTicket.subject")}>
+          {({ id }) => <TextInput id={id} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={tr("newTicket.subjectPlaceholder")} />}
         </Field>
-        <div className="rounded-md border border-line focus-within:border-fg-3 focus-within:shadow-[0_0_0_3px_var(--focus)]">
-          <RichEditor ref={editor} value={body} onChange={setBody} placeholder={kind === "reply" ? "Write your message" : "Describe the issue"} contentClassName="min-h-[160px]" onSubmit={submit} />
+        <div className="rounded-md border border-line transition-[border-color,box-shadow] duration-150 focus-within:border-fg-4 focus-within:shadow-[0_0_0_3px_var(--focus)]">
+          <RichEditor ref={editor} value={body} onChange={setBody} placeholder={kind === "reply" ? tr("newTicket.bodyReply") : tr("newTicket.bodyNote")} contentClassName="min-h-[160px]" onSubmit={submit} />
         </div>
         <div className="flex items-center gap-2">
           <Picker
             items={priorityOrder.map((p) => ({ value: p, label: priorityLabel[p], icon: <PriorityIcon priority={p} /> }))}
             value={priority}
             onSelect={(v) => setPriority(v as Priority)}
-            placeholder="Priority"
+            placeholder={tr("props.setPriority")}
             trigger={
               <Button size="sm" icon={<PriorityIcon priority={priority} />} iconRight={<ChevronDown className="size-3 text-fg-4" />}>
                 {priorityLabel[priority]}
@@ -203,15 +213,19 @@ export default function NewTicketDialog() {
           />
           <Picker
             items={[
-              { value: "__none", label: "Unassigned" },
+              { value: "__none", label: tr("props.unassigned"), icon: <span className="size-4 rounded-xs border border-dashed border-line-strong" /> },
               ...(members ?? []).filter((m) => m.role !== "viewer").map((m) => ({ value: m.user.id, label: m.user.name, icon: <Avatar name={m.user.name} src={m.user.avatar_url} size="xs" /> })),
             ]}
             value={assignee ?? "__none"}
             onSelect={(v) => setAssignee(v === "__none" ? null : v)}
-            placeholder="Assign to"
+            placeholder={tr("props.assignTo")}
             trigger={
-              <Button size="sm" icon={<Avatar name={assigneeName ?? "?"} size="xs" className={assignee ? "" : "opacity-40"} />} iconRight={<ChevronDown className="size-3 text-fg-4" />}>
-                {assignee ? (assignee === me ? "You" : assigneeName) : "Unassigned"}
+              <Button
+                size="sm"
+                icon={assignee ? <Avatar name={assigneeName ?? "?"} size="xs" /> : <span className="size-4 rounded-xs border border-dashed border-line-strong" />}
+                iconRight={<ChevronDown className="size-3 text-fg-4" />}
+              >
+                {assignee ? (assignee === me ? tr("newTicket.you") : assigneeName) : tr("props.unassigned")}
               </Button>
             }
           />

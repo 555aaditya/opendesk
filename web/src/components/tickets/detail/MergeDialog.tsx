@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { GitMerge } from "lucide-react";
 import { useDeferredValue, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Ticket } from "@/lib/api/types";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
@@ -10,13 +11,14 @@ import { cn } from "@/lib/cn";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toast";
 import { StatusIcon } from "../bits";
 import { useMergeTicket } from "../useTicketActions";
 import { EmptyState } from "@/components/ui/empty";
 
 export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; open: boolean; onOpenChange: (o: boolean) => void }) {
+  const { t: tr } = useTranslation("inbox");
   const [term, setTerm] = useState("");
   const deferred = useDeferredValue(term.trim());
   const [target, setTarget] = useState<Ticket | null>(null);
@@ -42,7 +44,7 @@ export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; op
       { id: ticket.id, into: target.id },
       {
         onSuccess: () => {
-          toast.success(`Merged into #${target.number}`);
+          toast.success(tr("merge.done", { number: target.number }));
           onOpenChange(false);
           void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "open", ticketId: target.id } });
         },
@@ -55,29 +57,36 @@ export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; op
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Merge #${ticket.number} into another ticket`}
-      description="Messages and notes move to the ticket you choose. This ticket is closed and points to it."
+      title={tr("merge.title", { number: ticket.number })}
+      description={tr("merge.description")}
       footer={
         <>
           {error && <p className="mr-auto text-xs text-danger-fg">{error}</p>}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tr("common.cancel")}
           </Button>
           <Button variant="primary" icon={<GitMerge className="size-3.5" />} disabled={!target} loading={merge.isPending} onClick={run}>
-            {target ? `Merge into #${target.number}` : "Merge"}
+            {target ? tr("merge.into", { number: target.number }) : tr("merge.merge")}
           </Button>
         </>
       }
     >
       <SearchInput value={term} onChange={setTerm} placeholder="Search by subject, customer or #number" inputSize="md" autoFocus />
       <div className="mt-3 flex min-h-[220px] flex-col gap-0.5">
-        {!deferred && <p className="label-caps px-1 pb-1">{ticket.contact ? `Other tickets from ${ticket.contact.name || ticket.contact.email}` : "Recent tickets"}</p>}
+        {!deferred && <p className="label-caps px-1 pb-1">{ticket.contact ? tr("merge.fromContact", { name: ticket.contact.name || ticket.contact.email }) : tr("merge.recent")}</p>}
         {results.isPending ? (
-          <div className="flex justify-center py-8">
-            <Spinner className="text-fg-4" />
+          <div className="flex flex-col gap-0.5" aria-busy="true">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex h-10 items-center gap-2.5 px-2.5" style={{ opacity: 1 - i * 0.2 }}>
+                <Skeleton className="size-3.5 rounded-full" />
+                <Skeleton className="h-2.5 w-10" />
+                <Skeleton className="h-2.5 flex-1" />
+                <Skeleton className="h-2.5 w-8" />
+              </div>
+            ))}
           </div>
         ) : !list.length ? (
-          <EmptyState compact lit={2} title="No tickets found" description="Search by subject, number or contact." />
+          <EmptyState compact lit={2} title={tr("merge.none")} description={tr("merge.noneHint")} />
         ) : (
           list.map((t) => (
             <button
@@ -86,7 +95,7 @@ export function MergeDialog({ ticket, open, onOpenChange }: { ticket: Ticket; op
               onClick={() => setTarget(t)}
               aria-pressed={target?.id === t.id}
               className={cn(
-                "flex h-10 items-center gap-2.5 rounded-md px-2.5 text-left text-[12.5px] hover:bg-hover",
+                "flex h-10 items-center gap-2.5 rounded-md px-2.5 text-left text-[12.5px] outline-none transition-[background-color,box-shadow] duration-150 hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] active:scale-[0.995]",
                 target?.id === t.id && "bg-active shadow-[inset_0_0_0_1px_var(--line-strong)]",
               )}
             >
