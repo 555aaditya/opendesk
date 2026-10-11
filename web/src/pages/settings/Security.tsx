@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Download, Laptop, ShieldCheck, Smartphone } from "lucide-react";
 import { useState } from "react";
+import { DeleteAccountDialog } from "@/components/account/DeleteAccountDialog";
 import { SettingsPage, Section, Row, ListRow } from "@/components/layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import { errorMessage, isApiError } from "@/lib/api/client";
 import type { Session } from "@/lib/api/types";
 import { relLong } from "@/lib/format";
 import { q, qk } from "@/lib/queries";
-import { clearSession, updateUser, useSession } from "@/lib/session";
+import { updateUser, useSession } from "@/lib/session";
 
 export default function Security() {
   return (
@@ -461,70 +461,5 @@ function DeleteAccountSection() {
       </Row>
       {open && <DeleteAccountDialog onClose={() => setOpen(false)} />}
     </Section>
-  );
-}
-
-function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
-  const user = useSession((s) => s.user)!;
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
-  const [typed, setTyped] = useState("");
-  const del = useMutation({
-    mutationFn: () => api.me.delete({ password: password || undefined, code: user.totp_enabled ? code.trim() : undefined }),
-    onSuccess: () => {
-      clearSession();
-      qc.clear();
-      void navigate({ to: "/login" });
-    },
-  });
-  const message = del.error
-    ? isApiError(del.error, "sole_owner") || isApiError(del.error, "conflict")
-      ? "Transfer ownership or delete the workspaces you own with other members first."
-      : isApiError(del.error, "invalid_credentials") || isApiError(del.error, "invalid_code")
-        ? "That password or code is not right."
-        : errorMessage(del.error)
-    : null;
-  return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="sm"
-      title="Delete your account?"
-      description="Your account, your sessions and every workspace you solely own are removed for good."
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="danger-solid"
-            loading={del.isPending}
-            disabled={typed !== "delete" || (user.totp_enabled && code.trim().length < 6)}
-            onClick={() => del.mutate()}
-          >
-            Delete account
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3 pb-1">
-        <Field label="Password" hint="Leave empty if you only sign in with Google, Microsoft, GitHub or SSO.">
-          {({ id, ...a }) => (
-            <TextInput id={id} {...a} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          )}
-        </Field>
-        {user.totp_enabled && (
-          <Field label="Two-factor code">
-            {({ id }) => <TextInput id={id} className="mono" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" />}
-          </Field>
-        )}
-        <Field label={<>Type <span className="mono">delete</span> to confirm</>}>
-          {({ id }) => <TextInput id={id} value={typed} onChange={(e) => setTyped(e.target.value)} />}
-        </Field>
-        {message && <p className="text-xs text-danger-fg">{message}</p>}
-      </div>
-    </Dialog>
   );
 }

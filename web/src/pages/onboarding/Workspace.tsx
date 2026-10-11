@@ -9,14 +9,17 @@ import { AuthField, Notice, slugify } from "@/components/auth/parts";
 import { OnboardingSteps } from "@/components/auth/OnboardingSteps";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import { reloadSession, selectWorkspace, useSession, useWorkspace } from "@/lib/session";
-import { track } from "@/lib/analytics";
+import { reloadSession, selectWorkspace, signOut, useSession, useWorkspace } from "@/lib/session";
+import { DeleteAccountDialog } from "@/components/account/DeleteAccountDialog";
+import { resetAnalytics, track } from "@/lib/analytics";
 
 export default function Workspace() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const current = useWorkspace();
   const hasWorkspaces = useSession((s) => s.memberships.length > 0);
+  const email = useSession((s) => s.user?.email);
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +69,29 @@ export default function Workspace() {
           Continue
         </Button>
       </form>
+      {!hasWorkspaces && (
+        // Without a workspace the app's account menu and settings are out of reach.
+        <p className="mt-8 text-center text-[12px] text-fg-3">
+          Signed in as <span className="text-fg-2">{email}</span> ·{" "}
+          <button
+            type="button"
+            className="underline-offset-2 hover:text-fg hover:underline"
+            onClick={async () => {
+              await signOut();
+              resetAnalytics();
+              qc.clear();
+              void navigate({ to: "/login", search: { next: undefined, error: undefined } });
+            }}
+          >
+            Log out
+          </button>{" "}
+          ·{" "}
+          <button type="button" className="underline-offset-2 hover:text-fg hover:underline" onClick={() => setDeleting(true)}>
+            Delete account
+          </button>
+        </p>
+      )}
+      {deleting && <DeleteAccountDialog onClose={() => setDeleting(false)} />}
     </div>
   );
 }
