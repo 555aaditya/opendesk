@@ -1,6 +1,7 @@
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
+import { Morph } from "@/components/motion";
 import { Tooltip } from "./tooltip";
 
 export async function copyText(text: string) {
@@ -28,7 +29,7 @@ export function CopyButton({ value, label = "Copy", className }: { value: string
         }}
         className={cn("flex size-6 shrink-0 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-hover hover:text-fg", className)}
       >
-        {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        <Morph k={done ? "done" : "copy"}>{done ? <Check className="size-3.5 text-tone-green" /> : <Copy className="size-3.5" />}</Morph>
       </button>
     </Tooltip>
   );

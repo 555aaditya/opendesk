@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Outlet, useNavigate } from "@tanstack/react-router";
+import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect } from "react";
 import { Dialog as D } from "radix-ui";
 import { identify } from "@/lib/analytics";
@@ -73,6 +73,8 @@ function useRealtimeConnection() {
 }
 
 export function AppLayout() {
+  // The top-level area (inbox, views, contacts, settings/...) keys the route transition.
+  const section = useRouterState({ select: (s) => { const p = s.location.pathname.split("/").filter(Boolean); return p[0] ?? ""; } });
   useRealtimeConnection();
   const navigate = useNavigate();
   const newTicketOpen = useShell((s) => s.newTicketOpen);
@@ -125,7 +127,10 @@ export function AppLayout() {
 
         {/* The work panel: pure white, its inner corner softened where it meets the chrome. */}
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden border-t border-line bg-surface md:rounded-tl-2xl md:border-l">
-          <Outlet />
+          {/* Moving between areas cross-fades the panel; moving within one (ticket to ticket) does not. */}
+          <div key={section} className="flex min-h-0 flex-1 flex-col animate-route-in motion-reduce:animate-none">
+            <Outlet />
+          </div>
         </main>
       </div>
 

@@ -28,7 +28,8 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/kbd";
@@ -55,12 +56,39 @@ const folderIcons: Record<FolderId, ReactNode> = {
 // The two row shapes share one element so the icon never moves while the label
 // fades and the column narrows.
 const rowBase =
-  "group relative flex items-center rounded-md text-left text-[12.5px] outline-none transition-[width,background-color,color] duration-200 ease-out focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:transition-colors";
+  "group relative isolate flex items-center rounded-md text-left text-[12.5px] outline-none transition-[width,background-color,color] duration-200 ease-out focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:transition-colors";
 const rowShape = (rail: boolean) => (rail ? "mx-3 h-8 w-8 justify-center" : "mx-2.5 h-7 w-[calc(100%-1.25rem)] gap-2.5 px-2");
 const rowIdle = "text-fg-2 hover:bg-chrome-hover hover:text-fg [&>svg]:text-fg-3 hover:[&>svg]:text-fg-2";
-// The module dot: a small ink circle in the gutter beside the current row.
-const rowActive =
-  "bg-chrome-active text-fg font-medium [&>svg]:text-fg";
+// The current row: its grey pill glides between rows (ActivePill), so the row
+// itself only changes its text.
+const rowActive = "text-fg font-medium [&>svg]:text-fg hover:bg-transparent";
+
+const PillCtx = createContext("nav-pill");
+
+/** The active row's background, shared across rows so it glides between them. */
+function ActivePill() {
+  const id = useContext(PillCtx);
+  const reduce = useReducedMotion();
+  return (
+    <motion.span
+      aria-hidden
+      layoutId={reduce ? undefined : id}
+      transition={{ type: "spring", stiffness: 550, damping: 42, mass: 0.7 }}
+      className="absolute inset-0 -z-10 rounded-md bg-chrome-active"
+    />
+  );
+}
+
+/** Link children that draw the gliding pill when the row is current. */
+const withPill = (content: ReactNode) =>
+  function NavRowContent({ isActive }: { isActive: boolean }) {
+    return (
+      <>
+        {isActive && <ActivePill />}
+        {content}
+      </>
+    );
+  };
 
 function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
   if (!rail) return children;
@@ -147,6 +175,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
   const { t } = useTranslation("shell");
 
   return (
+    <PillCtx.Provider value={drawer ? "nav-pill-drawer" : "nav-pill"}>
     <nav aria-label={t("nav.main")} className="flex h-full w-full flex-col">
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
         <Section id="inbox" label={t("nav.inbox")} rail={rail} first>
@@ -158,14 +187,14 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
                 className={cn(rowBase, rowShape(rail), rowIdle)}
                 activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
                 aria-label={rail ? f.label : undefined}
-              >
+              >{withPill(<>
                 {folderIcons[f.id]}
                 <Label rail={rail}>{f.label}</Label>
                 {counts && f.id !== "solved" && f.id !== "spam" && <Count n={f.count(counts)} rail={rail} />}
                 {rail && counts && f.id === "unassigned" && (f.count(counts) ?? 0) > 0 && (
                   <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />
                 )}
-              </Link>
+              </>)}</Link>
             </NavTip>
           ))}
         </Section>
@@ -199,11 +228,11 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
                     className={cn(rowBase, rowShape(rail), rowIdle)}
                     activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
                     aria-label={rail ? v.name : undefined}
-                  >
+                  >{withPill(<>
                     <Layers />
                     <Label rail={rail}>{v.name}</Label>
                     <Count n={counts?.views?.[v.id]} rail={rail} />
-                  </Link>
+                  </>)}</Link>
                 </NavTip>
               ))
           ) : (
@@ -224,32 +253,32 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
               className={cn(rowBase, rowShape(rail), rowIdle)}
               activeProps={{ className: rowActive }}
               aria-label={rail ? t("nav.contacts") : undefined}
-            >
+            >{withPill(<>
               <Users />
               <Label rail={rail}>{t("nav.contacts")}</Label>
-            </Link>
+            </>)}</Link>
           </NavTip>
           <NavTip rail={rail} label={t("nav.kb")}>
-            <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>
+            <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>{withPill(<>
               <BookOpen />
               <Label rail={rail}>{t("nav.kb")}</Label>
-            </Link>
+            </>)}</Link>
           </NavTip>
           <NavTip rail={rail} label={t("nav.reports")}>
-            <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.reports") : undefined}>
+            <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.reports") : undefined}>{withPill(<>
               <BarChart3 />
               <Label rail={rail}>{t("nav.reports")}</Label>
-            </Link>
+            </>)}</Link>
           </NavTip>
         </Section>
       </div>
 
       <div className="flex shrink-0 flex-col gap-px py-1.5">
         <NavTip rail={rail} label={t("nav.settings")}>
-          <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>
+          <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>{withPill(<>
             <Settings />
             <Label rail={rail}>{t("nav.settings")}</Label>
-          </Link>
+          </>)}</Link>
         </NavTip>
         {!drawer && (
           <Tooltip content={rail ? t("nav.expand") : t("nav.collapse")} shortcut="b" side="right">
@@ -270,6 +299,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
         <UserMenu rail={rail} />
       </div>
     </nav>
+    </PillCtx.Provider>
   );
 }
 

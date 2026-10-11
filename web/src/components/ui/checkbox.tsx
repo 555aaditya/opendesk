@@ -28,11 +28,11 @@ export function Checkbox({
       onClick={onClick}
       onCheckedChange={(v) => onCheckedChange(v === true)}
       className={cn(
-        "peer flex size-[15px] shrink-0 items-center justify-center rounded-sm border border-line-strong bg-surface text-inverse-fg transition-colors duration-100 hover:border-fg-3 data-[state=checked]:border-inverse data-[state=checked]:bg-inverse data-[state=indeterminate]:border-inverse data-[state=indeterminate]:bg-inverse disabled:opacity-50",
+        "peer flex size-[15px] shrink-0 items-center justify-center rounded-sm border border-line-strong bg-surface text-inverse-fg transition-[background-color,border-color,transform] duration-150 hover:border-fg-3 active:scale-90 data-[state=checked]:border-inverse data-[state=checked]:bg-inverse data-[state=indeterminate]:border-inverse data-[state=indeterminate]:bg-inverse disabled:opacity-50",
         className,
       )}
     >
-      <C.Indicator className="flex items-center justify-center">
+      <C.Indicator className="flex items-center justify-center data-[state=checked]:animate-check-pop data-[state=indeterminate]:animate-check-pop motion-reduce:animate-none">
         {checked === "indeterminate" ? <Minus className="size-2.5" strokeWidth={3} /> : <Check className="size-2.5" strokeWidth={3.5} />}
       </C.Indicator>
     </C.Root>

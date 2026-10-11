@@ -277,6 +277,9 @@
   --animate-dialog-out: dialog-out 140ms ease-in forwards;
   --animate-fade-out: fade-out 140ms ease-in forwards;
   --animate-slide-out-right: slide-out-right 160ms ease-in forwards;
+  --animate-check-pop: check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-bell-ring: bell-ring 700ms ease-in-out;
+  --animate-route-in: route-in 220ms var(--ease-out-expo) both;
   --animate-indicator-in: indicator-in 200ms var(--ease-out-expo);
   --color-tone-blue-soft: var(--tone-blue-soft);
   --color-tone-blue-line: var(--tone-blue-line);
@@ -345,6 +348,23 @@
   to { opacity: 1; transform: none; }
 }
 
+@keyframes route-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes check-pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-11deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-5deg); }
+  75% { transform: rotate(2deg); }
+}
+
 @keyframes shake {
   0%, 100% { transform: none; }
   25% { transform: translateX(-4px); }
@@ -403,7 +423,7 @@
 }
 @keyframes shimmer {
   0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  100% { background-position: 0% 0; }
 }
 @keyframes pending-bar {
   0% { transform: translateX(-100%); }
@@ -484,8 +504,8 @@
   }
   .skeleton {
     border-radius: 4px;
-    background: linear-gradient(90deg, var(--hover) 0%, var(--active) 50%, var(--hover) 100%);
-    background-size: 200% 100%;
+    background: linear-gradient(90deg, var(--hover) 0%, var(--hover) 35%, var(--active) 50%, var(--hover) 65%, var(--hover) 100%);
+    background-size: 300% 100%;
     animation: var(--animate-shimmer);
   }
   .hairline-b {
