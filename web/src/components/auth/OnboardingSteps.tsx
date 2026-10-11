@@ -16,7 +16,7 @@ export function OnboardingSteps({ current }: { current: 1 | 2 }) {
             {i > 0 && <span className={cn("h-px w-8", done || active ? "bg-fg-3" : "bg-line")} aria-hidden />}
             <span
               className={cn(
-                "mono flex size-5 items-center justify-center rounded-full text-[10.5px] font-medium",
+                "mono flex size-5 items-center justify-center rounded-[5px] text-[10.5px] font-medium",
                 done ? "bg-inverse text-inverse-fg" : active ? "border border-fg text-fg" : "border border-line text-fg-4",
               )}
             >
