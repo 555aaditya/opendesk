@@ -226,7 +226,7 @@ export function CommandPalette() {
               {pageCommands.length > 0 && (
                 <Command.Group heading="This ticket" className={groupCls}>
                   {pageCommands.map((c) => (
-                    <Item key={c.id} value={`${c.label} ${c.id}`} icon={c.icon} hint={c.shortcut && <Kbd>{c.shortcut}</Kbd>} onSelect={() => go(c.run)}>
+                    <Item key={c.id} value={`${c.label} ${c.id}`} keywords={c.keywords} icon={c.icon} hint={c.shortcut && <Kbd>{c.shortcut}</Kbd>} onSelect={() => go(c.run)}>
                       {c.label}
                     </Item>
                   ))}

@@ -86,6 +86,7 @@
     "filters": {
       "status": "Status",
       "priority": "Priority",
+      "severity": "Severity",
       "assignee": "Assignee",
       "team": "Team",
       "mailbox": "Mailbox",
@@ -96,6 +97,7 @@
     "any": {
       "status": "Any status",
       "priority": "Any priority",
+      "severity": "Any severity",
       "assignee": "Anyone",
       "team": "Any team",
       "mailbox": "Any mailbox",
@@ -103,6 +105,7 @@
       "channel": "Any channel"
     },
     "keywordPlaceholder": "Subject, contact or text",
+    "noSeverity": "No severity",
     "assigneeViewer": "The person viewing",
     "unassigned": "Unassigned",
     "assignedToViewer": "Assigned to the viewer",
@@ -262,7 +265,9 @@
       "action": "Add at least one action.",
       "condition": "Every condition needs a value, or remove it.",
       "actionValue": "Every action needs a value."
-    }
+    },
+    "chooseSeverity": "Choose a severity",
+    "noSeverity": "No severity"
   },
   "triggers": {
     "ticket_created": "A ticket is created",
@@ -283,6 +288,7 @@
     "channel": "Channel",
     "mailbox_id": "Mailbox",
     "priority": "Priority",
+    "severity": "Severity",
     "status": "Status",
     "tag": "Tag"
   },
@@ -291,11 +297,14 @@
     "not_contains": "doesn't contain",
     "equals": "is",
     "not_equals": "is not",
-    "eq": "is"
+    "eq": "is",
+    "gt": "is above",
+    "lt": "is below"
   },
   "actionTypes": {
     "set_status": "Set status to",
     "set_priority": "Set priority to",
+    "set_severity": "Set severity to",
     "assign_user": "Assign to",
     "assign_team": "Assign to team",
     "add_tag": "Add tag",
@@ -476,7 +485,8 @@
       "label": "Billing",
       "labelAdded": "label added",
       "sentiment": "Sentiment and language recorded",
-      "assigned": "Assigned to the next teammate"
+      "assigned": "Assigned to the next teammate",
+      "severity": "Severity set to Sev 2"
     },
     "section": "Triage",
     "auto": {
@@ -494,9 +504,17 @@
         "label": "Priority",
         "hint": "Raise the priority when a ticket looks urgent. It never lowers it."
       },
+      "severity": {
+        "label": "Severity",
+        "hint": "Set Sev 1 to Sev 4 from the business impact. It only ever raises a severity."
+      },
       "labels": {
         "label": "Labels",
         "hint": "Add labels that match what the ticket is about."
+      },
+      "team": {
+        "label": "Team",
+        "hint": "Route a ticket with no team to the team that fits it best."
       }
     },
     "after": {
@@ -505,6 +523,27 @@
       "hintMode": "The ticket is then assigned with your {{mode}} mode.",
       "hintNone": "Assignment is off, so the ticket goes to whoever has the fewest open tickets.",
       "link": "Assignment settings"
+    },
+    "engine": {
+      "section": "Decision engine",
+      "label": "Engine",
+      "jev": "Jev by TypeSafe",
+      "jevHint": "Fast, typed decisions with calibrated confidence. {{name}} applies a decision only when Jev is sure enough.",
+      "connected": "Connected",
+      "unreachable": "Not reachable",
+      "llm": "LLM fallback",
+      "llmHint": "Your AI model answers the same questions. Set TYPESAFE_API_KEY to use Jev for calibrated confidence.",
+      "none": "Not set up",
+      "noneHint": "Set TYPESAFE_API_KEY or an AI provider key to let {{name}} triage.",
+      "model": "Model"
+    },
+    "threshold": {
+      "label": "Confidence to apply",
+      "hint": "At or above this, {{name}} applies a decision. Below it, the decision waits as a suggestion an agent accepts with one click.",
+      "llmNote": "The LLM fallback has no calibrated confidence, so its decisions apply directly.",
+      "value": "{{pct}}%",
+      "cautious": "Cautious",
+      "eager": "Eager"
     }
   },
   "hours": {

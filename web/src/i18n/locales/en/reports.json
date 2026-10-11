@@ -68,6 +68,11 @@
   "priority": {
     "title": "By priority"
   },
+  "severity": {
+    "title": "By severity",
+    "subtitle": "Tickets created in the period",
+    "none": "No severity"
+  },
   "tags": {
     "title": "By label",
     "emptyTitle": "No labels on open work",

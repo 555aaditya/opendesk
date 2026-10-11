@@ -11,6 +11,8 @@ import { OllieMark } from "@/components/assistant/OllieMark";
 import { useAssistantName } from "@/components/assistant/name";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useTranslation } from "react-i18next";
+import type { DecisionField, Ticket } from "@/lib/api/types";
+import { aiDecisions, decisionNote } from "@/lib/decisions";
 
 export { useAssistantName };
 
@@ -19,15 +21,32 @@ export function isAIActor(actor: { type: string } | null | undefined) {
   return actor?.type === "ai";
 }
 
-/** A tiny violet sparkle with "Set by Ollie"; sits on a value the AI chose. */
-export function SetByOllie({ className }: { className?: string }) {
+/**
+ * What to say about a value the AI chose: "Ollie set this · 92% sure · via Jev"
+ * when Jev decided it, "Ollie set this" otherwise.
+ */
+export function useOllieNote() {
   const { t } = useTranslation("inbox");
   const name = useAssistantName();
+  return (ticket: Pick<Ticket, "custom"> | null | undefined, field?: DecisionField) => {
+    const n = field ? decisionNote(aiDecisions(ticket), field) : null;
+    const parts = [t("ollie.setThis", { name })];
+    if (n?.sure != null) parts.push(t("ollie.sure", { pct: n.sure }));
+    if (n?.jev) parts.push(t("ollie.viaJev"));
+    return parts.join(" · ");
+  };
+}
+
+/** A tiny violet sparkle with "Set by Ollie"; sits on a value the AI chose. `note` replaces the tooltip. */
+export function SetByOllie({ className, note }: { className?: string; note?: string }) {
+  const { t } = useTranslation("inbox");
+  const name = useAssistantName();
+  const label = note ?? t("ollie.setBy", { name });
   return (
-    <Tooltip content={t("ollie.setBy", { name })}>
+    <Tooltip content={label}>
       <span
         role="img"
-        aria-label={t("ollie.setBy", { name })}
+        aria-label={label}
         className={cn("inline-flex size-3 shrink-0 items-center justify-center rounded-xs", tone.violet.soft, tone.violet.text, className)}
       >
         <Sparkles className="size-2" strokeWidth={2.25} />
@@ -55,7 +74,7 @@ export function useAISet(ticketId: string) {
   const tags = new Set<string>();
   for (const a of [...(data ?? [])].sort((x, y) => x.created_at.localeCompare(y.created_at))) {
     const ai = isAIActor(a.actor);
-    if (a.type === "priority_changed" || a.type === "status_changed" || a.type === "assigned") last[a.type] = ai;
+    if (a.type === "priority_changed" || a.type === "severity_changed" || a.type === "status_changed" || a.type === "assigned" || a.type === "team_changed") last[a.type] = ai;
     const tag = typeof a.data.tag === "string" ? a.data.tag : undefined;
     if (tag && a.type === "tagged") {
       if (ai) tags.add(tag);
@@ -63,5 +82,5 @@ export function useAISet(ticketId: string) {
     }
     if (tag && a.type === "untagged") tags.delete(tag);
   }
-  return { priority: !!last.priority_changed, status: !!last.status_changed, assignee: !!last.assigned, tags };
+  return { priority: !!last.priority_changed, severity: !!last.severity_changed, team: !!last.team_changed, status: !!last.status_changed, assignee: !!last.assigned, tags };
 }

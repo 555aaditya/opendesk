@@ -60,6 +60,7 @@ export function matches(ws: WsData, t: Ticket, raw: ListFilters, meId: string): 
   if ((f.spam ?? false) !== t.spam) return false;
   if (f.status?.length && !f.status.includes(t.status)) return false;
   if (f.priority?.length && !f.priority.includes(t.priority)) return false;
+  if (f.severity?.length && !f.severity.includes(t.severity ?? "none")) return false;
   if (f.assignee === "me" && t.assignee?.id !== meId) return false;
   if (f.assignee === "none" && t.assignee) return false;
   if (f.assignee && f.assignee !== "me" && f.assignee !== "none" && t.assignee?.id !== f.assignee) return false;
@@ -95,6 +96,7 @@ export function counts(ws: WsData, meId: string): TicketCounts {
 }
 
 const priorityRank: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
+const severityRank = (s: Ticket["severity"]) => (s ? { sev4: 1, sev3: 2, sev2: 3, sev1: 4 }[s] : 0);
 
 function dueOf(t: Ticket): number {
   const d = t.sla?.first_response_due_at && !t.first_responded_at ? t.sla.first_response_due_at : t.sla?.resolution_due_at;
@@ -115,6 +117,7 @@ export function sortTickets(list: Ticket[], sort: string, order: string | null, 
       if (x === null || y === null) d = x === y ? 0 : x === null ? -1 : 1;
       else d = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y));
     } else if (sort === "priority") d = priorityRank[a.priority] - priorityRank[b.priority];
+    else if (sort === "severity") d = severityRank(a.severity) - severityRank(b.severity);
     else if (sort === "due") d = dueOf(a) - dueOf(b);
     else if (sort === "created_at") d = Date.parse(a.created_at) - Date.parse(b.created_at);
     else d = Date.parse(a.last_message_at) - Date.parse(b.last_message_at);
@@ -201,6 +204,12 @@ export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: Use
     changes.push("priority");
     act("priority_changed", { from, to: patch.priority });
   }
+  if (patch.severity !== undefined && (patch.severity ?? null) !== t.severity) {
+    const from = t.severity;
+    t.severity = patch.severity ?? null;
+    changes.push("severity");
+    act("severity_changed", { from, to: t.severity });
+  }
   if (patch.assignee_id !== undefined && (patch.assignee_id ?? null) !== (t.assignee?.id ?? null)) {
     const from = t.assignee;
     t.assignee = userRef(patch.assignee_id);
@@ -244,6 +253,16 @@ export function applyPatch(ws: WsData, t: Ticket, patch: TicketPatch, actor: Use
   if (patch.custom) {
     t.custom = { ...t.custom, ...patch.custom };
     changes.push("custom");
+  }
+  // Setting a field drops Ollie's pending suggestion for it (contracts/api.md).
+  const sugg = t.custom.ai_suggestions as Record<string, unknown> | undefined;
+  if (sugg && typeof sugg === "object") {
+    const map: Record<string, string> = { priority: "priority", severity: "severity", team_id: "team", spam: "spam", tags: "labels" };
+    const drop = changes.map((c) => map[c]).filter(Boolean);
+    if (drop.some((k) => k in sugg)) {
+      t.custom = { ...t.custom, ai_suggestions: Object.fromEntries(Object.entries(sugg).filter(([k]) => !drop.includes(k))) };
+      if (!changes.includes("custom")) changes.push("custom");
+    }
   }
   if (changes.some((c) => c === "priority" || c === "status")) t.sla = computeSla(ws, t, false);
   if (changes.length && publishEvents) publishTicketUpdated(ws, t, changes);
@@ -366,6 +385,7 @@ export function newTicket(
     contact: Ticket["contact"];
     channel: Channel;
     priority?: Priority;
+    severity?: Ticket["severity"];
     status?: TicketStatus;
     mailbox_id?: string | null;
     assignee?: UserRef | null;
@@ -383,6 +403,7 @@ export function newTicket(
     subject: init.subject,
     status: init.status ?? "open",
     priority: init.priority ?? "normal",
+    severity: init.severity ?? null,
     channel: init.channel,
     mailbox_id: init.mailbox_id ?? ws.mailboxes[0]?.id ?? null,
     contact: init.contact,

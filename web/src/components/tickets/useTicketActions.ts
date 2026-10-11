@@ -4,7 +4,8 @@
 
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api/endpoints";
-import type { Member, Tag, TagGroup, TagRef, Team, Ticket, TicketPatch } from "@/lib/api/types";
+import type { Member, SuggestionField, Tag, TagGroup, TagRef, Team, Ticket, TicketPatch } from "@/lib/api/types";
+import { withoutSuggestion } from "@/lib/decisions";
 import { qk } from "@/lib/queries";
 import { cachedTicket, patchTicketEverywhere, removeTicketEverywhere } from "@/lib/ticketCache";
 import { useSession } from "@/lib/session";
@@ -21,6 +22,7 @@ export function applyPatch(qc: QueryClient, t: Ticket, p: TicketPatch): Ticket {
     if (p.status === "solved" && !t.solved_at) next.solved_at = new Date().toISOString();
   }
   if (p.priority !== undefined) next.priority = p.priority;
+  if (p.severity !== undefined) next.severity = p.severity;
   if (p.spam !== undefined) next.spam = p.spam;
   if (p.snoozed_until !== undefined) next.snoozed_until = p.snoozed_until;
   if (p.team_id !== undefined) next.team_id = p.team_id;
@@ -57,6 +59,18 @@ export function applyPatch(qc: QueryClient, t: Ticket, p: TicketPatch): Ticket {
       const g = r.group_id && groups.find((x) => x.id === r.group_id);
       return !g || !g.exclusive || !refs.slice(i + 1).some((o) => o.group_id === r.group_id);
     });
+  }
+  // Setting a field drops Ollie's pending suggestion for it (as the server does).
+  const sugg = t.custom?.ai_suggestions;
+  if (sugg && typeof sugg === "object") {
+    const drop = new Set<string>();
+    if (p.priority !== undefined) drop.add("priority");
+    if (p.severity !== undefined) drop.add("severity");
+    if (p.team_id !== undefined) drop.add("team");
+    if (p.spam !== undefined) drop.add("spam");
+    if (p.tags !== undefined || p.add_tags || p.remove_tags) drop.add("labels");
+    const rest = Object.fromEntries(Object.entries(sugg as Record<string, unknown>).filter(([k]) => !drop.has(k)));
+    if (Object.keys(rest).length !== Object.keys(sugg).length) next.custom = { ...next.custom, ai_suggestions: rest };
   }
   return next;
 }
@@ -157,4 +171,22 @@ export function useMergeTicket() {
 
 export function teamName(teams: Team[] | undefined, id: string | null) {
   return id ? teams?.find((t) => t.id === id)?.name ?? "Team" : null;
+}
+
+/** Dismiss Ollie's suggestion for a field, optimistically. */
+export function useDismissSuggestion() {
+  const qc = useQueryClient();
+  const me = useSession((s) => s.user?.id ?? "");
+  return useMutation({
+    mutationFn: ({ id, field }: { id: string; field: SuggestionField }) => api.ai.dismissSuggestion(id, field),
+    onMutate: ({ id, field }) => {
+      const prev = cachedTicket(qc, id);
+      if (prev) patchTicketEverywhere(qc, withoutSuggestion(prev, field), me);
+      return { prev };
+    },
+    onError: (e, _v, ctx) => {
+      if (ctx?.prev) patchTicketEverywhere(qc, ctx.prev, me);
+      toast.error(e, "Couldn't dismiss the suggestion");
+    },
+  });
 }

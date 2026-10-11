@@ -4,12 +4,14 @@
 
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import type { TicketListQuery } from "./api/endpoints";
-import type { Page, Priority, Ticket, TicketFilters, View } from "./api/types";
+import type { Page, Priority, Severity, Ticket, TicketFilters, View } from "./api/types";
 import { qk } from "./queries";
 
 export type TicketPages = InfiniteData<Page<Ticket>, string | null>;
 
 const priorityRank: Record<Priority, number> = { low: 0, normal: 1, high: 2, urgent: 3 };
+/** sev1 sorts first in descending order; no severity sorts last. */
+const severityRank = (s: Severity | null | undefined) => (s ? { sev4: 1, sev3: 2, sev2: 3, sev1: 4 }[s] : 0);
 
 /** Resolve a list query (which may name a view) to plain filters. */
 export function effectiveFilters(query: TicketListQuery, views: View[] | undefined): (TicketListQuery & TicketFilters) | null {
@@ -34,6 +36,7 @@ export function ticketMatches(query: TicketListQuery, t: Ticket, me: string, vie
   if (t.spam !== wantSpam) return false;
   if (f.status?.length && !f.status.includes(t.status)) return false;
   if (f.priority?.length && !f.priority.includes(t.priority)) return false;
+  if (f.severity?.length && !f.severity.includes(t.severity ?? "none")) return false;
   if (f.assignee) {
     if (f.assignee === "me" && t.assignee?.id !== me) return false;
     if (f.assignee === "none" && t.assignee) return false;
@@ -57,6 +60,7 @@ export function compareTickets(query: TicketListQuery) {
   return (a: Ticket, b: Ticket) => {
     let d: number;
     if (sort === "priority") d = priorityRank[a.priority] - priorityRank[b.priority];
+    else if (sort === "severity") d = severityRank(a.severity) - severityRank(b.severity);
     else if (sort === "due") d = dueOf(a) - dueOf(b);
     else if (sort === "created_at") d = Date.parse(a.created_at) - Date.parse(b.created_at);
     else d = Date.parse(a.last_message_at) - Date.parse(b.last_message_at);

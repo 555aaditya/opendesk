@@ -27,6 +27,14 @@ describe("ticketMatches", () => {
     expect(ticketMatches({ assignee: "none" }, t, "u1")).toBe(false);
   });
 
+  it("filters by severity, with none for unset", () => {
+    const t = ticket({ severity: "sev2" });
+    expect(ticketMatches({ severity: ["sev1", "sev2"] }, t, "u1")).toBe(true);
+    expect(ticketMatches({ severity: ["sev1"] }, t, "u1")).toBe(false);
+    expect(ticketMatches({ severity: ["none"] }, ticket({ severity: null }), "u1")).toBe(true);
+    expect(ticketMatches({ severity: ["none"] }, t, "u1")).toBe(false);
+  });
+
   it("can't decide full-text or unknown views", () => {
     expect(ticketMatches({ q: "refund" }, ticket(), "u1")).toBeNull();
     expect(ticketMatches({ view_id: "v1" }, ticket(), "u1", [])).toBeNull();

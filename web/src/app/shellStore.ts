@@ -22,7 +22,7 @@ export const shell = {
 };
 
 // Contextual commands a page offers the command menu (the open ticket's actions).
-export type PageCommand = { id: string; label: string; group?: string; shortcut?: string; icon?: React.ReactNode; run: () => void };
+export type PageCommand = { id: string; label: string; group?: string; shortcut?: string; icon?: React.ReactNode; keywords?: string[]; run: () => void };
 type CommandsState = { commands: PageCommand[] };
 export const usePageCommands = create<CommandsState>(() => ({ commands: [] }));
 

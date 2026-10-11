@@ -12,7 +12,8 @@ import { TagChip } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import { AI_TONE, tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
-import { PriorityIcon, priorityLabel, StatusIcon, statusLabel } from "../bits";
+import { PriorityIcon, priorityLabel, SeverityChip, severityLabel, StatusIcon, statusLabel } from "../bits";
+import { isSeverity, pct } from "@/lib/decisions";
 import { MessageItem } from "./MessageItem";
 import { isAIActor, OllieAvatar, useAssistantName } from "../ollie";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
@@ -63,6 +64,12 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
         icon: priorityLabel[to] ? <PriorityIcon priority={to} className="size-3" /> : <CircleDot />,
         text: line("activity.priority", { priority: priorityLabel[to] ? display.priority(to) : String(d.to) }),
       };
+    }
+    case "severity_changed": {
+      const to = d.to;
+      return isSeverity(to)
+        ? { icon: <SeverityChip severity={to} className="h-[13px] min-w-[18px] px-0.5 text-[8.5px]" />, text: line("activity.severity", { severity: severityLabel[to] }) }
+        : { icon: <CircleDot />, text: line("activity.severityCleared") };
     }
     case "assigned": {
       const to = ref(d.to, members);
@@ -163,13 +170,29 @@ function ActivityLine({ a }: { a: Activity }) {
       >
         {icon}
       </span>
-      <span className="min-w-0 flex-1 truncate">{text}</span>
+      <span className="min-w-0 truncate">{text}</span>
+      {ai && <DecisionMeta a={a} ollie={ollie} />}
+      <span className="flex-1" />
       <Tooltip content={fullDate(a.created_at)}>
         <time dateTime={a.created_at} className="mono shrink-0 text-[10.5px] text-fg-4">
           {relShort(a.created_at)}
         </time>
       </Tooltip>
     </div>
+  );
+}
+
+/** How sure Jev was about an AI change ({model: "jev", confidence} in the activity data). */
+function DecisionMeta({ a, ollie }: { a: Activity; ollie: string }) {
+  const { t } = useTranslation("inbox");
+  const sure = typeof a.data.confidence === "number" ? pct(a.data.confidence) : null;
+  const jev = a.data.model === "jev";
+  if (sure == null && !jev) return null;
+  const note = [t("ollie.setThis", { name: ollie }), ...(sure != null ? [t("ollie.sure", { pct: sure })] : []), ...(jev ? [t("ollie.viaJev")] : [])].join(" · ");
+  return (
+    <Tooltip content={note}>
+      <span className={cn("mono shrink-0 rounded-sm px-1 text-[10px] tabular-nums", tone[AI_TONE].text, tone[AI_TONE].soft)}>{sure != null ? `${sure}%` : "Jev"}</span>
+    </Tooltip>
   );
 }
 

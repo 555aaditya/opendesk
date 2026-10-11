@@ -24,6 +24,7 @@ export type InboxSearch = {
   sort?: TicketListQuery["sort"];
   order?: TicketListQuery["order"];
   priority?: string;
+  severity?: string;
   channel?: string;
   tag?: string;
   mailbox?: string;
@@ -50,6 +51,7 @@ export function listQuery(base: TicketListQuery, s: InboxSearch): TicketListQuer
   if (s.sort) q.sort = s.sort;
   if (s.order) q.order = s.order;
   if (s.priority) q.priority = s.priority.split(",") as TicketListQuery["priority"];
+  if (s.severity) q.severity = s.severity.split(",") as TicketListQuery["severity"];
   if (s.channel) q.channel = s.channel as TicketListQuery["channel"];
   if (s.tag) q.tag = s.tag;
   if (s.mailbox) q.mailbox_id = s.mailbox;
@@ -64,9 +66,10 @@ export function parseInboxSearch(raw: Record<string, unknown>): InboxSearch {
   const sort = str(raw.sort);
   const order = str(raw.order);
   return {
-    sort: sort === "created_at" || sort === "priority" || sort === "due" || sort === "last_message_at" ? sort : sort && /^field\.[a-z][a-z0-9_]{0,39}$/.test(sort) ? (sort as `field.${string}`) : undefined,
+    sort: sort === "created_at" || sort === "priority" || sort === "severity" || sort === "due" || sort === "last_message_at" ? sort : sort && /^field\.[a-z][a-z0-9_]{0,39}$/.test(sort) ? (sort as `field.${string}`) : undefined,
     order: order === "asc" || order === "desc" ? order : undefined,
     priority: str(raw.priority),
+    severity: str(raw.severity),
     channel: str(raw.channel),
     tag: str(raw.tag),
     mailbox: str(raw.mailbox),

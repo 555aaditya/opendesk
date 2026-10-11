@@ -2,7 +2,7 @@
 // and KB article drafts. `?mock_ai=off` behaves like an instance with no
 // provider: config says disabled and every other AI route answers 404.
 
-import type { AIConfig, AISettings, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
+import type { AIConfig, AISettings, DecisionEngine, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
 import { db, type WsData } from "../db";
 import { COSTS, reserve, spend } from "../credits";
 import { publish } from "../gateway";
@@ -12,6 +12,14 @@ import { ASSISTANT_NAME } from "@/components/assistant/name";
 
 export function aiOff(): boolean {
   return typeof location !== "undefined" && new URLSearchParams(location.search).get("mock_ai") === "off";
+}
+
+/** The decision engine: Jev by TypeSafe unless `?mock_decisions=llm|none` says otherwise. */
+export function decisionEngine(): DecisionEngine {
+  const v = typeof location !== "undefined" ? new URLSearchParams(location.search).get("mock_decisions") : null;
+  if (v === "none" || (aiOff() && v !== "typesafe")) return { provider: "none", model: "", connected: false };
+  if (v === "llm") return { provider: "llm", model: "claude-haiku-4-5-20251001", connected: true };
+  return { provider: "typesafe", model: "jev-latest", connected: true };
 }
 
 /** Throws 404 ai_disabled when the instance has no AI, 403 ai_off when the workspace turned it off. */
@@ -26,7 +34,7 @@ function role(ws: WsData) {
 
 function config(ws: WsData): AIConfig {
   if (aiOff()) {
-    return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {}, assistant_name: ASSISTANT_NAME };
+    return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {}, assistant_name: ASSISTANT_NAME, decisions: decisionEngine() };
   }
   return {
     enabled: true,
@@ -36,6 +44,7 @@ function config(ws: WsData): AIConfig {
     features: ws.ai,
     costs: { ...COSTS },
     assistant_name: ASSISTANT_NAME,
+    decisions: decisionEngine(),
   };
 }
 

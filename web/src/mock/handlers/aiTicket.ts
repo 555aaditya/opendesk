@@ -9,6 +9,8 @@ import { reserve, spend } from "../credits";
 import { chunk, HttpError, invalid, notFound, post, sse, type Ctx } from "../router";
 import { addMessage, applyPatch, findTicket, newTicket, publishTicketUpdated } from "../tickets";
 import { ago, escapeHtml, MIN, nowIso, uuid } from "../util";
+import { applyDecisions, severityFor } from "../decisions";
+import { decisionEngine } from "./ai";
 
 // ─── Text helpers ───────────────────────────────────────────────────────────
 
@@ -450,10 +452,12 @@ function triage(ws: WsData, t: Ticket): Triage {
     tags: theme.tags,
     suggested_tags: [],
     priority,
+    severity: severityFor(priority, text),
+    team_id: null,
     sentiment,
     language: lang,
     category: theme.category,
-    summary: clip(informative(text)[0] ?? t.subject, 140),
+    summary: decisionEngine().provider === "typesafe" ? "" : clip(informative(text)[0] ?? t.subject, 140),
     applied: false,
   };
 }
@@ -556,7 +560,12 @@ export function registerAiTicket() {
     const t = ticketOf(ctx);
     reserve(ctx.ws, "triage");
     const r = triage(ctx.ws, t);
-    if (ctx.body.apply === true) {
+    if (ctx.body.apply === true && decisionEngine().provider === "typesafe") {
+      const { decisions, suggestions } = applyDecisions(ctx.ws, t, { priority: r.priority, severity: r.severity!, tags: r.tags, team_id: r.team_id, sentiment: r.sentiment, category: r.category, language: r.language }, { via: "ai_triage", force: true, publish: true });
+      r.decisions = decisions;
+      r.suggestions = suggestions;
+      r.applied = true;
+    } else if (ctx.body.apply === true) {
       const before = ctx.ws.activities.length;
       const { changes } = applyPatch(ctx.ws, t, { priority: r.priority, add_tags: r.tags }, null, false, { lenient: true, createLabels: ctx.ws.workspace.settings.label_creation !== "admins" });
       for (const a of ctx.ws.activities.slice(before)) {

@@ -56,6 +56,7 @@ export type RoutingState = {
   autoAwayMinutes: number;
   hours: Omit<BusinessHours, "timezone">;
   triageFields: TriageField[];
+  triageThreshold: number;
   assignAfterTriage: boolean;
   widgetSeen: boolean;
 };
@@ -141,7 +142,8 @@ export function defaultRouting(): RoutingState {
     rules: [],
     autoAwayMinutes: 0,
     hours: { enabled: false, schedule: { mon: day, tue: day, wed: day, thu: day, fri: day, sat: [], sun: [] }, holidays: [] },
-    triageFields: ["priority", "labels"],
+    triageFields: ["priority", "severity", "labels"],
+    triageThreshold: 0.7,
     assignAfterTriage: false,
     widgetSeen: false,
   };

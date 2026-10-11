@@ -7,6 +7,7 @@ export function ticket(over: Partial<Ticket> = {}): Ticket {
     subject: "Hello",
     status: "open",
     priority: "normal",
+    severity: null,
     channel: "email",
     mailbox_id: null,
     contact: null,

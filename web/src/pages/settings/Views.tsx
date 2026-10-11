@@ -23,16 +23,17 @@ import {
   SinglePick,
   channelItems,
   priorityItems,
+  severityFilterItems,
   statusItems,
   useMailboxItems,
   useMemberItems,
   TagPick,
   useTeamItems,
 } from "@/components/settings2/pickers";
-import { ChannelIcon, PriorityIcon, StatusIcon, channelLabel, priorityLabel, statusLabel } from "@/components/tickets/bits";
+import { ChannelIcon, PriorityIcon, SeverityChip, StatusIcon, channelLabel, priorityLabel, severityLabel, statusLabel } from "@/components/tickets/bits";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { Channel, Priority, TicketFilters, TicketStatus, View } from "@/lib/api/types";
+import type { Channel, Priority, Severity, TicketFilters, TicketStatus, View } from "@/lib/api/types";
 import { q, qk, upsertInList } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { cn } from "@/lib/cn";
@@ -65,6 +66,13 @@ function FilterChips({ f }: { f: TicketFilters }) {
           <PriorityIcon key={p} priority={p} />
         ))}
         <span className="truncate">{or(f.priority.map((p) => priorityLabel[p]))}</span>
+      </span>,
+    );
+  if (f.severity?.length)
+    out.push(
+      <span key="sev" className={chip}>
+        {f.severity.map((s) => (s === "none" ? null : <SeverityChip key={s} severity={s} />))}
+        <span className="truncate">{or(f.severity.map((s) => (s === "none" ? t("views.noSeverity") : severityLabel[s])))}</span>
       </span>,
     );
   if (f.assignee) {
@@ -409,6 +417,14 @@ function ViewDrawer({ view, nextPosition, onClose }: { view: View | null; nextPo
                   placeholder={t("views.any.priority")}
                 />
               </FilterRow>
+              <FilterRow label={t("views.filters.severity")} onClear={f.severity?.length ? () => set("severity", undefined) : undefined}>
+                <MultiPick
+                  items={severityFilterItems()}
+                  values={f.severity ?? []}
+                  onChange={(v) => set("severity", v as (Severity | "none")[])}
+                  placeholder={t("views.any.severity")}
+                />
+              </FilterRow>
               <FilterRow label={t("views.filters.assignee")} onClear={f.assignee ? () => set("assignee", undefined) : undefined}>
                 <SinglePick items={assigneeItems} value={f.assignee} onChange={(v) => set("assignee", v)} placeholder={t("views.any.assignee")} width={280} />
               </FilterRow>
@@ -483,6 +499,7 @@ function clean(f: TicketFilters): TicketFilters {
   const out: TicketFilters = {};
   if (f.status?.length) out.status = f.status;
   if (f.priority?.length) out.priority = f.priority;
+  if (f.severity?.length) out.severity = f.severity;
   if (f.assignee) out.assignee = f.assignee;
   if (f.team_id) out.team_id = f.team_id;
   if (f.mailbox_id) out.mailbox_id = f.mailbox_id;

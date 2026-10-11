@@ -24,7 +24,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { copyText } from "@/components/ui/copy-button";
-import { ChannelIcon, channelLabel, PriorityPill, SlaPill, slaState, StatusPill, TicketNumber } from "../bits";
+import { ChannelIcon, channelLabel, PriorityPill, SeverityChip, severityLabel, severityOrder, SlaPill, slaState, StatusPill, TicketNumber } from "../bits";
+import { useOllieNote } from "../ollie";
+import { aiDecisions } from "@/lib/decisions";
+import type { Ticket } from "@/lib/api/types";
 import { Morph } from "@/components/motion";
 import { CheckBurst } from "../CheckBurst";
 import { intent } from "../motion";
@@ -229,6 +232,17 @@ export default function TicketDetail({
         { id: "assign", label: tr("commands.assign"), shortcut: "a", icon: <UserRound />, run: () => openPicker("assignee") },
         { id: "status", label: tr("commands.status"), shortcut: "s", icon: <CircleDot />, run: () => openPicker("status") },
         { id: "priority", label: tr("commands.priority"), shortcut: "p", icon: <Signal />, run: () => openPicker("priority") },
+        { id: "severity", label: tr("commands.severity"), icon: <SeverityChip severity={t.severity ?? "sev3"} />, run: () => openPicker("severity") },
+        ...severityOrder
+          .filter((s) => s !== t.severity)
+          .map((s) => ({
+            id: `severity-${s}`,
+            label: tr("commands.setSeverity", { severity: severityLabel[s] }),
+            keywords: ["severity", "sev", s, `s${s.slice(3)}`],
+            icon: <SeverityChip severity={s} />,
+            run: () => update.mutate({ id: t.id, patch: { severity: s } }),
+          })),
+        ...(t.severity ? [{ id: "severity-clear", label: tr("commands.clearSeverity"), keywords: ["severity"], icon: <SeverityChip severity={null} />, run: () => update.mutate({ id: t.id, patch: { severity: null } }) }] : []),
         { id: "solve", label: solved ? tr("commands.reopen") : tr("commands.solve"), shortcut: "e", icon: <CircleCheck />, run: solve },
         { id: "merge", label: tr("detail.merge"), icon: <GitMerge />, run: () => setMergeOpen(true) },
         { id: "spam", label: t.spam ? tr("detail.notSpam") : tr("detail.markSpam"), icon: <ShieldAlert />, run: spam },
@@ -236,7 +250,7 @@ export default function TicketDetail({
     });
     return () => usePageCommands.setState({ commands: [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t?.id, t?.status, t?.spam, canEdit, aiOn]);
+  }, [t?.id, t?.status, t?.spam, t?.severity, canEdit, aiOn]);
 
   if (ticket.isError) {
     return (
@@ -293,6 +307,7 @@ export default function TicketDetail({
               <span className="hidden shrink-0 items-center gap-1.5 md:flex">
                 <StatusPill status={t.status} label={display.status(t.status)} hue={display.statusTone(t.status)} />
                 <PriorityPill priority={t.priority} label={display.priority(t.priority)} hue={display.priorityTone(t.priority)} />
+                {t.severity && <HeaderSeverity t={t} />}
                 {slaState(t) && slaState(t)!.state !== "on_track" && <SlaPill ticket={t} />}
                 {t.spam && <Badge tone="red">{tr("detail.spam")}</Badge>}
               </span>
@@ -419,5 +434,20 @@ export default function TicketDetail({
       </div>
       {t && <MergeDialog ticket={t} open={mergeOpen} onOpenChange={setMergeOpen} />}
     </div>
+  );
+}
+
+/** The header's severity chip; its tooltip says when Ollie set it and how sure Jev was. */
+function HeaderSeverity({ t }: { t: Ticket }) {
+  const note = useOllieNote();
+  if (!t.severity) return null;
+  const d = aiDecisions(t)?.fields.severity;
+  const byAi = !!d?.applied && d.value === t.severity;
+  return (
+    <Tooltip content={byAi ? `${severityLabel[t.severity]} · ${note(t, "severity")}` : severityLabel[t.severity]}>
+      <span className="flex">
+        <SeverityChip severity={t.severity} className="h-[19px] min-w-[26px] text-[10.5px]" />
+      </span>
+    </Tooltip>
   );
 }

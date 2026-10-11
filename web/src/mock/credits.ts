@@ -13,6 +13,8 @@ export const COSTS: Record<AIFeature, number> = {
   rewrite: 1,
   translate: 1,
   triage: 1,
+  decide: 1,
+  answer_check: 0,
   copilot: 2,
   draft_reply: 3,
   answer: 3,

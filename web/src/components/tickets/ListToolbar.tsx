@@ -6,18 +6,19 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Menu, MenuCheckItem, MenuContent, MenuLabel, MenuSeparator, MenuSub, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { Channel, Priority } from "@/lib/api/types";
+import type { Channel, Priority, Severity } from "@/lib/api/types";
 import { encodeFieldFilters, parseFieldFilters, type InboxSearch } from "@/lib/folders";
 import { fieldText, useTicketFields, type CustomField } from "./fields";
 import { q } from "@/lib/queries";
 import { cn } from "@/lib/cn";
 import { AnimatedNumber } from "@/components/motion";
 import { TagSwatch } from "./TagSwatch";
-import { ChannelIcon, PriorityIcon, channelLabel, priorityLabel, priorityOrder } from "./bits";
+import { ChannelIcon, PriorityIcon, SeverityChip, channelLabel, priorityLabel, priorityOrder, severityLabel, severityOrder } from "./bits";
 
 export type InboxLayout = "split" | "list";
 
-const sorts = ["last_message_at", "created_at", "priority", "due"] as const;
+const sorts = ["last_message_at", "created_at", "priority", "severity", "due"] as const;
+const noSeverityMark = <span className="h-[14px] w-[20px] rounded-[4px] border border-dashed border-line-strong" />;
 
 function Chip({ children, onRemove, label }: { children: ReactNode; onRemove: () => void; label: string }) {
   return (
@@ -90,6 +91,11 @@ export function ListToolbar({
   const priorities = (search.priority?.split(",") ?? []) as Priority[];
   const sort = search.sort ?? "last_message_at";
   const order = search.order ?? (sort === "due" ? "asc" : "desc");
+  const severities = (search.severity?.split(",") ?? []) as (Severity | "none")[];
+  const toggleSeverity = (v: Severity | "none") => {
+    const next = severities.includes(v) ? severities.filter((x) => x !== v) : [...severities, v];
+    onSearch({ ...search, severity: next.length ? next.join(",") : undefined });
+  };
   const togglePriority = (p: Priority) => {
     const next = priorities.includes(p) ? priorities.filter((x) => x !== p) : [...priorities, p];
     onSearch({ ...search, priority: next.length ? next.join(",") : undefined });
@@ -109,7 +115,7 @@ export function ListToolbar({
     setFieldFilters(vals.length ? [...rest, { key: f.key, op: "any", value: vals.join(",") }] : rest);
   };
   const memberName = (id: string) => (id === "me" ? t("fields.me") : members?.find((m) => m.user.id === id)?.user.name);
-  const activeFilters = priorities.length + (search.channel ? 1 : 0) + (search.tag ? 1 : 0) + (search.mailbox ? 1 : 0) + fieldFilters.length;
+  const activeFilters = priorities.length + severities.length + (search.channel ? 1 : 0) + (search.tag ? 1 : 0) + (search.mailbox ? 1 : 0) + fieldFilters.length;
   const closeSearch = () => {
     setTerm("");
     setSearchOpen(false);
@@ -180,6 +186,16 @@ export function ListToolbar({
                   {priorityLabel[p]}
                 </MenuCheckItem>
               ))}
+            </MenuSub>
+            <MenuSub label={t("filter.severity")}>
+              {severityOrder.map((v) => (
+                <MenuCheckItem key={v} checked={severities.includes(v)} onSelect={() => toggleSeverity(v)} icon={<SeverityChip severity={v} />}>
+                  {severityLabel[v]}
+                </MenuCheckItem>
+              ))}
+              <MenuCheckItem checked={severities.includes("none")} onSelect={() => toggleSeverity("none")} icon={noSeverityMark}>
+                {t("filter.noSeverity")}
+              </MenuCheckItem>
             </MenuSub>
             <MenuSub label={t("filter.channel")}>
               {(["email", "chat", "api", "portal"] as Channel[]).map((c) => (
@@ -336,6 +352,12 @@ export function ListToolbar({
                   <Chip key={p} label={t("filter.remove")} onRemove={() => togglePriority(p)}>
                     <PriorityIcon priority={p} />
                     {priorityLabel[p]}
+                  </Chip>
+                ))}
+                {severities.map((v) => (
+                  <Chip key={`sev-${v}`} label={t("filter.remove")} onRemove={() => toggleSeverity(v)}>
+                    {v === "none" ? noSeverityMark : <SeverityChip severity={v} />}
+                    {v === "none" ? t("filter.noSeverity") : severityLabel[v]}
                   </Chip>
                 ))}
                 {search.channel && (

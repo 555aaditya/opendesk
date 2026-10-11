@@ -5,6 +5,8 @@
     "rewrite": "Rewrite a draft",
     "translate": "Translate a message or draft",
     "triage": "Triage a ticket",
+    "decide": "Ask a yes/no question in an automation",
+    "answer_check": "Check the knowledge base before answering",
     "copilot": "Ask about a ticket",
     "draft_reply": "Draft a reply",
     "answer": "Answer in the chat widget",
@@ -29,7 +31,13 @@
     "ai_triage": "Run AI triage",
     "ai_triage_hint": "Sets tags, priority, sentiment and language from the conversation.",
     "per_run_one": "{{count}} credit per run",
-    "per_run_other": "{{count}} credits per run"
+    "per_run_other": "{{count}} credits per run",
+    "ai_decide": "Ask Ollie a yes/no question",
+    "ai_decide_question": "Question",
+    "ai_decide_placeholder": "Is the customer at risk of churning?",
+    "ai_decide_hint": "Ollie answers with a probability of yes. Every question in one run is asked together.",
+    "ai_decide_probability": "Probability of yes",
+    "ai_decide_percent": "{{pct}}% likely"
   },
   "settings": {
     "title": "AI",

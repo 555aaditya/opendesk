@@ -117,6 +117,8 @@ export type Company = {
 
 export type TicketStatus = "open" | "pending" | "on_hold" | "solved" | "closed";
 export type Priority = "low" | "normal" | "high" | "urgent";
+/** Business impact; sev1 is the most severe. A ticket may have none. */
+export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
 export type Channel = "email" | "chat" | "api" | "portal";
 // Labels ("tags" in the API) and custom fields (contracts/api.md "Labels and custom fields").
 export type LabelColor =
@@ -214,6 +216,7 @@ export type Ticket = {
   subject: string;
   status: TicketStatus;
   priority: Priority;
+  severity: Severity | null;
   channel: Channel;
   mailbox_id: string | null;
   contact: ContactRef | null;
@@ -270,6 +273,8 @@ export type Message = {
 export type ActivityType =
   | "status_changed"
   | "priority_changed"
+  /** data: {from, to} with Severity | null. */
+  | "severity_changed"
   | "assigned"
   | "team_changed"
   | "tagged"
@@ -300,6 +305,8 @@ export type SavedReply = {
 export type TicketFilters = {
   status?: TicketStatus[];
   priority?: Priority[];
+  /** "none" matches tickets without a severity. */
+  severity?: (Severity | "none")[];
   assignee?: "me" | "none" | string;
   team_id?: string;
   mailbox_id?: string;
@@ -332,12 +339,17 @@ export type Assignment = {
   /** 0 is off, else 10..1440. */
   auto_away_minutes: number;
 };
-export type TriageField = "priority" | "labels";
+export type TriageField = "priority" | "severity" | "labels" | "team";
+/** The decision engine behind triage (contracts/api.md). Jev is TypeSafe's decision model. */
+export type DecisionEngine = { provider: "typesafe" | "llm" | "none"; model: string; connected: boolean };
 export type TriageSettings = {
   auto_triage: boolean;
   fields: TriageField[];
   assign_after_triage: boolean;
-  /** AI is configured and on for the workspace. */
+  /** 0.5..0.99: decisions at or above it apply, below it they become suggestions. */
+  threshold: number;
+  engine: DecisionEngine;
+  /** Triage can run: AI or a decision engine is configured and AI is on. */
   available: boolean;
 };
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -365,18 +377,21 @@ export type Onboarding = { steps: OnboardingStep[]; done_count: number; total: n
 
 export type AutomationTrigger = "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
 export type ConditionField =
-  | "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "status" | "tag" | "sentiment"
+  | "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide"
   /** A ticket custom field, or the ticket contact's. */
   | `field.${string}` | `contact.field.${string}`;
 /** `eq` is the AI sentiment condition's operator (contracts/ai.md). */
-export type ConditionOp = "contains" | "not_contains" | "equals" | "not_equals" | "eq";
+export type ConditionOp = "contains" | "not_contains" | "equals" | "not_equals" | "eq" | "gt" | "lt";
 /** Custom field conditions (`field.<key>`, `contact.field.<key>`) take the FieldOp set of their type; `ne` aliases `not_equals`. */
-export type Condition = { field: ConditionField; op: ConditionOp; value: string };
+/** ai_decide: op gt/lt, value a probability 0.01..0.99, question a yes/no question (3..300 chars). */
+export type Condition = { field: ConditionField; op: ConditionOp; value: string; question?: string };
 /** A condition on a custom field, with the operators of its type. */
 export type FieldCondition = { field: `field.${string}` | `contact.field.${string}`; op: FieldOp; value: string };
 export type ActionType =
   | "set_status"
   | "set_priority"
+  /** value: a Severity, or "" to clear. */
+  | "set_severity"
   | "assign_user"
   | "assign_team"
   | "add_tag"
@@ -565,6 +580,8 @@ export type ReportsOverview = {
   sla_breached: number;
   by_day: { date: string; created: number; solved: number }[];
   by_channel: Partial<Record<Channel, number>>;
+  /** Tickets created in the range, by severity. */
+  by_severity?: Partial<Record<Severity | "none", number>>;
   by_agent: { user: UserRef; solved: number; first_response_p50_minutes: number | null }[];
 };
 
@@ -594,6 +611,8 @@ export type TicketPatch = {
   subject?: string;
   status?: TicketStatus;
   priority?: Priority;
+  /** null clears. */
+  severity?: Severity | null;
   assignee_id?: string | null;
   team_id?: string | null;
   snoozed_until?: string | null;
@@ -629,7 +648,7 @@ export type Billing = {
   credits: { unlimited: boolean; monthly: number; used: number; purchased: number; remaining: number; period_end: string };
   prices: { pro_month: Price | null; pro_year: Price | null; credit_pack: Price | null };
 };
-export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "copilot" | "draft_reply" | "answer" | "kb_draft" | "assistant";
+export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "kb_draft" | "assistant";
 /** GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive. */
 export type BillingUsage = {
   from: string;
@@ -663,7 +682,37 @@ export type AIConfig = {
   costs: Partial<Record<AIFeature, number>>;
   /** The name AI acts under everywhere ("Ollie"). */
   assistant_name?: string;
+  /** The decision engine (Jev by TypeSafe, the LLM fallback, or none). */
+  decisions?: DecisionEngine;
 };
+
+// Decisions (contracts/ai.md "Decisions"), stored on tickets as custom.ai_decisions and custom.ai_suggestions.
+export type DecisionField =
+  | "priority" | "severity" | "category" | "type_label" | "label" | "sentiment" | "language" | "spam" | "needs_human" | "team" | "sla_risk";
+export type Decision = {
+  value: string | boolean | number | null;
+  probability: number | null;
+  confidence: number | null;
+  applied: boolean;
+};
+export type AIDecisions = {
+  engine: "jev" | "llm";
+  model: string;
+  model_version?: string;
+  threshold: number;
+  decided_at: string;
+  fields: Partial<Record<DecisionField, Decision>>;
+};
+export type SuggestionField = "priority" | "severity" | "labels" | "team" | "spam";
+export type Suggestion = {
+  /** labels: names; team: a team id. */
+  value: string | string[] | boolean;
+  confidence: number | null;
+  probability: number | null;
+  model: string;
+  decided_at: string;
+};
+export type AISuggestions = Partial<Record<SuggestionField, Suggestion>>;
 export type KBSource = { article_id: string; title: string; url: string };
 export type AIDraft = { body_html: string; body_text: string; sources: KBSource[] };
 export type AISummary = { summary: string; key_points: string[]; sentiment: Sentiment; updated_at: string };
@@ -673,11 +722,15 @@ export type Triage = {
   /** At most 2 new tag names; only the explicit apply creates them. */
   suggested_tags: string[];
   priority: Priority;
+  severity: Severity | null;
+  team_id: string | null;
   sentiment: Sentiment;
   language: string;
   category: string;
   summary: string;
   applied: boolean;
+  decisions?: AIDecisions;
+  suggestions?: AISuggestions;
 };
 export type RewriteMode = "friendlier" | "more_formal" | "shorter" | "longer" | "fix_grammar" | "simplify";
 export type TranslateResult = { html?: string; text?: string; source_language: string };

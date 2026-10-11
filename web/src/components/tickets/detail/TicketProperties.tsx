@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Clock, Hash, Inbox, Star, Users } from "lucide-react";
 import { forwardRef, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { Priority, Ticket, TicketStatus } from "@/lib/api/types";
+import type { Priority, Severity, Ticket, TicketStatus } from "@/lib/api/types";
 import { q } from "@/lib/queries";
 import { fullDate, minutes, relLong, shortDate } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -15,9 +15,11 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ContactCard } from "@/components/contacts/ContactCard";
 import { TicketAiPanel } from "@/components/ai/ticket/AiPanel";
-import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, slaState, StatusIcon, statusOrder } from "../bits";
+import { ChannelIcon, channelLabel, PriorityIcon, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, slaState, StatusIcon, statusOrder } from "../bits";
+import { OllieSuggestions } from "./OllieSuggestions";
+import { aiDecisions } from "@/lib/decisions";
 import { LabelPicker } from "./LabelPicker";
-import { SetByOllie, useAISet } from "../ollie";
+import { SetByOllie, useAISet, useOllieNote } from "../ollie";
 import { FieldsSection } from "./FieldsSection";
 import { useDisplay, type FieldPatch, type TicketWithFields } from "../fields";
 import { useUpdateTicket } from "../useTicketActions";
@@ -116,7 +118,7 @@ function SlaTimers({ t }: { t: Ticket }) {
   );
 }
 
-export type PropPicker = "status" | "priority" | "assignee" | null;
+export type PropPicker = "status" | "priority" | "severity" | "assignee" | null;
 
 const unassignedIcon = <span className="size-4 rounded-xs border border-dashed border-line-strong" />;
 
@@ -129,6 +131,8 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
   const { data: teams } = useQuery(q.teams());
   const display = useDisplay();
   const aiSet = useAISet(t.id);
+  const note = useOllieNote();
+  const decided = aiDecisions(t)?.fields;
   const { data: mailboxes } = useQuery(q.mailboxes());
   const patch = (p: Parameters<typeof update.mutate>[0]["patch"]) => update.mutate({ id: t.id, patch: p });
   const team = teams?.find((x) => x.id === t.team_id);
@@ -166,7 +170,26 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               <PropButton disabled={!canEdit}>
                 <PriorityIcon priority={t.priority} />
                 {display.priority(t.priority)}
-                {aiSet.priority && <SetByOllie />}
+                {aiSet.priority && <SetByOllie note={decided?.priority?.applied ? note(t, "priority") : undefined} />}
+              </PropButton>
+            }
+          />
+        </Prop>
+        <Prop label={tr("props.severity")}>
+          <Picker
+            {...openFor("severity")}
+            value={t.severity ?? "__none"}
+            placeholder={tr("props.setSeverity")}
+            items={[
+              ...severityOrder.map((s) => ({ value: s, label: severityLabel[s], hint: severityHint[s], icon: <SeverityChip severity={s} /> })),
+              { value: "__none", label: tr("props.noSeverity"), icon: <span className="h-[16px] w-[22px] rounded-[4px] border border-dashed border-line-strong" /> },
+            ]}
+            onSelect={(v) => patch({ severity: v === "__none" ? null : (v as Severity) })}
+            trigger={
+              <PropButton disabled={!canEdit} placeholder={!t.severity}>
+                {t.severity ? <SeverityChip severity={t.severity} /> : <span className="h-[16px] w-[22px] shrink-0 rounded-[4px] border border-dashed border-line-strong" />}
+                {t.severity ? severityLabel[t.severity] : tr("props.noSeverity")}
+                {aiSet.severity && <SetByOllie note={decided?.severity?.applied ? note(t, "severity") : undefined} />}
               </PropButton>
             }
           />
@@ -201,6 +224,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
               <PropButton disabled={!canEdit} placeholder={!team}>
                 <Users className="size-3.5 text-fg-3" />
                 <span className="truncate">{team?.name ?? tr("props.noTeam")}</span>
+                {aiSet.team && team && <SetByOllie note={decided?.team?.applied ? note(t, "team") : undefined} />}
               </PropButton>
             }
           />
@@ -211,7 +235,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
             {t.tags.map((tag) => (
               <span key={tag.id} className="relative animate-pop-in motion-reduce:animate-none">
                 <TagChip name={tag.name} color={tag.color} onRemove={canEdit ? () => patch({ tags: tagNames.filter((n) => n !== tag.name) }) : undefined} />
-                {aiSet.tags.has(tag.name) && <SetByOllie className="absolute -right-1 -top-1 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+                {aiSet.tags.has(tag.name) && <SetByOllie note={note(t, decided?.type_label?.value === tag.id ? "type_label" : "label")} className="absolute -right-1 -top-1 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
               </span>
             ))}
             {canEdit && (
@@ -231,6 +255,7 @@ export function TicketProperties({ t, picker, onPicker }: { t: Ticket; picker: P
             )}
           </div>
         </div>
+        {canEdit && <OllieSuggestions t={t} />}
       </section>
 
       <FieldsSection

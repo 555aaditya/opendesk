@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { AnimatedNumber } from "@/components/motion";
 import { springs } from "@/lib/motion";
-import { ShieldAlert, Signal, Tag as TagIcon, Trash2, UserRound, X, CircleDot } from "lucide-react";
+import { ShieldAlert, Signal, Siren, Tag as TagIcon, Trash2, UserRound, X, CircleDot } from "lucide-react";
 import { forwardRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,9 @@ import { Avatar } from "@/components/ui/avatar";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
-import type { Priority, TicketStatus } from "@/lib/api/types";
+import type { Priority, Severity, TicketStatus } from "@/lib/api/types";
 import { q } from "@/lib/queries";
-import { PriorityIcon, priorityLabel, priorityOrder, StatusIcon, statusLabel, statusOrder } from "./bits";
+import { PriorityIcon, priorityLabel, priorityOrder, SeverityChip, severityHint, severityLabel, severityOrder, StatusIcon, statusLabel, statusOrder } from "./bits";
 import { useLabelChoices } from "./detail/LabelPicker";
 import { useDisplay } from "./fields";
 import { useBulkUpdate } from "./useTicketActions";
@@ -100,6 +100,23 @@ export function BulkBar({ ids, onClear, spamView, compact }: { ids: string[]; on
             onSelect={(v) => run({ ids, patch: { priority: v as Priority } }, t("bulk.prioritised", { count: n, priority: priorityLabel[v as Priority].toLowerCase() }))}
             trigger={
               <Act compact={compact} icon={<Signal className="size-3.5" />} label={t("bulk.priority")} />
+            }
+          />
+          <Picker
+            side="top"
+            placeholder={t("bulk.setSeverity")}
+            value={null}
+            items={[
+              ...severityOrder.map((v) => ({ value: v, label: severityLabel[v], hint: severityHint[v], icon: <SeverityChip severity={v} /> })),
+              { value: "__none", label: t("bulk.noSeverity"), icon: <span className="h-[16px] w-[22px] rounded-[4px] border border-dashed border-line-strong" /> },
+            ]}
+            onSelect={(v) =>
+              v === "__none"
+                ? run({ ids, patch: { severity: null } }, t("bulk.severityCleared", { count: n }))
+                : run({ ids, patch: { severity: v as Severity } }, t("bulk.severitySet", { count: n, severity: severityLabel[v as Severity] }))
+            }
+            trigger={
+              <Act compact={compact} icon={<Siren className="size-3.5" />} label={t("bulk.severity")} />
             }
           />
           <Picker

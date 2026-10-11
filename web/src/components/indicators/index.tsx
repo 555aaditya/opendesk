@@ -4,10 +4,10 @@
 // variants, and they snap in softly when their value changes.
 
 import type { ReactNode } from "react";
-import type { Channel, Priority, Sentiment, TicketStatus } from "@/lib/api/types";
+import type { Channel, Priority, Sentiment, Severity, TicketStatus } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
-import { channelTone, isTone, priorityTone, sentimentTone, statusTone, tone, toneVar, type Tone } from "@/lib/tones";
+import { channelTone, isTone, priorityTone, sentimentTone, severityTone, statusTone, tone, toneVar, type Tone } from "@/lib/tones";
 import { Tooltip } from "@/components/ui/tooltip";
 
 export const statusLabel: Record<TicketStatus, string> = {
@@ -20,6 +20,15 @@ export const statusLabel: Record<TicketStatus, string> = {
 export const statusOrder: TicketStatus[] = ["open", "pending", "on_hold", "solved", "closed"];
 export const priorityLabel: Record<Priority, string> = { urgent: "Urgent", high: "High", normal: "Normal", low: "Low" };
 export const priorityOrder: Priority[] = ["urgent", "high", "normal", "low"];
+export const severityLabel: Record<Severity, string> = { sev1: "Sev 1", sev2: "Sev 2", sev3: "Sev 3", sev4: "Sev 4" };
+/** What each level means, for pickers and tooltips. */
+export const severityHint: Record<Severity, string> = {
+  sev1: "Critical outage",
+  sev2: "Major impact",
+  sev3: "Minor impact",
+  sev4: "Low impact",
+};
+export const severityOrder: Severity[] = ["sev1", "sev2", "sev3", "sev4"];
 export const channelLabel: Record<Channel, string> = { email: "Email", chat: "Chat", api: "API", portal: "Portal" };
 export const sentimentLabel: Record<Sentiment, string> = { positive: "Positive", neutral: "Neutral", negative: "Negative", frustrated: "Frustrated" };
 
@@ -133,6 +142,38 @@ export function PriorityPill({ priority, className, label, hue: override }: { pr
     <span className={cn("inline-flex h-[19px] shrink-0 items-center gap-1 rounded-sm pl-1 pr-1.5 text-[10.5px] font-medium", tone[hue].chip, className)}>
       <PriorityIcon priority={priority} className="size-3" />
       {label || priorityLabel[priority]}
+    </span>
+  );
+}
+
+// Severity: a compact mono chip, "S1" to "S4", in the level's tone. It sits
+// beside the priority glyph and stays out of the way when a ticket has none.
+
+export function SeverityChip({ severity, className, title }: { severity: Severity | null | undefined; className?: string; title?: string }) {
+  if (!severity) return null;
+  const hue: Tone = severityTone[severity];
+  return (
+    <span
+      key={severity}
+      role="img"
+      aria-label={title ?? severityLabel[severity]}
+      className={cn(
+        "mono inline-flex h-[16px] min-w-[22px] shrink-0 items-center justify-center rounded-[4px] px-1 text-[10px] font-semibold leading-none tabular-nums animate-indicator-in motion-reduce:animate-none",
+        tone[hue].chip,
+        className,
+      )}
+    >
+      S{severity.slice(3)}
+    </span>
+  );
+}
+
+/** The chip with its name, for pickers and the ticket header. */
+export function SeverityPill({ severity, className }: { severity: Severity; className?: string }) {
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5 text-[12px]", className)}>
+      <SeverityChip severity={severity} />
+      {severityLabel[severity]}
     </span>
   );
 }

@@ -7,6 +7,7 @@ import type { Ticket, UserRef } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
 import { reserve, spend } from "../credits";
 import { HttpError, del, get, invalid, patch, post, respond, type Ctx } from "../router";
+import { aiDecisions } from "@/lib/decisions";
 import { applyPatch, findTicket } from "../tickets";
 import { nowIso, uuid } from "../util";
 import { assertAi } from "./ai";
@@ -186,6 +187,14 @@ function tips(ws: WsData): Tip[] {
   const out: Tip[] = [];
   const urgent = all.filter((t) => t.priority === "urgent" && !t.assignee).length;
   if (urgent) out.push({ key: "urgent_unassigned", text: `${urgent} urgent ${urgent === 1 ? "ticket has" : "tickets have"} no owner yet.`, prompt: "Which urgent tickets have no owner, and who should take each?", severity: "high", count: urgent });
+  const soon = Date.now() + 4 * 3_600_000;
+  const risky = all.filter((t) => {
+    if (!t.sla || t.sla.breached) return false;
+    const due = Date.parse(t.sla.first_response_due_at ?? t.sla.resolution_due_at ?? "");
+    const risk = aiDecisions(t)?.fields.sla_risk?.value;
+    return due > Date.now() && due <= soon && typeof risk === "number" && risk >= 0.6;
+  }).length;
+  if (risky) out.push({ key: "sla_at_risk", text: `${risky} ${risky === 1 ? "ticket looks" : "tickets look"} likely to miss ${risky === 1 ? "its" : "their"} SLA in the next 4 hours.`, prompt: "Which open tickets are likely to miss their SLA soon, and what should we do first on each?", severity: "high", count: risky });
   const old = all.filter((t) => !t.assignee && Date.parse(t.created_at) < day).length;
   if (old) out.push({ key: "unassigned_old", text: `${old} unassigned ${old === 1 ? "ticket is" : "tickets are"} older than a day.`, prompt: "Show the open unassigned tickets older than a day and suggest an assignee for each, based on the team's workload.", severity: "medium", count: old });
   return out;

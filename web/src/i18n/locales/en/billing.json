@@ -161,6 +161,8 @@
     "rewrite": "Rewrites",
     "translate": "Translations",
     "triage": "Triage",
+    "decide": "Automation decisions",
+    "answer_check": "Answer checks",
     "copilot": "Ask about a ticket",
     "draft_reply": "Draft replies",
     "answer": "Widget answers",

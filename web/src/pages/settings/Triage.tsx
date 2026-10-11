@@ -5,11 +5,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Bot, Gauge, Globe, Smile, Tag } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowRight, Bot, Gauge, Globe, Smile, Tag, Users } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Row, Section, SettingsPage } from "@/components/layout";
-import { PriorityIcon } from "@/components/indicators";
+import { PriorityIcon, SeverityChip } from "@/components/indicators";
+import { Slider } from "@/components/ui/slider";
 import { OllieAvatar, SetByOllie, useAssistantName } from "@/components/tickets/ollie";
 import { TagChip } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,14 +19,20 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
-import type { TriageField, TriageSettings } from "@/lib/api/types";
+import type { DecisionEngine, TriageField, TriageSettings } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { dur, springs } from "@/lib/motion";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 import { AI_TONE, tone } from "@/lib/tones";
 
-const FIELDS: TriageField[] = ["priority", "labels"];
+const FIELDS: TriageField[] = ["priority", "severity", "labels", "team"];
+const fieldIcon: Record<TriageField, ReactNode> = {
+  priority: <Gauge />,
+  severity: <SeverityChip severity="sev2" className="h-[14px] min-w-[18px] text-[9px]" />,
+  labels: <Tag />,
+  team: <Users />,
+};
 
 export default function Triage() {
   const { t } = useTranslation("settingsInbox");
@@ -36,7 +43,7 @@ export default function Triage() {
   const { data: assignment } = useQuery(q.assignment());
 
   const write = useMutation({
-    mutationFn: (b: Partial<Omit<TriageSettings, "available">>) => api.triage.update(b),
+    mutationFn: (b: Partial<Omit<TriageSettings, "available" | "engine">>) => api.triage.update(b),
     onMutate: async (b) => {
       await qc.cancelQueries({ queryKey: qk.triage });
       const prev = qc.getQueryData<TriageSettings>(qk.triage);
@@ -82,6 +89,26 @@ export default function Triage() {
 
       <Explainer s={s} name={name} />
 
+      <Section title={t("triage.engine.section")}>
+        {s ? (
+          <>
+            <EngineRow engine={s.engine} name={name} />
+            <ThresholdRow
+              value={s.threshold}
+              llm={s.engine.provider !== "typesafe"}
+              disabled={disabled}
+              name={name}
+              onCommit={(threshold) => threshold !== s.threshold && write.mutate({ threshold })}
+            />
+          </>
+        ) : (
+          <div className="flex flex-col gap-3 py-4">
+            <Skeleton className="h-5 w-1/2" />
+            <Skeleton className="h-5 w-2/3" />
+          </div>
+        )}
+      </Section>
+
       <fieldset disabled={disabled} className={cn("flex flex-col gap-8 transition-opacity duration-200", off && "opacity-60")}>
         <Section title={t("triage.section")}>
           {isLoading || !s ? (
@@ -103,7 +130,7 @@ export default function Triage() {
                       checked={s.fields.includes(f)}
                       disabled={disabled}
                       onChange={(on) => toggleField(f, on)}
-                      icon={f === "priority" ? <Gauge /> : <Tag />}
+                      icon={fieldIcon[f]}
                     />
                   ))}
                 </div>
@@ -158,6 +185,63 @@ export default function Triage() {
   );
 }
 
+/** Which engine decides: Jev by TypeSafe, the LLM fallback, or nothing yet. */
+function EngineRow({ engine, name }: { engine: DecisionEngine; name: string }) {
+  const { t } = useTranslation("settingsInbox");
+  const jev = engine.provider === "typesafe";
+  const status =
+    jev ? (engine.connected ? { text: t("triage.engine.connected"), hue: "green" as const } : { text: t("triage.engine.unreachable"), hue: "amber" as const })
+    : engine.provider === "llm" ? { text: t("triage.engine.llm"), hue: "gray" as const }
+    : { text: t("triage.engine.none"), hue: "gray" as const };
+  return (
+    <Row
+      label={jev ? t("triage.engine.jev") : engine.provider === "llm" ? t("triage.engine.llm") : t("triage.engine.label")}
+      description={jev ? t("triage.engine.jevHint", { name }) : engine.provider === "llm" ? t("triage.engine.llmHint") : t("triage.engine.noneHint", { name })}
+    >
+      <div className="flex items-center gap-2">
+        {engine.model && (
+          <span className="mono hidden text-[11px] text-fg-4 sm:inline" title={t("triage.engine.model")}>
+            {engine.model}
+          </span>
+        )}
+        <span key={status.text} className={cn("inline-flex h-[20px] animate-indicator-in items-center gap-1.5 rounded-sm px-1.5 text-[11.5px] font-medium motion-reduce:animate-none", tone[status.hue].chip)}>
+          <span className={cn("size-1.5 rounded-full", tone[status.hue].solid)} />
+          {status.text}
+        </span>
+      </div>
+    </Row>
+  );
+}
+
+/** The confidence a decision needs before it is applied; below it, it waits as a suggestion. */
+function ThresholdRow({ value, llm, disabled, name, onCommit }: { value: number; llm: boolean; disabled: boolean; name: string; onCommit: (v: number) => void }) {
+  const { t } = useTranslation("settingsInbox");
+  const [v, setV] = useState(value);
+  useEffect(() => setV(value), [value]);
+  const pct = Math.round(v * 100);
+  return (
+    <Row label={t("triage.threshold.label")} description={<>{t("triage.threshold.hint", { name })}{llm && <> {t("triage.threshold.llmNote")}</>}</>} stack>
+      <div className="flex items-center gap-3">
+        <span className="text-[11.5px] text-fg-4">{t("triage.threshold.eager")}</span>
+        <Slider
+          value={v}
+          min={0.5}
+          max={0.99}
+          step={0.01}
+          disabled={disabled}
+          onChange={setV}
+          onCommit={(x) => onCommit(Number(x.toFixed(2)))}
+          aria-label={t("triage.threshold.label")}
+          valueText={(x) => t("triage.threshold.value", { pct: Math.round(x * 100) })}
+          className="max-w-[320px] flex-1"
+        />
+        <span className="text-[11.5px] text-fg-4">{t("triage.threshold.cautious")}</span>
+        <span className="mono w-10 text-right text-[12.5px] font-medium tabular-nums">{t("triage.threshold.value", { pct })}</span>
+      </div>
+    </Row>
+  );
+}
+
 function FieldOption({
   field,
   checked,
@@ -205,6 +289,16 @@ function Explainer({ s, name }: { s?: TriageSettings; name: string }) {
         <>
           <PriorityIcon priority="high" />
           {t("triage.sample.priority")}
+        </>
+      ),
+    });
+  if (s?.fields.includes("severity"))
+    lines.push({
+      key: "severity",
+      node: (
+        <>
+          <SeverityChip severity="sev2" />
+          {t("triage.sample.severity")}
         </>
       ),
     });

@@ -22,7 +22,7 @@ import { db, me, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, patch, post, put, respond, strArr, type Ctx } from "../router";
 import { isRecord, nowIso, uuid } from "../util";
-import { aiOff } from "./ai";
+import { aiOff, decisionEngine } from "./ai";
 import { memberOut } from "./workspace";
 
 const MAX_BYTES = 5 << 20;
@@ -84,7 +84,14 @@ function assignment(ws: WsData): Assignment {
 }
 
 function triage(ws: WsData): TriageSettings {
-  return { auto_triage: ws.ai.auto_triage, fields: ws.routing.triageFields, assign_after_triage: ws.routing.assignAfterTriage, available: !aiOff() && ws.ai.enabled };
+  return {
+    auto_triage: ws.ai.auto_triage,
+    fields: ws.routing.triageFields,
+    assign_after_triage: ws.routing.assignAfterTriage,
+    threshold: ws.routing.triageThreshold ?? 0.7,
+    engine: decisionEngine(),
+    available: !aiOff() && ws.ai.enabled,
+  };
 }
 
 function hours(ws: WsData): BusinessHours {
@@ -317,8 +324,13 @@ export function registerPictures() {
     if ("assign_after_triage" in b) ctx.ws.routing.assignAfterTriage = b.assign_after_triage === true;
     if ("fields" in b) {
       const f = strArr(b.fields);
-      if (!f || f.some((x) => x !== "priority" && x !== "labels")) throw invalid("fields are priority and labels");
+      if (!f || f.some((x) => !["priority", "severity", "labels", "team"].includes(x))) throw invalid("fields may hold priority, severity, labels and team.");
       ctx.ws.routing.triageFields = [...new Set(f)] as TriageField[];
+    }
+    if ("threshold" in b) {
+      const v = b.threshold;
+      if (typeof v !== "number" || !Number.isFinite(v) || v < 0.5 || v > 0.99) throw invalid("threshold must be between 0.5 and 0.99.");
+      ctx.ws.routing.triageThreshold = Math.round(v * 100) / 100;
     }
     audit(ctx.ws, "triage.updated", "workspace", ctx.ws.workspace.id);
     return triage(ctx.ws);

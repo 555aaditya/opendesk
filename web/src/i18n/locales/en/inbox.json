@@ -38,6 +38,9 @@
     "assign": "Assign to…",
     "status": "Change status",
     "priority": "Change priority",
+    "severity": "Change severity",
+    "setSeverity": "Set severity to {{severity}}",
+    "clearSeverity": "Clear severity",
     "solve": "Solve ticket",
     "reopen": "Reopen ticket"
   },
@@ -56,7 +59,8 @@
     "noSubject": "(no subject)",
     "select": "Select ticket {{number}}",
     "priority": "{{priority}} priority",
-    "awaiting": "Waiting for a reply"
+    "awaiting": "Waiting for a reply",
+    "severity": "{{severity}}"
   },
   "presence": {
     "viewing": "{{name}} is viewing",
@@ -150,18 +154,21 @@
   },
   "filter": {
     "priority": "Priority",
+    "severity": "Severity",
     "channel": "Channel",
     "tag": "Label",
     "mailbox": "Mailbox",
     "clear": "Clear filters",
     "remove": "Remove filter",
-    "noTags": "No labels yet"
+    "noTags": "No labels yet",
+    "noSeverity": "No severity"
   },
   "sort": {
     "by": "Sort by",
     "last_message_at": "Last activity",
     "created_at": "Created",
     "priority": "Priority",
+    "severity": "Severity",
     "due": "SLA due",
     "newest": "Newest first",
     "oldest": "Oldest first",
@@ -208,6 +215,13 @@
     "setPriority": "Set priority",
     "prioritised_one": "Set {{count}} ticket to {{priority}}",
     "prioritised_other": "Set {{count}} tickets to {{priority}}",
+    "severity": "Severity",
+    "setSeverity": "Set severity",
+    "noSeverity": "No severity",
+    "severitySet_one": "Set {{count}} ticket to {{severity}}",
+    "severitySet_other": "Set {{count}} tickets to {{severity}}",
+    "severityCleared_one": "Cleared severity on {{count}} ticket",
+    "severityCleared_other": "Cleared severity on {{count}} tickets",
     "tag": "Tag",
     "tagged_one": "Tagged {{count}} ticket",
     "tagged_other": "Tagged {{count}} tickets",
@@ -231,11 +245,14 @@
   "props": {
     "status": "Status",
     "priority": "Priority",
+    "severity": "Severity",
     "assignee": "Assignee",
     "team": "Team",
     "tags": "Labels",
     "setStatus": "Set status",
     "setPriority": "Set priority",
+    "setSeverity": "Set severity",
+    "noSeverity": "No severity",
     "assignTo": "Assign to",
     "unassigned": "Unassigned",
     "chooseTeam": "Choose a team",
@@ -279,6 +296,8 @@
     "ai": "AI",
     "status": "<b>{{who}}</b> marked this <b>{{status}}</b>",
     "priority": "<b>{{who}}</b> set priority to <b>{{priority}}</b>",
+    "severity": "<b>{{who}}</b> set severity to <b>{{severity}}</b>",
+    "severityCleared": "<b>{{who}}</b> cleared the severity",
     "took": "<b>{{who}}</b> took this ticket",
     "assigned": "<b>{{who}}</b> assigned this to <b>{{to}}</b>",
     "unassigned": "<b>{{who}}</b> unassigned this ticket",
@@ -435,6 +454,26 @@
   },
   "ollie": {
     "setBy": "Set by {{name}}",
-    "said": "{{name}} replied"
+    "said": "{{name}} replied",
+    "sure": "{{pct}}% sure",
+    "viaJev": "via Jev",
+    "setThis": "{{name}} set this"
+  },
+  "suggest": {
+    "title": "{{name}} suggests",
+    "hint": "Below your confidence threshold, so {{name}} didn't apply it.",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "acceptAria": "Accept: {{what}}",
+    "dismissAria": "Dismiss: {{what}}",
+    "fields": {
+      "priority": "Priority",
+      "severity": "Severity",
+      "labels": "Labels",
+      "team": "Team",
+      "spam": "Spam"
+    },
+    "spam": "Mark as spam",
+    "accepted": "Applied {{name}}'s suggestion"
   }
 }

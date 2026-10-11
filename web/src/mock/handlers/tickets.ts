@@ -1,6 +1,6 @@
 // Tickets, messages, activities, attachments, search and reports.
 
-import type { Attachment, Channel, Priority, ReportsOverview, Ticket, TicketPatch, TicketStatus } from "@/lib/api/types";
+import type { Attachment, Channel, Priority, ReportsOverview, Severity, SuggestionField, Ticket, TicketPatch, TicketStatus } from "@/lib/api/types";
 import { contactRef, db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, del, get, invalid, notFound, paginate, patch, post, required, respond, s, strArr, type Ctx } from "../router";
@@ -10,6 +10,8 @@ import { DAY, isRecord, nowIso, uuid } from "../util";
 
 const STATUSES: TicketStatus[] = ["open", "pending", "on_hold", "solved", "closed"];
 const PRIORITIES: Priority[] = ["low", "normal", "high", "urgent"];
+const SEVERITIES: Severity[] = ["sev1", "sev2", "sev3", "sev4"];
+const SUGGESTION_FIELDS: SuggestionField[] = ["priority", "severity", "labels", "team", "spam"];
 
 function csv<T extends string>(v: string | null, allowed: T[]): T[] | undefined {
   if (!v) return undefined;
@@ -22,6 +24,7 @@ function filtersFrom(ctx: Ctx): ListFilters {
   return {
     status: csv(q.get("status"), STATUSES),
     priority: csv(q.get("priority"), PRIORITIES),
+    severity: csv(q.get("severity"), [...SEVERITIES, "none" as const]),
     assignee: q.get("assignee") ?? undefined,
     team_id: q.get("team_id") ?? undefined,
     mailbox_id: q.get("mailbox_id") ?? undefined,
@@ -59,6 +62,11 @@ function readPatch(body: Record<string, unknown>): TicketPatch {
   if (typeof body.priority === "string") {
     if (!PRIORITIES.includes(body.priority as Priority)) throw invalid("Unknown priority");
     p.priority = body.priority as Priority;
+  }
+  if ("severity" in body) {
+    const v = body.severity;
+    if (v !== null && !SEVERITIES.includes(v as Severity)) throw invalid("severity must be one of sev1, sev2, sev3, sev4, or null");
+    p.severity = (v as Severity | null) ?? null;
   }
   if ("assignee_id" in body) {
     const v = body.assignee_id;
@@ -128,6 +136,7 @@ export function registerTickets() {
       contact: contact ? contactRef(contact) : null,
       channel: (s(ctx, "channel") as Channel | undefined) ?? "email",
       priority: p.priority,
+      severity: p.severity ?? null,
       mailbox_id: s(ctx, "mailbox_id") ?? ws.mailboxes[0]?.id ?? null,
       assignee: userRef(s(ctx, "assignee_id")),
       team_id: s(ctx, "team_id") ?? null,
@@ -152,6 +161,17 @@ export function registerTickets() {
     const t = ticket(ctx);
     applyPatch(ctx.ws, t, readPatch(ctx.body), userRef(db.meId), true, personOpts(ctx.ws));
     return t;
+  });
+  del("/v1/tickets/:id/ai/suggestions/:field", (ctx) => {
+    const t = ticket(ctx);
+    const field = ctx.params.field as SuggestionField;
+    if (!SUGGESTION_FIELDS.includes(field)) throw notFound("Suggestion");
+    const sugg = t.custom.ai_suggestions as Record<string, unknown> | undefined;
+    if (sugg && field in sugg) {
+      t.custom = { ...t.custom, ai_suggestions: Object.fromEntries(Object.entries(sugg).filter(([k]) => k !== field)) };
+      publishTicketUpdated(ctx.ws, t, ["custom"]);
+    }
+    return respond(204);
   });
   del("/v1/tickets/:id", (ctx) => {
     const t = ticket(ctx);
@@ -302,6 +322,13 @@ function reports(ctx: Ctx): ReportsOverview {
       chat: Math.round(created * 0.22),
       api: Math.round(created * 0.06),
       portal: created - Math.round(created * 0.68) - Math.round(created * 0.22) - Math.round(created * 0.06),
+    },
+    by_severity: {
+      sev1: Math.round(created * 0.02),
+      sev2: Math.round(created * 0.07),
+      sev3: Math.round(created * 0.16),
+      sev4: Math.round(created * 0.21),
+      none: created - Math.round(created * 0.02) - Math.round(created * 0.07) - Math.round(created * 0.16) - Math.round(created * 0.21),
     },
     by_agent: shares.map((share, i) => {
       const u = db.users[i];

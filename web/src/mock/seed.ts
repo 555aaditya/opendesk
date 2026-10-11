@@ -1,5 +1,6 @@
 // Builds the mock database: the Fieldnote workspace (rich) and Lumen Labs (small).
 
+import { applyDecisions, severityFor } from "./decisions";
 import type {
   ApiKey,
   Attachment,
@@ -469,6 +470,28 @@ function seedFieldnote(): WsData {
     if (openish) t.sla = null;
     else t.sla.breached = false;
     ws.activities = ws.activities.filter((a) => !(a.ticket_id === t.id && a.type === "sla_breached"));
+  }
+
+  // Ollie triaged each new ticket with Jev: confident decisions applied, the rest left as suggestions.
+  for (const t of ws.tickets) {
+    if (t.spam) continue;
+    const openish = t.status === "open" || t.status === "pending" || t.status === "on_hold";
+    if (!openish && !chance(0.4)) continue;
+    const text = ws.messages.find((m) => m.ticket_id === t.id && m.direction === "inbound")?.body_html ?? "";
+    applyDecisions(
+      ws,
+      t,
+      {
+        priority: t.priority,
+        severity: severityFor(t.priority, `${t.subject} ${text}`),
+        tags: [],
+        team_id: t.team_id ? null : teamId("Support") ?? null,
+        sentiment: typeof t.custom.ai_sentiment === "string" ? t.custom.ai_sentiment : "neutral",
+        category: typeof t.custom.ai_category === "string" ? t.custom.ai_category : "problem",
+        language: typeof t.custom.language === "string" ? t.custom.language : "en",
+      },
+      { via: "auto_triage", at: iso(Date.parse(t.created_at) + 40_000) },
+    );
   }
 
   // Saved replies, views, automations.

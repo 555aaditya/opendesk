@@ -9,9 +9,10 @@ import { ease } from "@/lib/motion";
 import { Avatar, AvatarStack } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip } from "@/components/ui/tooltip";
-import { ChannelIcon, channelLabel, PriorityIcon, SlaPill, slaState, StatusIcon } from "./bits";
+import { ChannelIcon, channelLabel, PriorityIcon, SeverityChip, severityLabel, SlaPill, slaState, StatusIcon } from "./bits";
 import { useDisplay } from "./fields";
-import { SetByOllie, useAssistantName } from "./ollie";
+import { SetByOllie, useOllieNote } from "./ollie";
+import { aiDecisions } from "@/lib/decisions";
 import { useTicketViewers } from "./presence";
 import { rowMotion } from "./motion";
 
@@ -90,13 +91,15 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
   const { t: tr } = useTranslation("inbox");
   const reduced = useReducedMotion();
   const display = useDisplay();
-  const ollie = useAssistantName();
+  const note = useOllieNote();
   const unread = awaitingReply(t);
   const contactName = t.contact?.name || t.contact?.email || tr("row.unknown");
   const subject = t.subject || tr("row.noSubject");
   const showCheck = selecting || selected;
   const done = t.status === "solved" || t.status === "closed";
-  const aiSet = !!t.custom?.ai_triaged_at;
+  const decisions = aiDecisions(t);
+  const aiSet = decisions ? !!decisions.fields.priority?.applied : !!t.custom?.ai_triaged_at;
+  const aiSeverity = !!decisions?.fields.severity?.applied && decisions.fields.severity.value === t.severity;
   const assignee = !hideAssignee && t.assignee;
   const motionProps = rowMotion(reduced);
   const initial = fresh && !reduced ? { ...motionProps.initial, backgroundColor: "var(--tone-blue-soft)" } : motionProps.initial;
@@ -138,10 +141,19 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
 
   // Every row shows its priority in the same slot, so the column lines up.
   const prioritySlot = (
-    <Tooltip content={aiSet ? `${tr("row.priority", { priority: display.priority(t.priority) })} · ${tr("ollie.setBy", { name: ollie })}` : tr("row.priority", { priority: display.priority(t.priority) })}>
+    <Tooltip content={aiSet ? `${tr("row.priority", { priority: display.priority(t.priority) })} · ${note(t, "priority")}` : tr("row.priority", { priority: display.priority(t.priority) })}>
       <span className="relative flex size-4 shrink-0 items-center justify-center">
         <PriorityIcon priority={t.priority} />
         {aiSet && <SetByOllie className="absolute -right-1.5 -top-1.5 size-2.5 ring-1 ring-surface [&_svg]:size-[7px]" />}
+      </span>
+    </Tooltip>
+  );
+
+  // Severity is optional: a compact chip before the subject, only when set.
+  const severity = t.severity && (
+    <Tooltip content={aiSeverity ? `${severityLabel[t.severity]} · ${note(t, "severity")}` : severityLabel[t.severity]}>
+      <span className="flex shrink-0">
+        <SeverityChip severity={t.severity} />
       </span>
     </Tooltip>
   );
@@ -232,8 +244,11 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
               <span className="flex-1" />
               {end}
             </div>
-            <div className={cn("mt-0.5 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg")} data-ph-mask>
-              {subject}
+            <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+              {severity}
+              <span className={cn("min-w-0 truncate text-[12.5px]", unread ? "font-medium text-fg" : "text-fg")} data-ph-mask>
+                {subject}
+              </span>
             </div>
             <div className="mt-1 flex items-center gap-1.5">
               <span className="min-w-0 flex-1 truncate text-xs text-fg-3" data-ph-mask>
@@ -260,6 +275,7 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
             <Viewers ticketId={t.id} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
+            {severity}
             <span className={cn("max-w-[60%] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
               {subject}
             </span>

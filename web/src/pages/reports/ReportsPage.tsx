@@ -15,6 +15,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { RangePicker } from "@/components/reports/RangePicker";
 import { Sparkline, VolumeChart, VolumeLegend, VolumeTable } from "@/components/reports/VolumeChart";
 import { ChannelBars } from "@/components/reports/ChannelBars";
+import { SeverityBars } from "@/components/reports/SeverityBars";
 import { AgentTable } from "@/components/reports/AgentTable";
 import { AnimatedNumber } from "@/components/motion";
 import { Bar, BreakdownBars, ShareBar, type BarRow } from "@/components/reports/Bars";
@@ -77,10 +78,15 @@ export default function ReportsPage() {
               <VolumeCard d={d} className="xl:col-span-2" />
               <BacklogCard />
             </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className={cn("grid grid-cols-1 gap-4", d.by_severity ? "md:grid-cols-2 xl:grid-cols-4" : "lg:grid-cols-3")}>
               <Card title={t("channel.title")} subtitle={t("channel.subtitle")}>
                 <ChannelBars data={d.by_channel} />
               </Card>
+              {d.by_severity && (
+                <Card title={t("severity.title")} subtitle={t("severity.subtitle")}>
+                  <SeverityBars data={d.by_severity} />
+                </Card>
+              )}
               <OpenWorkCards />
             </div>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -450,8 +456,8 @@ function ReportSkeleton() {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {[0, 1, 2].map((i) => (
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
           <div key={i} className={card}>
             <Skeleton className="h-3 w-24" />
             <div className="mt-6">

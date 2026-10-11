@@ -8,6 +8,8 @@ type ListQuery = { limit?: number; cursor?: string | null };
 export type TicketListQuery = ListQuery & {
   status?: T.TicketStatus[];
   priority?: T.Priority[];
+  /** "none": tickets without a severity. */
+  severity?: (T.Severity | "none")[];
   assignee?: string;
   team_id?: string;
   mailbox_id?: string;
@@ -18,7 +20,7 @@ export type TicketListQuery = ListQuery & {
   q?: string;
   spam?: boolean | "any";
   /** `field.<key>` sorts by a text, number, date, checkbox or select custom field. */
-  sort?: "last_message_at" | "created_at" | "priority" | "due" | `field.${string}`;
+  sort?: "last_message_at" | "created_at" | "priority" | "severity" | "due" | `field.${string}`;
   order?: "asc" | "desc";
   /** Custom field filters, sent as `field.<key>[<op>]=<value>`. */
   fields?: T.FieldFilter[];
@@ -54,6 +56,7 @@ export type CreateTicketBody = {
   body_html: string;
   kind?: "reply" | "note";
   priority?: T.Priority;
+  severity?: T.Severity;
   assignee_id?: string;
   team_id?: string;
   tags?: string[];
@@ -304,6 +307,8 @@ export const api = {
     summary: (ticketId: string) => http.post<T.AISummary>(`/v1/tickets/${ticketId}/ai/summary`, {}),
     ask: (ticketId: string, question: string, h?: StreamHandlers) => stream<T.AIAnswer>(`/v1/tickets/${ticketId}/ai/ask`, { question }, h),
     triage: (ticketId: string, apply: boolean) => http.post<T.Triage>(`/v1/tickets/${ticketId}/ai/triage`, { apply }),
+    /** Dismisses Ollie's suggestion for one field; accepting is setting the field. */
+    dismissSuggestion: (ticketId: string, field: T.SuggestionField) => http.del(`/v1/tickets/${ticketId}/ai/suggestions/${field}`),
     rewrite: (b: { html: string; mode: T.RewriteMode; instructions?: string }, h?: StreamHandlers) => stream<{ html: string }>("/v1/ai/rewrite", b, h),
     translate: (b: { html?: string; text?: string; target: string }) => http.post<T.TranslateResult>("/v1/ai/translate", b),
     kbDraft: (b: { ticket_ids?: string[]; topic?: string }) => http.post<T.KBArticleDraft>("/v1/kb/articles/ai/draft", b),

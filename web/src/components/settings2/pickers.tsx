@@ -10,10 +10,14 @@ import {
   ChannelIcon,
   PriorityIcon,
   SentimentIcon,
+  SeverityChip,
   StatusIcon,
   channelLabel,
   priorityLabel,
   priorityOrder,
+  severityHint,
+  severityLabel,
+  severityOrder,
   statusLabel,
   statusOrder,
 } from "@/components/tickets/bits";
@@ -34,6 +38,18 @@ export const priorityItems: PickerItem[] = priorityOrder.map((p) => ({
   label: priorityLabel[p],
   icon: <PriorityIcon priority={p} />,
 }));
+/** Severity levels, sev1 first, each with what it means. */
+export const severityItems: PickerItem[] = severityOrder.map((s) => ({
+  value: s,
+  label: severityLabel[s],
+  hint: severityHint[s],
+  icon: <SeverityChip severity={s} />,
+}));
+/** Severity levels plus "no severity" ("none"), for conditions and filters. */
+export const severityFilterItems = (): PickerItem[] => [
+  ...severityItems,
+  { value: "none", label: i18n.t("settingsInbox:edit.noSeverity"), icon: <span className="h-[16px] w-[22px] rounded-[4px] border border-dashed border-line-strong" /> },
+];
 export const channelItems: PickerItem[] = (Object.keys(channelLabel) as Channel[]).map((c) => ({
   value: c,
   label: channelLabel[c],

@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BackLink, NoAccess, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
-import { Field, TextInput } from "@/components/ui/input";
+import { Field, TextInput, Textarea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState } from "@/components/ui/empty";
@@ -21,6 +21,8 @@ import {
   channelItems,
   priorityItems,
   sentimentItems,
+  severityFilterItems,
+  severityItems,
   statusItems,
   triggerItems,
   useMailboxItems,
@@ -28,7 +30,7 @@ import {
   useTeamItems,
 } from "@/components/settings2/pickers";
 import { rowSpring } from "@/components/settings2/motion";
-import { actionLabel, actionNeedsValue, aiActions, aiFields, fieldLabel, offered, opLabel, opsFor } from "@/components/settings2/automation";
+import { actionLabel, actionNeedsValue, aiActions, aiFields, fieldLabel, offered, opLabel, opsFor, validProbability, validQuestion } from "@/components/settings2/automation";
 import { AiIcon } from "@/components/ai/bits";
 import { useAI } from "@/lib/ai";
 import { useTranslation } from "react-i18next";
@@ -227,7 +229,8 @@ export default function AutomationEdit() {
     );
 
   const set = (patch: Partial<Draft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
-  const condInvalid = (c: Rule) => (isFieldRule(c) ? !fieldConditionComplete(c) : !c.value.trim());
+  const condInvalid = (c: Rule) =>
+    isFieldRule(c) ? !fieldConditionComplete(c) : c.field === "ai_decide" ? !validProbability(c.value) || !validQuestion(c.question) : !c.value.trim();
   const actInvalid = (a: Action) =>
     a.type === "set_field"
       ? !a.field
@@ -490,7 +493,8 @@ function ConditionRow({
       const field = v as ConditionField;
       const nextOps = opsFor(field);
       const cur = isFieldRule(c) ? undefined : c.op;
-      onChange({ field, op: cur && nextOps.includes(cur) ? cur : nextOps[0], value: "" });
+      if (field === "ai_decide") onChange({ field, op: "gt", value: "0.7", question: "" });
+      else onChange({ field, op: cur && nextOps.includes(cur) ? cur : nextOps[0], value: "" });
     }
   };
 
@@ -542,6 +546,32 @@ function ConditionRow({
         )}
       </div>
       <RemoveButton onClick={onRemove} label={t("edit.removeCondition")} />
+      {!isFieldRule(c) && c.field === "ai_decide" && <DecideQuestion c={c} invalid={invalid} onChange={onChange} />}
+    </div>
+  );
+}
+
+/** ai_decide: the admin's yes/no question, asked of Ollie about the ticket. */
+function DecideQuestion({ c, invalid, onChange }: { c: Condition; invalid: boolean; onChange: (c: Rule) => void }) {
+  const { t } = useTranslation("ai");
+  const { cost } = useAI();
+  const n = cost("decide");
+  return (
+    <div className="basis-full pl-11">
+      <Textarea
+        rows={2}
+        maxLength={300}
+        value={c.question ?? ""}
+        invalid={invalid && !validQuestion(c.question)}
+        aria-label={t("automation.ai_decide_question")}
+        placeholder={t("automation.ai_decide_placeholder")}
+        onChange={(e) => onChange({ ...c, question: e.target.value.replace(/[\r\n]+/g, " ") })}
+        className="min-h-[52px] text-[12.5px]"
+      />
+      <p className="mt-1 text-[11.5px] text-fg-3">
+        {t("automation.ai_decide_hint")}
+        {n !== null && <span className="mono ml-1.5 whitespace-nowrap text-[11px] text-fg-4">{t("automation.per_run", { count: n })}</span>}
+      </p>
     </div>
   );
 }
@@ -557,6 +587,28 @@ function ConditionValue({ c, invalid, onChange }: { c: Condition; invalid: boole
       return (
         <SinglePick items={priorityItems} value={c.value} onChange={onChange} placeholder={ts("edit.choosePriority")} invalid={invalid} className="w-full" />
       );
+    case "severity":
+      return (
+        <SinglePick items={severityFilterItems()} value={c.value} onChange={onChange} placeholder={ts("edit.chooseSeverity")} invalid={invalid} width={300} className="w-full" />
+      );
+    case "ai_decide": {
+      const p = Number(c.value);
+      return (
+        <div className="flex items-center gap-2">
+          <TextInput
+            inputSize="sm"
+            inputMode="decimal"
+            value={c.value}
+            invalid={invalid && !validProbability(c.value)}
+            aria-label={t("automation.ai_decide_probability")}
+            placeholder="0.7"
+            onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, "").slice(0, 4))}
+            className="mono w-[72px]"
+          />
+          {validProbability(c.value) && <span className="text-[12px] text-fg-3">{t("automation.ai_decide_percent", { pct: Math.round(p * 100) })}</span>}
+        </div>
+      );
+    }
     case "channel":
       return (
         <SinglePick items={channelItems} value={c.value} onChange={onChange} placeholder={ts("edit.chooseChannel")} invalid={invalid} className="w-full" />
@@ -628,6 +680,11 @@ function ActionRow({ a, invalid, onChange, onRemove }: { a: Action; invalid: boo
     case "set_priority":
       control = (
         <SinglePick items={priorityItems} value={a.value} onChange={set} placeholder={ts("edit.choosePriority")} invalid={invalid} className="w-full" />
+      );
+      break;
+    case "set_severity":
+      control = (
+        <SinglePick items={severityItems} value={a.value} onChange={set} placeholder={ts("edit.chooseSeverity")} invalid={invalid} width={300} className="w-full" />
       );
       break;
     case "assign_user":
