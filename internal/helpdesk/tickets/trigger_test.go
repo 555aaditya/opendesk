@@ -10,12 +10,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
-	"github.com/opendesk/opendesk/internal/helpdesk/tickets"
-	"github.com/opendesk/opendesk/internal/ids"
-	"github.com/opendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/tickets"
+	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 func addSLA(t *testing.T, e *hdtest.Env, ws hdtest.WS, priority any, fr, res, pos int, enabled bool) uuid.UUID {

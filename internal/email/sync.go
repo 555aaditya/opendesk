@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 // First-connect import window, and the most messages one pass ingests.

@@ -14,12 +14,12 @@ import (
 	"github.com/riverqueue/river/rivertype"
 	"github.com/stripe/stripe-go/v87"
 
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/events"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/jobs"
-	"github.com/opendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/events"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // Billing is the GET /v1/billing body and the billing.updated event data.

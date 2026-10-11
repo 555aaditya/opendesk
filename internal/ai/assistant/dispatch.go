@@ -14,8 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // caller runs the assistant's tools through the public API itself, in process, as the

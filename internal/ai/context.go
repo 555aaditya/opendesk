@@ -9,8 +9,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 )
 
 // Untrusted content (customer messages, KB articles, contact fields) goes into delimited

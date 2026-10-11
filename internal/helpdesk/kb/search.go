@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/db"
 )
 
 // Search returns the workspace's best matching articles (drafts included) for the

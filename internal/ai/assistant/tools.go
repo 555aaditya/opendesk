@@ -12,9 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/ai"
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/ai"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // output is a tool's answer: Content for the model (always inside a data block),

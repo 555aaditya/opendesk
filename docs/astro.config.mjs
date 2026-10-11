@@ -22,7 +22,7 @@ export default defineConfig({
         { tag: 'meta', attrs: { property: 'og:image', content: 'https://docs.opendesk.sh/og.png' } },
         { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
       ],
-      editLink: { baseUrl: 'https://github.com/opendesk/opendesk/edit/main/docs/' },
+      editLink: { baseUrl: 'https://github.com/useopendesk/opendesk/edit/main/docs/' },
       lastUpdated: false,
       disable404Route: true,
       customCss: [

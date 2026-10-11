@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/opendesk/opendesk/internal/config"
+	"github.com/useopendesk/opendesk/internal/config"
 )
 
 func TestWebCSPConnectsToOrigins(t *testing.T) {

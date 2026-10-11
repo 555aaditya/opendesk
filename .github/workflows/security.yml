@@ -79,7 +79,7 @@ jobs:
     steps:
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/opendesk/${{ matrix.image }}:latest
+          image-ref: ghcr.io/useopendesk/${{ matrix.image }}:latest
           severity: CRITICAL,HIGH,MEDIUM
           ignore-unfixed: true
           format: sarif

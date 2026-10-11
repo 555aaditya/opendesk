@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"slices"
 
-	"github.com/opendesk/opendesk/internal/config"
+	"github.com/useopendesk/opendesk/internal/config"
 )
 
 // DecisionEngine reports the instance's decision engine (contracts/api.md).

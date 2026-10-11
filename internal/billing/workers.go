@@ -9,10 +9,10 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/stripe/stripe-go/v87"
 
-	"github.com/opendesk/opendesk/internal/audit"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/jobs"
-	"github.com/opendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/audit"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // syncSeatsWorker sets the Stripe quantity of an active subscription to the billed seats.

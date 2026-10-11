@@ -12,13 +12,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/ai/decide"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/ai/decide"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // Service runs the AI features for every area.

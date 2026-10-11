@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/ids"
 )
 
 func TestMailboxCRUD(t *testing.T) {

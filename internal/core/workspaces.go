@@ -16,17 +16,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/opendesk/opendesk/internal/audit"
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/billing"
-	"github.com/opendesk/opendesk/internal/crypto"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/displayname"
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/events"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/ids"
-	"github.com/opendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/audit"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/billing"
+	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/displayname"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/events"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // CoreWorkspaceSettings are the agent-editable workspace options (contracts/api.md).

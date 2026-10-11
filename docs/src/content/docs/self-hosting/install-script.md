@@ -41,7 +41,7 @@ Each flag also has an environment variable.
 | `--no-start` | `OPENDESK_NO_START=1` | | Write the files and pull nothing; start later yourself |
 | `--wizard` | `OPENDESK_WIZARD=1` | | Also ask about email, storage, inbound mail and sign-ups |
 | `-y`, `--yes` | `OPENDESK_YES=1` | | Ask nothing and take defaults (and install Docker if missing) |
-| `--registry PREFIX` | `OPENDESK_REGISTRY` | `ghcr.io/opendesk` | Image namespace |
+| `--registry PREFIX` | `OPENDESK_REGISTRY` | `ghcr.io/useopendesk` | Image namespace |
 | `--ai-key KEY` | `OPENDESK_AI_KEY` | | Anthropic API key, or the key for `--ai-url`. Prefer the variable, so the key stays out of your shell history. |
 | `--ai-url URL` | `OPENDESK_AI_URL` | | An OpenAI-compatible endpoint instead of Anthropic (OpenAI, vLLM, your own Ollama). |
 | `--ai-model NAME` | `OPENDESK_AI_MODEL` | provider default | Model name. With `--ollama`, the model to pull (default `llama3.1:8b`). |

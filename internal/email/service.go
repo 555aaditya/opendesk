@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/deps"
 )
 
 // Limits on what the pipeline accepts.

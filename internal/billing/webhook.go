@@ -16,12 +16,12 @@ import (
 	"github.com/stripe/stripe-go/v87"
 	"github.com/stripe/stripe-go/v87/webhook"
 
-	"github.com/opendesk/opendesk/internal/audit"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/jobs"
-	"github.com/opendesk/opendesk/internal/mailer"
-	"github.com/opendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/audit"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/mailer"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 const (

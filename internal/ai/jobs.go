@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 // autoSummarizeMin is the message count from which auto-summarize keeps a summary.

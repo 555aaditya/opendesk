@@ -12,10 +12,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/opendesk/opendesk/internal/app"
-	"github.com/opendesk/opendesk/internal/config"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/version"
+	"github.com/useopendesk/opendesk/internal/app"
+	"github.com/useopendesk/opendesk/internal/config"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/version"
 )
 
 func main() {

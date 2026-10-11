@@ -11,11 +11,11 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humachi"
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 const (

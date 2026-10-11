@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
-	"github.com/opendesk/opendesk/internal/helpdesk/kb"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/kb"
 )
 
 type article struct {

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/crypto"
 )
 
 type ridKey struct{}

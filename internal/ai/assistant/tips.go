@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/auth"
 )
 
 // Tip is one thing worth doing now, offered under the header blob.

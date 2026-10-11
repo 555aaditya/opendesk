@@ -21,17 +21,17 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
-	"github.com/opendesk/opendesk/internal/analytics"
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/captcha"
-	"github.com/opendesk/opendesk/internal/config"
-	"github.com/opendesk/opendesk/internal/crypto"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/natsx"
-	"github.com/opendesk/opendesk/internal/storage"
+	"github.com/useopendesk/opendesk/internal/analytics"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/captcha"
+	"github.com/useopendesk/opendesk/internal/config"
+	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/natsx"
+	"github.com/useopendesk/opendesk/internal/storage"
 )
 
 // testEnv is a core API backed by a real Postgres (OPENDESK_TEST_DATABASE_URL).

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/netsafe"
+	"github.com/useopendesk/opendesk/internal/netsafe"
 )
 
 // ErrNotFound means the source answered that there is no picture (a remembered miss).

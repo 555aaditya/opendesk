@@ -6,8 +6,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 // Test hooks for the external billing_test package.

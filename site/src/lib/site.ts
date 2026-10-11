@@ -15,10 +15,10 @@ export const LINKS = {
   api: 'https://api.opendesk.sh',
   apiReference: 'https://api.opendesk.sh/docs',
   openapi: 'https://api.opendesk.sh/v1/openapi.json',
-  github: 'https://github.com/opendesk/opendesk',
-  githubIssues: 'https://github.com/opendesk/opendesk/issues',
-  githubReleases: 'https://github.com/opendesk/opendesk/releases',
-  license: 'https://github.com/opendesk/opendesk/blob/main/LICENSE',
+  github: 'https://github.com/useopendesk/opendesk',
+  githubIssues: 'https://github.com/useopendesk/opendesk/issues',
+  githubReleases: 'https://github.com/useopendesk/opendesk/releases',
+  license: 'https://github.com/useopendesk/opendesk/blob/main/LICENSE',
   install: 'curl -fsSL https://opendesk.sh/install.sh | sh',
 } as const;
 

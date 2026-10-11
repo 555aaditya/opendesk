@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/opendesk/opendesk/internal/ai"
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/ai"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 func writeTools() []*tool {

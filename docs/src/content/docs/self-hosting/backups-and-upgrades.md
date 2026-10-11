@@ -54,6 +54,6 @@ An upgrade:
 3. reruns it in place with `--version`, keeping every secret and setting
 4. pulls the new images and restarts
 
-Migrations run when opendesk starts, so there is no separate migration step. Read the [release notes](https://github.com/opendesk/opendesk/releases) before upgrading across several versions.
+Migrations run when opendesk starts, so there is no separate migration step. Read the [release notes](https://github.com/useopendesk/opendesk/releases) before upgrading across several versions.
 
 To roll back, restore the backup taken before the upgrade, then install the earlier version with `--version`.

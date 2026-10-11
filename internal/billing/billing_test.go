@@ -10,9 +10,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/billing"
-	"github.com/opendesk/opendesk/internal/jobs"
-	"github.com/opendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/billing"
+	"github.com/useopendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/plan"
 )
 
 // proWorkspace walks an owner through Checkout and the webhook to an active Pro plan.

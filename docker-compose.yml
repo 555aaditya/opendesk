@@ -43,7 +43,7 @@ x-hardening: &hardening
 services:
   opendesk:
     <<: *hardening
-    image: ${OPENDESK_IMAGE:-ghcr.io/opendesk/opendesk}:${OPENDESK_VERSION:-latest}
+    image: ${OPENDESK_IMAGE:-ghcr.io/useopendesk/opendesk}:${OPENDESK_VERSION:-latest}
     build:
       context: .
       dockerfile: deploy/docker/opendesk.Dockerfile
@@ -132,7 +132,7 @@ services:
 
   realtime:
     <<: *hardening
-    image: ${REALTIME_IMAGE:-ghcr.io/opendesk/realtime}:${OPENDESK_VERSION:-latest}
+    image: ${REALTIME_IMAGE:-ghcr.io/useopendesk/realtime}:${OPENDESK_VERSION:-latest}
     build:
       context: .
       dockerfile: deploy/docker/realtime.Dockerfile

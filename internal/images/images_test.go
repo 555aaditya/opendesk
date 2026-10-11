@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/netsafe"
+	"github.com/useopendesk/opendesk/internal/netsafe"
 )
 
 func sample(w, h int) *image.NRGBA {

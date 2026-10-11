@@ -15,7 +15,7 @@ import (
 	"github.com/fxamacker/cbor/v2"
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/auth"
 )
 
 // softKey is a software passkey for rpID http://app.test (the test APP_URL).

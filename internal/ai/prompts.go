@@ -3,7 +3,7 @@ package ai
 import (
 	"strings"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 )
 
 // The system prompts are fixed text, so the provider can cache them. Workspace guidance

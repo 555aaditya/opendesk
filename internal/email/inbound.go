@@ -15,7 +15,7 @@ import (
 
 	"github.com/emersion/go-smtp"
 
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // InboundSecretHeader authenticates the Cloudflare Email Worker (or SES relay).

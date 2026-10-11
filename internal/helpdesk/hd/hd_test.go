@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 )
 
 func TestSanitizeRich(t *testing.T) {

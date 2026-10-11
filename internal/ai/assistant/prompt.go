@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/ai"
-	"github.com/opendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/ai"
+	"github.com/useopendesk/opendesk/internal/auth"
 )
 
 // systemPrompt is fixed text, cached with the tools.

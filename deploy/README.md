@@ -331,7 +331,7 @@ curl -fsS https://api.opendesk.sh/readyz     # database and NATS connected
 ### 12. First release
 
 Tag `v0.1.0` and push the tag. Release builds multi-arch images to
-`ghcr.io/opendesk/{opendesk,realtime}` (make the packages public in the org's
+`ghcr.io/useopendesk/{opendesk,realtime}` (make the packages public in the org's
 package settings after the first run), creates the GitHub release with the
 installer and the self-host files, and redeploys opendesk.sh so
 `/install.sh` is that release's installer.

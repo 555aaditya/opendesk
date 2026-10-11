@@ -51,7 +51,7 @@ COPY --from=web /src/web/dist/ internal/webui/dist/
 RUN --mount=type=cache,id=gomod,target=/go/pkg/mod \
     --mount=type=cache,id=gobuild,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
-      -ldflags "-s -w -X github.com/opendesk/opendesk/internal/version.Version=${VERSION} -X github.com/opendesk/opendesk/internal/version.Commit=${COMMIT}" \
+      -ldflags "-s -w -X github.com/useopendesk/opendesk/internal/version.Version=${VERSION} -X github.com/useopendesk/opendesk/internal/version.Commit=${COMMIT}" \
       -o /out/opendesk ./cmd/opendesk
 # /data is the volume: attachments (STORAGE_DRIVER=local) and the embedded NATS
 # JetStream store. Docker seeds a fresh named volume from the image, so the
@@ -64,7 +64,7 @@ FROM gcr.io/distroless/static-debian13:nonroot
 ARG VERSION=dev COMMIT=none
 LABEL org.opencontainers.image.title="opendesk" \
       org.opencontainers.image.description="The open-source helpdesk: API, workers and web app" \
-      org.opencontainers.image.source="https://github.com/opendesk/opendesk" \
+      org.opencontainers.image.source="https://github.com/useopendesk/opendesk" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"
 COPY --from=go /out/opendesk /opendesk

@@ -23,7 +23,7 @@ import (
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
 
-	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/crypto"
 )
 
 type Mail struct {

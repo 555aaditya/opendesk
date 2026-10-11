@@ -1,4 +1,4 @@
-module github.com/opendesk/opendesk
+module github.com/useopendesk/opendesk
 
 go 1.27.1
 

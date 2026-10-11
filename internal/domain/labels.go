@@ -12,10 +12,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/events"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/events"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/ids"
 )
 
 // Labels are the API's tags (contracts/api.md "Labels and custom fields").

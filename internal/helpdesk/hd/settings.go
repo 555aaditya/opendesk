@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/db"
 )
 
 // WidgetSettings lives in workspaces.settings.widget.

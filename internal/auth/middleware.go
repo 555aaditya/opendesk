@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/opendesk/opendesk/internal/crypto"
-	"github.com/opendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/db"
 )
 
 // WorkspaceHeader selects the workspace for user (session) requests.

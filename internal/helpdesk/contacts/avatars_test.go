@@ -16,12 +16,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/deps"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/contacts"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
-	"github.com/opendesk/opendesk/internal/images"
-	"github.com/opendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/helpdesk/contacts"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/images"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 func pngBytes(t *testing.T, w, h int) []byte {

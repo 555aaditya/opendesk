@@ -3,9 +3,9 @@ package resources_test
 import (
 	"testing"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
-	"github.com/opendesk/opendesk/internal/helpdesk/resources"
-	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/resources"
+	"github.com/useopendesk/opendesk/internal/ids"
 )
 
 func TestAssignmentSettings(t *testing.T) {

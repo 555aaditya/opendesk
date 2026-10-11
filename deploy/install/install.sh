@@ -44,7 +44,7 @@ set -eu
 REPO="opendesk/opendesk"
 DOCS="https://docs.opendesk.sh"
 DEFAULT_DIR="/opt/opendesk"
-DEFAULT_REGISTRY="ghcr.io/opendesk"
+DEFAULT_REGISTRY="ghcr.io/useopendesk"
 MARKER=".opendesk-install"
 
 # ── Answers: each is a flag and an OPENDESK_* variable ──────────────────────

@@ -1,7 +1,7 @@
 # Short links and app entry points.
 /docs                 https://docs.opendesk.sh                     301
 /docs/*               https://docs.opendesk.sh/:splat              301
-/github               https://github.com/opendesk/opendesk          302
+/github               https://github.com/useopendesk/opendesk          302
 /app                  https://app.opendesk.sh                      302
 /login                https://app.opendesk.sh/login                302
 /signup               https://app.opendesk.sh/signup               302

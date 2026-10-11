@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/crypto"
 )
 
 // fakeStripe is the slice of the Stripe API billing uses, held in memory.

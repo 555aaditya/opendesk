@@ -6,7 +6,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/go-chi/chi/v5"
 
-	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/deps"
 )
 
 // Register adds this package's routes.

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
 )
 
 func TestAddBusinessMinutes(t *testing.T) {

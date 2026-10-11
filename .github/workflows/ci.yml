@@ -325,7 +325,7 @@ jobs:
           file: deploy/docker/opendesk.Dockerfile
           load: true
           push: false
-          tags: ghcr.io/opendesk/opendesk:ci
+          tags: ghcr.io/useopendesk/opendesk:ci
           build-args: |
             VERSION=ci
             COMMIT=${{ github.sha }}
@@ -338,7 +338,7 @@ jobs:
           file: deploy/docker/realtime.Dockerfile
           load: true
           push: false
-          tags: ghcr.io/opendesk/realtime:ci
+          tags: ghcr.io/useopendesk/realtime:ci
           build-args: |
             VERSION=ci
             COMMIT=${{ github.sha }}
@@ -347,7 +347,7 @@ jobs:
       - name: Trivy (opendesk)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/opendesk/opendesk:ci
+          image-ref: ghcr.io/useopendesk/opendesk:ci
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
@@ -355,7 +355,7 @@ jobs:
       - name: Trivy (realtime)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/opendesk/realtime:ci
+          image-ref: ghcr.io/useopendesk/realtime:ci
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
@@ -365,7 +365,7 @@ jobs:
         if: always() && github.event_name != 'merge_group'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ghcr.io/opendesk/opendesk:ci
+          image-ref: ghcr.io/useopendesk/opendesk:ci
           severity: CRITICAL,HIGH,MEDIUM
           format: sarif
           output: trivy-opendesk.sarif

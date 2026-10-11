@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/domain"
 )
 
 func readTools() []*tool {

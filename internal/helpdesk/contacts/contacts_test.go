@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/contacts"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
-	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/helpdesk/contacts"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/ids"
 )
 
 type contact struct {

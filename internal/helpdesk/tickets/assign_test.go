@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/opendesk/opendesk/internal/helpdesk/hd"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hd"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 )
 
 // assignNew creates n tickets (with extra body members) and returns who got each.

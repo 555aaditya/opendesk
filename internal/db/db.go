@@ -18,7 +18,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
-	"github.com/opendesk/opendesk/migrations"
+	"github.com/useopendesk/opendesk/migrations"
 )
 
 // Querier is satisfied by *pgxpool.Pool, pgx.Tx and *pgx.Conn.

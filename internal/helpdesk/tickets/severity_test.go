@@ -5,10 +5,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
-	"github.com/opendesk/opendesk/internal/helpdesk/resources"
-	"github.com/opendesk/opendesk/internal/helpdesk/tickets"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk/resources"
+	"github.com/useopendesk/opendesk/internal/helpdesk/tickets"
 )
 
 // newFullEnv adds the resources routes (views, automations) to the tickets routes.

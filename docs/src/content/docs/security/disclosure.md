@@ -7,7 +7,7 @@ We take security reports seriously and appreciate the work of researchers who he
 
 ## How to report
 
-Email **[security@opendesk.sh](mailto:security@opendesk.sh)**, or open a private report through [GitHub security advisories](https://github.com/opendesk/opendesk/security/advisories/new).
+Email **[security@opendesk.sh](mailto:security@opendesk.sh)**, or open a private report through [GitHub security advisories](https://github.com/useopendesk/opendesk/security/advisories/new).
 
 Please include:
 
@@ -36,6 +36,6 @@ Good-faith research that follows these guidelines is welcome, and we will not pu
 
 ## Scope
 
-In scope: the opendesk code in [github.com/opendesk/opendesk](https://github.com/opendesk/opendesk) and the hosted service at `opendesk.sh`, `app.opendesk.sh`, `api.opendesk.sh` and `gateway.opendesk.sh`.
+In scope: the opendesk code in [github.com/useopendesk/opendesk](https://github.com/useopendesk/opendesk) and the hosted service at `opendesk.sh`, `app.opendesk.sh`, `api.opendesk.sh` and `gateway.opendesk.sh`.
 
 Out of scope: findings that need physical access or a compromised device, social engineering, reports from automated scanners without a demonstrated impact, and missing best-practice headers on pages that serve no sensitive data.

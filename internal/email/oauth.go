@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/oauth2"
 
-	"github.com/opendesk/opendesk/internal/config"
+	"github.com/useopendesk/opendesk/internal/config"
 )
 
 // Token resources. Google issues one token for IMAP and the Gmail API; Microsoft

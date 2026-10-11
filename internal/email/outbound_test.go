@@ -21,9 +21,9 @@ import (
 	"github.com/jhillyerd/enmime/v2"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/crypto"
-	"github.com/opendesk/opendesk/internal/domain"
-	"github.com/opendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/domain"
+	"github.com/useopendesk/opendesk/internal/ids"
 )
 
 // smtpSink is a submission server that requires STARTTLS and AUTH PLAIN.

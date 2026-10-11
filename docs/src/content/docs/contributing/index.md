@@ -3,7 +3,7 @@ title: Contributing
 description: Set up opendesk for development and send your first change.
 ---
 
-opendesk is open source under the Apache-2.0 license at [github.com/opendesk/opendesk](https://github.com/opendesk/opendesk). Issues, discussions and pull requests are welcome.
+opendesk is open source under the Apache-2.0 license at [github.com/useopendesk/opendesk](https://github.com/useopendesk/opendesk). Issues, discussions and pull requests are welcome.
 
 ## The repository
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // cleanEmail validates and lowercases an address.

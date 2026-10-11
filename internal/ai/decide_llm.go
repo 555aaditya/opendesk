@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/opendesk/opendesk/internal/ai/decide"
+	"github.com/useopendesk/opendesk/internal/ai/decide"
 )
 
 // llmDecider answers decision questions with the configured LLM's structured output,

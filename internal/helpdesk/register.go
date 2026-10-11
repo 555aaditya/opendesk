@@ -14,13 +14,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/deps"
-	"github.com/opendesk/opendesk/internal/helpdesk/contacts"
-	"github.com/opendesk/opendesk/internal/helpdesk/kb"
-	"github.com/opendesk/opendesk/internal/helpdesk/resources"
-	"github.com/opendesk/opendesk/internal/helpdesk/tickets"
-	"github.com/opendesk/opendesk/internal/helpdesk/widget"
-	"github.com/opendesk/opendesk/internal/images"
+	"github.com/useopendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/helpdesk/contacts"
+	"github.com/useopendesk/opendesk/internal/helpdesk/kb"
+	"github.com/useopendesk/opendesk/internal/helpdesk/resources"
+	"github.com/useopendesk/opendesk/internal/helpdesk/tickets"
+	"github.com/useopendesk/opendesk/internal/helpdesk/widget"
+	"github.com/useopendesk/opendesk/internal/images"
 )
 
 // Register adds this area's routes. Prefer huma operations; use r only for raw HTTP

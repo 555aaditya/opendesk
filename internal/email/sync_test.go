@@ -12,7 +12,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapserver"
 	"github.com/emersion/go-imap/v2/imapserver/imapmemserver"
 
-	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/crypto"
 )
 
 type literal struct {

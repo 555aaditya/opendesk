@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/opendesk/opendesk/internal/netsafe"
+	"github.com/useopendesk/opendesk/internal/netsafe"
 )
 
 // errBlockedAddress means an outbound URL resolves to a non-public address.

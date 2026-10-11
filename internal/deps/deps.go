@@ -7,17 +7,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/analytics"
-	"github.com/opendesk/opendesk/internal/auth"
-	"github.com/opendesk/opendesk/internal/captcha"
-	"github.com/opendesk/opendesk/internal/config"
-	"github.com/opendesk/opendesk/internal/crypto"
-	"github.com/opendesk/opendesk/internal/db"
-	"github.com/opendesk/opendesk/internal/httpx"
-	"github.com/opendesk/opendesk/internal/mailer"
-	"github.com/opendesk/opendesk/internal/natsx"
-	"github.com/opendesk/opendesk/internal/plan"
-	"github.com/opendesk/opendesk/internal/storage"
+	"github.com/useopendesk/opendesk/internal/analytics"
+	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/captcha"
+	"github.com/useopendesk/opendesk/internal/config"
+	"github.com/useopendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/db"
+	"github.com/useopendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/mailer"
+	"github.com/useopendesk/opendesk/internal/natsx"
+	"github.com/useopendesk/opendesk/internal/plan"
+	"github.com/useopendesk/opendesk/internal/storage"
 )
 
 type Deps struct {

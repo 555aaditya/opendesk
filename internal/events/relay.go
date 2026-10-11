@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/jobs"
+	"github.com/useopendesk/opendesk/internal/jobs"
 )
 
 // Relay moves committed events from the outbox to NATS and queues webhook dispatch.

@@ -41,7 +41,7 @@ ARG RELEASE_NAME=realtime
 ARG VERSION=dev COMMIT=none
 LABEL org.opencontainers.image.title="opendesk-realtime" \
       org.opencontainers.image.description="The opendesk realtime gateway (Phoenix Channels over WebSocket)" \
-      org.opencontainers.image.source="https://github.com/opendesk/opendesk" \
+      org.opencontainers.image.source="https://github.com/useopendesk/opendesk" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}"
 

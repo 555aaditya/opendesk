@@ -39,7 +39,7 @@ opendesk ships with secure defaults. This checklist covers what is up to you as 
 
 - Upgrade promptly when a release mentions security fixes: `opendesk-ctl upgrade`.
 - Keep the host OS and Docker patched.
-- Watch [security advisories](https://github.com/opendesk/opendesk/security/advisories) on GitHub.
+- Watch [security advisories](https://github.com/useopendesk/opendesk/security/advisories) on GitHub.
 
 ## What opendesk does for you
 

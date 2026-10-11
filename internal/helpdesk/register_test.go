@@ -6,8 +6,8 @@ import (
 
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/helpdesk"
-	"github.com/opendesk/opendesk/internal/helpdesk/hdtest"
+	"github.com/useopendesk/opendesk/internal/helpdesk"
+	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 )
 
 // Every subpackage registers on one API, as in the server: operation ids and schema

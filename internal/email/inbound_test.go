@@ -14,7 +14,7 @@ import (
 	"github.com/emersion/go-smtp"
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/crypto"
+	"github.com/useopendesk/opendesk/internal/crypto"
 )
 
 func postInbound(t *testing.T, base, secret, to, body string) (int, map[string]any) {

@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/useopendesk/opendesk/internal/httpx"
 )
 
 // AssistantName is the name the product gives its AI everywhere: the assistant, and the

@@ -10,8 +10,8 @@ The installer is a convenience around Docker Compose. The same `docker-compose.y
 | Service | Image | Role |
 | --- | --- | --- |
 | `caddy` | `caddy:2.11-alpine` | Ports 80 and 443 with automatic HTTPS. `/socket*` goes to `realtime`, everything else to `opendesk`. |
-| `opendesk` | `ghcr.io/opendesk/opendesk:${OPENDESK_VERSION}` | The API, workers and web app (`SERVE_WEB=true`), with NATS embedded on the internal network. |
-| `realtime` | `ghcr.io/opendesk/realtime:${OPENDESK_VERSION}` | The Phoenix gateway, connected to opendesk's NATS with `NATS_TOKEN`. |
+| `opendesk` | `ghcr.io/useopendesk/opendesk:${OPENDESK_VERSION}` | The API, workers and web app (`SERVE_WEB=true`), with NATS embedded on the internal network. |
+| `realtime` | `ghcr.io/useopendesk/realtime:${OPENDESK_VERSION}` | The Phoenix gateway, connected to opendesk's NATS with `NATS_TOKEN`. |
 | `postgres` | `pgvector/pgvector:pg17` | Postgres 17 with pgvector for semantic search, data in the `postgres-data` volume. |
 
 Postgres, NATS and the app ports are on an `internal` network and are never published. Only Caddy (and the optional SMTP relay) face the host.
@@ -42,7 +42,7 @@ From a checkout, `make selfhost-env` writes `.env` with fresh secrets (it never 
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `OPENDESK_VERSION` | pinned by the installer | Release of the `opendesk` and `realtime` images. Change it, then `docker compose pull && docker compose up -d`, to upgrade. |
-| `OPENDESK_IMAGE`, `REALTIME_IMAGE` | `ghcr.io/opendesk/...` | Image names, for a mirror. |
+| `OPENDESK_IMAGE`, `REALTIME_IMAGE` | `ghcr.io/useopendesk/...` | Image names, for a mirror. |
 | `OPENDESK_DOMAIN` | `localhost` | The hostname Caddy serves. `localhost` uses Caddy's local CA; `:80` serves plain HTTP behind another proxy. |
 | `OPENDESK_URL` | `https://localhost` | Public URL. Sets `API_URL`, `APP_URL`, `CORS_ORIGINS` and `SITE_URL`. |
 | `OPENDESK_GATEWAY_URL` | `wss://localhost/socket` | Public WebSocket URL (`GATEWAY_URL`). |

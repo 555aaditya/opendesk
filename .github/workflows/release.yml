@@ -1,8 +1,8 @@
 name: Release
 
 # A v* tag publishes:
-#   ghcr.io/opendesk/opendesk:<tag>  multi-arch (amd64, arm64), API + workers + web
-#   ghcr.io/opendesk/realtime:<tag>  multi-arch, the gateway
+#   ghcr.io/useopendesk/opendesk:<tag>  multi-arch (amd64, arm64), API + workers + web
+#   ghcr.io/useopendesk/realtime:<tag>  multi-arch, the gateway
 #   a GitHub release with the installer, its checksum, and the files the
 #   installer fetches (docker-compose.yml, Caddyfile, env.template,
 #   opendesk-ctl) listed in SHA256SUMS, plus images.json with the digests.
@@ -20,7 +20,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/opendesk
+  IMAGE_PREFIX: ghcr.io/useopendesk
 
 jobs:
   validate:
@@ -272,7 +272,7 @@ jobs:
 
           Upgrade an existing install: \`/opt/opendesk/opendesk-ctl upgrade $TAG\`
 
-          Images: \`ghcr.io/opendesk/opendesk:$TAG\`, \`ghcr.io/opendesk/realtime:$TAG\` (digests in images.json).
+          Images: \`ghcr.io/useopendesk/opendesk:$TAG\`, \`ghcr.io/useopendesk/realtime:$TAG\` (digests in images.json).
           EOF
           # shellcheck disable=SC2086
           gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --notes-file notes.md $flags

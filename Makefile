@@ -51,8 +51,8 @@ selfhost-down:
 	docker compose down
 
 images: ## build both release images locally
-	docker build -f deploy/docker/opendesk.Dockerfile -t ghcr.io/opendesk/opendesk:dev .
-	docker build -f deploy/docker/realtime.Dockerfile -t ghcr.io/opendesk/realtime:dev .
+	docker build -f deploy/docker/opendesk.Dockerfile -t ghcr.io/useopendesk/opendesk:dev .
+	docker build -f deploy/docker/realtime.Dockerfile -t ghcr.io/useopendesk/realtime:dev .
 
 installer-sha: ## regenerate deploy/install/install.sh.sha256 after editing install.sh
 	sh deploy/install/gen-sha256.sh

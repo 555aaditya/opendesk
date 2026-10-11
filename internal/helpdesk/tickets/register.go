@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/riverqueue/river"
 
-	"github.com/opendesk/opendesk/internal/deps"
+	"github.com/useopendesk/opendesk/internal/deps"
 )
 
 // Register adds this package's routes.
