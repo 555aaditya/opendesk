@@ -68,6 +68,32 @@ defmodule RealtimeWeb.PresenceTypingTest do
       end
     end
 
+    test "a watcher gets presence but is not tracked", c do
+      uid = c.uid
+      assert_push "presence_state", _
+      other = Tokens.ws_claims(%{"wid" => c.wid, "name" => "Ben"})
+      {:ok, o} = connect_claims(other)
+      {:ok, _, w} = subscribe_and_join(o, TicketChannel, c.topic, %{"watch" => true})
+
+      assert_push "presence_state", state
+      assert Map.has_key?(state, uid)
+      refute Map.has_key?(Presence.list(c.topic), other["sub"])
+
+      push(w, "presence", %{"state" => "replying"})
+      push(w, "typing", %{})
+      refute_receive %Broadcast{event: "typing"}, 100
+      refute Map.has_key?(Presence.list(c.topic), other["sub"])
+    end
+
+    test "the join state sets the initial presence state", c do
+      assert_push "presence_state", _
+      other = Tokens.ws_claims(%{"wid" => c.wid, "name" => "Ben"})
+      {:ok, o} = connect_claims(other)
+      {:ok, _, _} = subscribe_and_join(o, TicketChannel, c.topic, %{"state" => "replying"})
+      assert_push "presence_state", _
+      assert %{metas: [%{state: "replying"}]} = Presence.list(c.topic)[other["sub"]]
+    end
+
     test "invalid presence states are refused", c do
       for payload <- [%{"state" => "away"}, %{"state" => 1}, %{}, %{"status" => "idle"}] do
         ref = push(c.ticket, "presence", payload)

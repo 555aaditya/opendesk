@@ -33,6 +33,11 @@ client appends `/websocket`.
 | `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, same `wid`            | Presence (`presence_state`, `presence_diff`) and `"typing"` |
 | `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, and `"typing"` from agents |
 
+Join params on `ticket:<wid>:<tid>`: `{"watch": true}` watches a ticket (the inbox list
+shows who is on it): the joiner receives `presence_state`/`presence_diff` but is **not**
+tracked, and its `"presence"` and `"typing"` pushes are ignored. `{"state": "viewing" |
+"replying" | "idle"}` sets the initial Presence state (default `"viewing"`).
+
 Join replies `{"ok": {"server_time": "..."}}`. Unauthorized joins reply `{"error": {"reason": "forbidden"}}`.
 
 ### Client → server

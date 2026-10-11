@@ -3,6 +3,13 @@ defmodule RealtimeWeb.TicketChannel do
   `ticket:<wid>:<ticket_id>`: Presence of agents on a ticket and typing.
   Joined by `ws` tokens with `kind=user` in the same workspace.
 
+  Join params:
+
+    * `{watch: true}` watches the ticket (the inbox list): the joiner receives
+      Presence but is not tracked, and its presence and typing pushes are ignored.
+    * `{state: "viewing" | "replying" | "idle"}` is the initial Presence state
+      (default `"viewing"`).
+
   Client pushes:
 
     * `"presence"` `{state: "viewing" | "replying" | "idle"}` updates the meta.
@@ -21,12 +28,19 @@ defmodule RealtimeWeb.TicketChannel do
   @states ~w(viewing replying idle)
 
   @impl true
-  def join("ticket:" <> rest, _payload, %{assigns: %{kind: :user, wid: wid}} = socket) do
+  def join("ticket:" <> rest, payload, %{assigns: %{kind: :user, wid: wid}} = socket) do
     with [^wid, ticket_id] <- String.split(rest, ":"),
          true <- Ids.uuid?(ticket_id) and ticket_id == Ids.normalize(ticket_id) do
       if Guard.join_allowed?(socket) do
         send(self(), :after_join)
-        {:ok, Guard.ok_reply(), assign(socket, :ticket_id, ticket_id)}
+
+        socket =
+          socket
+          |> assign(:ticket_id, ticket_id)
+          |> assign(:watch, watch?(payload))
+          |> assign(:initial_state, initial_state(payload))
+
+        {:ok, Guard.ok_reply(), socket}
       else
         {:error, %{reason: "rate_limited"}}
       end
@@ -39,10 +53,20 @@ defmodule RealtimeWeb.TicketChannel do
 
   @impl true
   def handle_info(:after_join, socket) do
-    {:ok, _ref} = Presence.track(socket, socket.assigns.sub, meta(socket, "viewing"))
+    unless socket.assigns.watch do
+      {:ok, _ref} =
+        Presence.track(socket, socket.assigns.sub, meta(socket, socket.assigns.initial_state))
+    end
+
     push(socket, "presence_state", Presence.list(socket))
     {:noreply, socket}
   end
+
+  defp watch?(%{"watch" => true}), do: true
+  defp watch?(_), do: false
+
+  defp initial_state(%{"state" => state}) when state in @states, do: state
+  defp initial_state(_), do: "viewing"
 
   @impl true
   def handle_in(event, payload, socket) do
@@ -51,6 +75,12 @@ defmodule RealtimeWeb.TicketChannel do
       {:drop, socket} -> {:noreply, socket}
       reply -> reply
     end
+  end
+
+  # A watcher is not in Presence and does not type here.
+  defp handle_push(event, _payload, %{assigns: %{watch: true}} = socket)
+       when event in ["presence", "typing"] do
+    {:noreply, socket}
   end
 
   defp handle_push("presence", %{"state" => state}, socket) when state in @states do
