@@ -42,7 +42,7 @@ import { useAI } from "@/lib/ai";
 import type { SearchResults } from "@/lib/api/types";
 
 const itemCls =
-  "flex h-9 cursor-default select-none items-center gap-2.5 rounded-md px-2.5 text-[13px] text-fg data-[selected=true]:bg-hover [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-fg-3";
+  "flex h-9 cursor-default select-none items-center gap-2.5 rounded-md px-2.5 text-[13px] text-fg transition-colors duration-100 animate-item-in motion-reduce:animate-none data-[selected=true]:bg-hover [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-fg-3";
 const groupCls =
   "[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-fg-3";
 
@@ -92,10 +92,10 @@ export function CommandPalette() {
   return (
     <D.Root open={open} onOpenChange={(o) => shell.palette(o)}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-50 bg-scrim/70 data-[state=open]:animate-fade-in" />
+        <D.Overlay className="fixed inset-0 z-50 bg-scrim/70 data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <D.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-[14vh] z-50 w-[calc(100vw-32px)] max-w-[620px] -translate-x-1/2 overflow-hidden rounded-xl border border-line bg-raised shadow-float outline-none data-[state=open]:animate-pop-in"
+          className="fixed left-1/2 top-[14vh] z-50 w-[calc(100vw-32px)] max-w-[620px] -translate-x-1/2 overflow-hidden rounded-xl border border-line bg-raised shadow-float origin-top outline-none data-[state=open]:animate-palette-in data-[state=closed]:animate-palette-out motion-reduce:animate-none"
         >
           <D.Title className="sr-only">Command menu</D.Title>
           <Command loop shouldFilter={!aiMode} className="flex flex-col">

@@ -14,6 +14,7 @@ import { AppHeader } from "./AppHeader";
 import { cn } from "@/lib/cn";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsSheet } from "./ShortcutsSheet";
+import { ConnectionBanner } from "./ConnectionBanner";
 import { shell, toggleNav, useNav, useShell } from "./shellStore";
 
 const NewTicketDialog = lazy(() => import("@/components/tickets/NewTicketDialog"));
@@ -127,6 +128,7 @@ export function AppLayout() {
 
         {/* The work panel: pure white, its inner corner softened where it meets the chrome. */}
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden border-t border-line bg-surface md:rounded-tl-2xl md:border-l">
+          <ConnectionBanner />
           {/* Moving between areas cross-fades the panel; moving within one (ticket to ticket) does not. */}
           <div key={section} className="flex min-h-0 flex-1 flex-col animate-route-in motion-reduce:animate-none">
             <Outlet />

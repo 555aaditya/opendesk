@@ -3,6 +3,7 @@
 // icon-only rail (`b` or the Collapse row) that keeps every row reachable.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatedNumber } from "@/components/motion";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -101,11 +102,18 @@ function NavTip({ rail, label, children }: { rail: boolean; label: string; child
 
 function Count({ n, rail }: { n: number | null | undefined; rail: boolean }) {
   if (n === null || n === undefined || rail) return null;
-  return <span className="mono ml-auto text-[11px] tabular-nums text-fg-4 group-data-[status=active]:text-fg-2">{n > 999 ? "999+" : n}</span>;
+  return (
+    <AnimatedNumber
+      value={Math.min(n, 1000)}
+      format={(v) => (v >= 1000 ? "999+" : String(Math.round(v)))}
+      flash
+      className="mono ml-auto text-[11px] text-fg-4 group-data-[status=active]:text-fg-2"
+    />
+  );
 }
 
 function Label({ children, rail }: { children: ReactNode; rail: boolean }) {
-  return <span className={cn("min-w-0 flex-1 truncate transition-opacity duration-150", rail && "sr-only")}>{children}</span>;
+  return <span className={cn("min-w-0 flex-1 truncate", rail ? "sr-only" : "animate-label-in motion-reduce:animate-none")}>{children}</span>;
 }
 
 function Section({

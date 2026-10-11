@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AtSign, Bell, CornerDownLeft, Hand, TimerOff, UserPlus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { api } from "@/lib/api/endpoints";
@@ -57,6 +57,14 @@ export function NotificationsButton() {
   const unread = data?.filter((n) => !n.read_at).length ?? 0;
   const { t } = useTranslation("shell");
   const shown = (data ?? []).filter((n) => filter === "all" || !n.read_at);
+  // The bell rings once when a new unread notification arrives (not on first load).
+  const [rings, setRings] = useState(0);
+  const seen = useRef<number | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    if (seen.current !== null && unread > seen.current) setRings((r) => r + 1);
+    seen.current = unread;
+  }, [data, unread]);
 
   const markRead = useMutation({
     mutationFn: (b: { ids?: string[]; all?: boolean }) => api.notifications.read(b),
@@ -94,7 +102,7 @@ export function NotificationsButton() {
             aria-label={unread ? t("notifications.unread", { count: unread }) : t("notifications.title")}
             className="relative flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-chrome-hover hover:text-fg active:scale-[0.96] data-[state=open]:bg-chrome-active data-[state=open]:text-fg motion-reduce:active:scale-100"
           >
-            <Bell className="size-[15px]" />
+            <Bell key={rings} className={cn("size-[15px] origin-top", rings > 0 && "animate-bell-ring motion-reduce:animate-none")} />
             <AnimatePresence>
               {unread > 0 && (
                 <motion.span
@@ -150,9 +158,9 @@ export function NotificationsButton() {
           </div>
         ) : !shown.length ? (
           filter === "unread" && data?.length ? (
-            <EmptyState compact lit={1} title={t("notifications.noneUnread")} description={t("notifications.noneUnreadHint")} />
+            <EmptyState compact art="solved" title={t("notifications.noneUnread")} description={t("notifications.noneUnreadHint")} />
           ) : (
-            <EmptyState compact lit={0} title={t("notifications.empty")} description={t("notifications.emptyHint")} />
+            <EmptyState compact art="inbox" title={t("notifications.empty")} description={t("notifications.emptyHint")} />
           )
         ) : (
           <ul>

@@ -60,7 +60,7 @@ export function AppHeader() {
                   <li aria-hidden>
                     <ChevronRight className="size-3.5 shrink-0 text-fg-4" />
                   </li>
-                  <li className="min-w-0">
+                  <li className="min-w-0 animate-label-in motion-reduce:animate-none">
                     {last || !c.to ? (
                       <span
                         aria-current={last ? "page" : undefined}
