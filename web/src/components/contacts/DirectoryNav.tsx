@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/cn";
 
 const tab =
@@ -7,8 +8,9 @@ const active = "bg-surface !text-fg shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(
 
 /** Contacts / Companies switch shown in both page headers. */
 export function DirectoryNav({ current }: { current: "contacts" | "companies" }) {
+  const { t } = useTranslation("contacts");
   return (
-    <nav aria-label="Directory" className="inline-flex items-center rounded-md bg-hover p-0.5">
+    <nav aria-label={t("nav.label")} className="inline-flex items-center rounded-md bg-hover p-0.5">
       <Link
         to="/contacts/{-$contactId}"
         params={{ contactId: undefined }}
@@ -16,7 +18,7 @@ export function DirectoryNav({ current }: { current: "contacts" | "companies" })
         aria-current={current === "contacts" ? "page" : undefined}
         className={cn(tab, current === "contacts" && active)}
       >
-        People
+        {t("nav.people")}
       </Link>
       <Link
         to="/companies/{-$companyId}"
@@ -25,7 +27,7 @@ export function DirectoryNav({ current }: { current: "contacts" | "companies" })
         aria-current={current === "companies" ? "page" : undefined}
         className={cn(tab, current === "companies" && active)}
       >
-        Companies
+        {t("nav.companies")}
       </Link>
     </nav>
   );

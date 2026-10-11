@@ -1,21 +1,28 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { differenceInCalendarDays, format, parseISO, subDays } from "date-fns";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, CircleCheck, CircleDot, Inbox, Reply, ShieldAlert, Smile, Timer } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { PageHeader } from "@/components/layout";
 import { EmptyState } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Segmented } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { TagChip } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
 import { RangePicker } from "@/components/reports/RangePicker";
 import { Sparkline, VolumeChart, VolumeLegend, VolumeTable } from "@/components/reports/VolumeChart";
 import { ChannelBars } from "@/components/reports/ChannelBars";
 import { AgentTable } from "@/components/reports/AgentTable";
-import type { ReportsOverview, ReportsRange } from "@/lib/api/types";
+import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
+import { Bar, BreakdownBars, ShareBar, type BarRow } from "@/components/reports/Bars";
+import { PriorityIcon, StatusIcon, priorityLabel, priorityOrder, statusLabel } from "@/components/tickets/bits";
+import type { ReportsOverview, ReportsRange, Ticket } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
 import { minutes } from "@/lib/format";
 import { q } from "@/lib/queries";
+import { isTone, priorityTone, SERIES, statusTone, tone, toneFor, toneVar, type Tone } from "@/lib/tones";
 import { reportsRange } from "@/router";
 
 const route = getRouteApi("/app/reports");
@@ -27,144 +34,183 @@ function previous(r: ReportsRange): ReportsRange {
   return { from: format(subDays(from, len), "yyyy-MM-dd"), to: format(subDays(from, 1), "yyyy-MM-dd") };
 }
 
+const OPEN_WORK = { status: ["open", "pending", "on_hold"] as Ticket["status"][] };
+
 export default function ReportsPage() {
+  const { t } = useTranslation("reports");
   const search = route.useSearch();
   const navigate = route.useNavigate();
   const range = reportsRange(search);
   const report = useQuery({ ...q.reports(range), placeholderData: keepPreviousData });
   const prev = useQuery({ ...q.reports(previous(range)), placeholderData: keepPreviousData });
-  const [view, setView] = useState<"chart" | "table">("chart");
   const d = report.data;
   const p = prev.data;
   const refetching = report.isFetching && report.isPlaceholderData;
   const empty = d && d.created === 0 && d.solved === 0 && d.open_now === 0;
+  const days = differenceInCalendarDays(parseISO(range.to), parseISO(range.from)) + 1;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader title="Reports" icon={<BarChart3 />} />
+      <PageHeader
+        title={t("title")}
+        icon={<BarChart3 />}
+        subtitle={<span className="hidden sm:inline">{t("compared", { count: days })}</span>}
+        actions={<RangePicker value={range} onChange={(r) => void navigate({ search: r })} />}
+      />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-5 px-6 pb-16 pt-5">
-          <div className="flex items-center gap-2">
-            <RangePicker value={range} onChange={(r) => void navigate({ search: r })} />
-            <span className="text-xs text-fg-4">Compared with the previous {differenceInCalendarDays(parseISO(range.to), parseISO(range.from)) + 1} days</span>
-          </div>
-
-          {report.isLoading ? (
-            <ReportSkeleton />
-          ) : report.error ? (
-            <EmptyState lit={3} title="Reports couldn't load" description="Check your connection and try again." action={<Button onClick={() => void report.refetch()}>Retry</Button>} />
-          ) : !d || empty ? (
-            <EmptyState lit={1} title="Nothing to report yet" description="Once tickets come in, volume, response times and satisfaction show up here." />
-          ) : (
-            <div className={cn("flex flex-col gap-5 transition-opacity duration-150", refetching && "opacity-60")}>
-              <Kpis d={d} p={p} />
-
-              <Card
-                title="Volume by day"
-                actions={
-                  <>
-                    <VolumeLegend />
-                    <Segmented
-                      size="xs"
-                      value={view}
-                      onChange={setView}
-                      options={[
-                        { value: "chart", label: "Chart" },
-                        { value: "table", label: "Table" },
-                      ]}
-                    />
-                  </>
-                }
-              >
-                {view === "chart" ? <VolumeChart days={d.by_day} /> : <VolumeTable days={d.by_day} />}
-              </Card>
-
-              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-                <Card title="By channel" subtitle="Tickets created in the period">
-                  <ChannelBars data={d.by_channel} />
-                </Card>
-                <Card title="By agent" flush>
-                  {d.by_agent.length ? (
-                    <AgentTable rows={d.by_agent} />
-                  ) : (
-                    <EmptyState compact lit={0} title="No solved tickets" description="Agents appear here once they solve tickets in this period." />
-                  )}
-                </Card>
-              </div>
+        {report.isLoading ? (
+          <ReportSkeleton />
+        ) : report.error ? (
+          <EmptyState
+            lit={3}
+            title={t("error.title")}
+            description={t("error.description")}
+            action={<Button onClick={() => void report.refetch()}>{t("error.retry")}</Button>}
+          />
+        ) : !d || empty ? (
+          <EmptyState lit={1} title={t("empty.title")} description={t("empty.description")} />
+        ) : (
+          <div className={cn("flex flex-col gap-4 px-4 pb-12 pt-4 transition-opacity duration-150 md:px-6 md:pt-5", refetching && "opacity-60")}>
+            <Kpis d={d} p={p} />
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <VolumeCard d={d} className="xl:col-span-2" />
+              <BacklogCard />
             </div>
-          )}
-        </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <Card title={t("channel.title")} subtitle={t("channel.subtitle")}>
+                <ChannelBars data={d.by_channel} />
+              </Card>
+              <OpenWorkCards />
+            </div>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <Card title={t("agents.title")} subtitle={t("agents.subtitle")} flush className="xl:col-span-2">
+                {d.by_agent.length ? (
+                  <AgentTable rows={d.by_agent} />
+                ) : (
+                  <EmptyState compact lit={0} title={t("agents.emptyTitle")} description={t("agents.emptyDescription")} />
+                )}
+              </Card>
+              <ResponseCard d={d} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Card({ title, subtitle, actions, children, flush }: { title: string; subtitle?: string; actions?: ReactNode; children: ReactNode; flush?: boolean }) {
+function Card({
+  title,
+  subtitle,
+  actions,
+  children,
+  flush,
+  className,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+  flush?: boolean;
+  className?: string;
+}) {
   return (
-    <section className="rounded-lg border border-line bg-surface">
-      <div className="flex min-h-11 items-center justify-between gap-4 px-4 pt-3">
-        <div>
+    <section className={cn("flex min-w-0 flex-col rounded-lg border border-line bg-surface shadow-xs", className)}>
+      <div className="flex min-h-12 items-start justify-between gap-4 px-4 pt-3.5">
+        <div className="min-w-0">
           <h2 className="text-[13px] font-semibold tracking-[-0.01em]">{title}</h2>
-          {subtitle && <p className="text-xs text-fg-3">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-xs text-fg-3">{subtitle}</p>}
         </div>
-        {actions && <div className="flex items-center gap-3">{actions}</div>}
+        {actions && <div className="flex shrink-0 items-center gap-3">{actions}</div>}
       </div>
-      <div className={flush ? "pt-2" : "px-4 pb-4 pt-3"}>{children}</div>
+      <div className={cn("flex-1", flush ? "pt-2" : "px-4 pb-4 pt-4")}>{children}</div>
     </section>
   );
 }
 
 type Tile = {
   label: string;
-  value: string;
+  value: number | null;
+  format: (n: number) => string;
   unit?: string;
+  icon: ReactNode;
+  tone: Tone;
   delta?: { now: number | null; before: number | null; upIsGood: boolean | null };
   trend?: number[];
   note?: string;
 };
 
 function Kpis({ d, p }: { d: ReportsOverview; p?: ReportsOverview }) {
+  const { t } = useTranslation("reports");
+  const int = (n: number) => Math.round(n).toLocaleString();
+  const dur = (n: number) => minutes(Math.round(n));
   const tiles: Tile[] = [
-    { label: "Created", value: d.created.toLocaleString(), delta: { now: d.created, before: p?.created ?? null, upIsGood: null }, trend: d.by_day.map((x) => x.created) },
-    { label: "Solved", value: d.solved.toLocaleString(), delta: { now: d.solved, before: p?.solved ?? null, upIsGood: true }, trend: d.by_day.map((x) => x.solved) },
-    { label: "Open now", value: d.open_now.toLocaleString(), note: "Right now" },
+    { label: t("kpi.created"), value: d.created, format: int, icon: <Inbox />, tone: SERIES[0], delta: { now: d.created, before: p?.created ?? null, upIsGood: null }, trend: d.by_day.map((x) => x.created) },
+    { label: t("kpi.solved"), value: d.solved, format: int, icon: <CircleCheck />, tone: SERIES[2], delta: { now: d.solved, before: p?.solved ?? null, upIsGood: true }, trend: d.by_day.map((x) => x.solved) },
+    { label: t("kpi.openNow"), value: d.open_now, format: int, icon: <CircleDot />, tone: "amber", note: t("kpi.rightNow") },
     {
-      label: "First response",
-      value: minutes(d.first_response_p50_minutes),
-      note: "Median",
+      label: t("kpi.firstResponse"),
+      value: d.first_response_p50_minutes,
+      format: dur,
+      icon: <Reply />,
+      tone: "blue",
+      note: t("kpi.median"),
       delta: { now: d.first_response_p50_minutes, before: p?.first_response_p50_minutes ?? null, upIsGood: false },
     },
     {
-      label: "Resolution",
-      value: minutes(d.resolution_p50_minutes),
-      note: "Median",
+      label: t("kpi.resolution"),
+      value: d.resolution_p50_minutes,
+      format: dur,
+      icon: <Timer />,
+      tone: "violet",
+      note: t("kpi.median"),
       delta: { now: d.resolution_p50_minutes, before: p?.resolution_p50_minutes ?? null, upIsGood: false },
     },
     {
-      label: "CSAT",
-      value: d.csat_avg === null ? "–" : d.csat_avg.toFixed(1),
+      label: t("kpi.csat"),
+      value: d.csat_avg,
+      format: (n) => n.toFixed(1),
       unit: d.csat_avg === null ? undefined : "/ 5",
-      note: `${d.csat_count.toLocaleString()} ratings`,
+      icon: <Smile />,
+      tone: "pink",
+      note: t("kpi.ratings", { count: d.csat_count }),
       delta: { now: d.csat_avg, before: p?.csat_avg ?? null, upIsGood: true },
     },
-    { label: "SLA breached", value: d.sla_breached.toLocaleString(), delta: { now: d.sla_breached, before: p?.sla_breached ?? null, upIsGood: false } },
+    {
+      label: t("kpi.slaBreached"),
+      value: d.sla_breached,
+      format: int,
+      icon: <ShieldAlert />,
+      tone: d.sla_breached ? "red" : "gray",
+      delta: { now: d.sla_breached, before: p?.sla_breached ?? null, upIsGood: false },
+    },
   ];
   return (
-    <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-line bg-surface sm:grid-cols-4 xl:grid-cols-7">
-      {tiles.map((t) => (
-        <div key={t.label} className="flex flex-col gap-2 border-b border-r border-line-soft px-4 py-3.5 last:border-r-0 xl:border-b-0">
-          <span className="label-caps">{t.label}</span>
-          <div className="flex items-end justify-between gap-2">
-            <span className="flex items-baseline gap-1">
-              <span className="mono text-[22px] font-medium leading-7 tracking-[-0.03em] text-fg">{t.value}</span>
-              {t.unit && <span className="mono text-xs text-fg-4">{t.unit}</span>}
-            </span>
-            {t.trend && <Sparkline values={t.trend} />}
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      {tiles.map((x) => (
+        <div key={x.label} className="flex min-w-0 flex-col gap-3 rounded-lg border border-line bg-surface px-4 py-3.5 shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <span className="label-caps truncate">{x.label}</span>
+            <span className={cn("hidden size-6 shrink-0 items-center justify-center rounded-md 2xl:flex [&_svg]:size-3.5", tone[x.tone].chip)}>{x.icon}</span>
           </div>
-          <span className="flex min-h-4 items-center gap-1.5 text-[11.5px] text-fg-3">
-            {t.delta ? <Delta {...t.delta} /> : null}
-            {t.note && !t.delta?.before && <span>{t.note}</span>}
-            {t.note && t.delta?.before ? <span className="text-fg-4">{t.note}</span> : null}
+          <div className="flex items-end justify-between gap-2">
+            <span className="flex min-w-0 items-baseline gap-1">
+              {x.value === null ? (
+                <span className="text-[26px] font-semibold leading-8 tracking-[-0.03em] text-fg-4">–</span>
+              ) : (
+                <AnimatedNumber value={x.value} format={x.format} className="text-[26px] font-semibold leading-8 tracking-[-0.03em] tabular-nums text-fg" />
+              )}
+              {x.unit && <span className="mono text-xs text-fg-4">{x.unit}</span>}
+            </span>
+          </div>
+          <span className="flex min-h-5 items-center gap-1.5 text-[11.5px] text-fg-3">
+            {x.delta && <Delta {...x.delta} />}
+            {x.note && <span className="truncate text-fg-4">{x.note}</span>}
+            {x.trend && (
+              <span className="ml-auto">
+                <Sparkline values={x.trend} color={toneVar(x.tone)} width={56} />
+              </span>
+            )}
           </span>
         </div>
       ))}
@@ -173,45 +219,245 @@ function Kpis({ d, p }: { d: ReportsOverview; p?: ReportsOverview }) {
 }
 
 function Delta({ now, before, upIsGood }: { now: number | null; before: number | null; upIsGood: boolean | null }) {
+  const { t } = useTranslation("reports");
   if (now === null || before === null || before === 0) return null;
-  const change = (now - before) / before;
-  const pct = Math.round(change * 100);
-  if (pct === 0) return <span className="mono text-fg-4">No change</span>;
+  const pct = Math.round(((now - before) / before) * 100);
+  if (pct === 0) return <span className="mono rounded-sm bg-hover px-1.5 py-px text-[11px] text-fg-3">{t("delta.none")}</span>;
   const good = pct > 0 === upIsGood;
+  const hue: Tone = upIsGood === null ? "gray" : good ? "green" : "red";
   return (
-    <span className="mono flex items-center gap-1 text-fg-2" title="Compared with the previous period">
-      {upIsGood !== null && <span className={cn("size-1.5 rounded-full", good ? "bg-ok" : "bg-danger")} aria-hidden />}
-      {pct > 0 ? "↑" : "↓"} {Math.abs(pct)}%
-      {upIsGood !== null && <span className="sr-only">{good ? "better" : "worse"} than the previous period</span>}
+    <span className={cn("mono inline-flex items-center gap-0.5 rounded-sm px-1.5 py-px text-[11px] font-medium", tone[hue].chip)} title={t("delta.title")}>
+      {pct > 0 ? "↑" : "↓"}
+      {Math.abs(pct)}%
+      {upIsGood !== null && <span className="sr-only">{good ? t("delta.better") : t("delta.worse")}</span>}
     </span>
   );
 }
 
-function ReportSkeleton() {
+function Figure({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-5" aria-busy="true" aria-label="Loading reports">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line sm:grid-cols-4 xl:grid-cols-7">
+    <div className="min-w-0">
+      <div className="label-caps">{label}</div>
+      <div className="mt-1 flex items-baseline gap-1.5 text-[15px] font-semibold tabular-nums tracking-[-0.01em] text-fg">
+        {value}
+        {sub && <span className="truncate text-[11.5px] font-normal text-fg-4">{sub}</span>}
+      </div>
+    </div>
+  );
+}
+
+function VolumeCard({ d, className }: { d: ReportsOverview; className?: string }) {
+  const { t } = useTranslation("reports");
+  const [view, setView] = useState<"chart" | "table">("chart");
+  const avg = d.by_day.length ? d.created / d.by_day.length : 0;
+  const busiest = d.by_day.reduce<ReportsOverview["by_day"][number] | null>((m, x) => (!m || x.created > m.created ? x : m), null);
+  const rate = d.created ? Math.round((d.solved / d.created) * 100) : null;
+  return (
+    <Card
+      title={t("volume.title")}
+      subtitle={t("volume.subtitle")}
+      className={className}
+      actions={
+        <>
+          <VolumeLegend />
+          <Segmented
+            size="xs"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "chart", label: t("volume.chart") },
+              { value: "table", label: t("volume.table") },
+            ]}
+          />
+        </>
+      }
+    >
+      <div className="mb-4 grid grid-cols-3 gap-4 border-b border-line-soft pb-4">
+        <Figure label={t("volume.avg")} value={<AnimatedNumber value={avg} format={(n) => n.toFixed(1)} />} sub={t("volume.perDay")} />
+        <Figure
+          label={t("volume.busiest")}
+          value={busiest && busiest.created ? <AnimatedNumber value={busiest.created} /> : "–"}
+          sub={busiest && busiest.created ? format(parseISO(busiest.date), "EEE, MMM d") : undefined}
+        />
+        <Figure label={t("volume.solveRate")} value={rate === null ? "–" : <AnimatedNumber value={rate} format={(n) => `${Math.round(n)}%`} />} sub={t("volume.solvedOfCreated")} />
+      </div>
+      {view === "chart" ? <VolumeChart days={d.by_day} /> : <VolumeTable days={d.by_day} />}
+    </Card>
+  );
+}
+
+/** Open work right now, by status, from the inbox counts. */
+function BacklogCard() {
+  const { t } = useTranslation("reports");
+  const counts = useQuery(q.counts());
+  const c = counts.data;
+  const rows: BarRow[] = c
+    ? (["open", "pending", "on_hold"] as const).map((s) => ({
+        id: s,
+        label: statusLabel[s],
+        text: statusLabel[s],
+        value: c[s],
+        tone: statusTone[s],
+        icon: <StatusIcon status={s} />,
+      }))
+    : [];
+  const total = rows.reduce((a, r) => a + r.value, 0);
+  return (
+    <Card title={t("backlog.title")} subtitle={t("backlog.subtitle")}>
+      {counts.isLoading ? (
+        <BarsSkeleton />
+      ) : !c ? null : (
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-2 gap-4">
+            <Figure label={t("backlog.open")} value={<AnimatedNumber value={total} />} sub={t("backlog.tickets")} />
+            <Figure label={t("backlog.unassigned")} value={<AnimatedNumber value={c.unassigned} />} sub={total ? `${Math.round((c.unassigned / total) * 100)}%` : undefined} />
+          </div>
+          <ShareBar rows={rows} />
+          <BreakdownBars
+            rows={rows}
+            unit={(n) => t("unit.tickets", { count: n })}
+            empty={<EmptyState compact lit={1} title={t("backlog.emptyTitle")} description={t("backlog.emptyDescription")} />}
+          />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Priority and label mix of the open work, from the loaded open tickets. */
+function OpenWorkCards() {
+  const { t } = useTranslation("reports");
+  const list = useInfiniteQuery(q.tickets(OPEN_WORK));
+  const tickets = list.data?.pages.flatMap((pg) => pg.data) ?? [];
+  const sample = list.hasNextPage ? t("open.sample", { count: tickets.length }) : t("open.subtitle");
+
+  const priorities: BarRow[] = priorityOrder.map((pr) => ({
+    id: pr,
+    label: priorityLabel[pr],
+    text: priorityLabel[pr],
+    value: tickets.filter((x) => x.priority === pr).length,
+    tone: priorityTone[pr],
+    icon: <PriorityIcon priority={pr} />,
+  }));
+
+  const tagMap = new Map<string, { name: string; color?: string | null; n: number }>();
+  for (const tk of tickets)
+    for (const tag of tk.tags) {
+      const e = tagMap.get(tag.id) ?? { name: tag.name, color: tag.color, n: 0 };
+      e.n++;
+      tagMap.set(tag.id, e);
+    }
+  const tags: BarRow[] = [...tagMap.entries()]
+    .sort((a, b) => b[1].n - a[1].n)
+    .slice(0, 6)
+    .map(([id, e]) => ({ id, label: <TagChip name={e.name} color={e.color} />, text: e.name, value: e.n, tone: isTone(e.color) ? e.color : toneFor(e.name) }));
+
+  return (
+    <>
+      <Card title={t("priority.title")} subtitle={sample}>
+        {list.isLoading ? (
+          <BarsSkeleton />
+        ) : (
+          <BreakdownBars
+            rows={priorities}
+            unit={(n) => t("unit.tickets", { count: n })}
+            empty={<EmptyState compact lit={1} title={t("backlog.emptyTitle")} description={t("backlog.emptyDescription")} />}
+          />
+        )}
+      </Card>
+      <Card title={t("tags.title")} subtitle={sample}>
+        {list.isLoading ? (
+          <BarsSkeleton />
+        ) : (
+          <BreakdownBars
+            rows={tags}
+            unit={(n) => t("unit.tickets", { count: n })}
+            empty={<EmptyState compact lit={2} title={t("tags.emptyTitle")} description={t("tags.emptyDescription")} />}
+          />
+        )}
+      </Card>
+    </>
+  );
+}
+
+/** Medians for the period, then agents ranked by how fast they first reply. */
+function ResponseCard({ d }: { d: ReportsOverview }) {
+  const { t } = useTranslation("reports");
+  const ranked = d.by_agent.filter((a) => a.first_response_p50_minutes !== null).sort((a, b) => a.first_response_p50_minutes! - b.first_response_p50_minutes!);
+  const max = Math.max(1, ...ranked.map((a) => a.first_response_p50_minutes!));
+  return (
+    <Card title={t("response.title")} subtitle={t("response.subtitle")}>
+      <div className="grid grid-cols-2 gap-4 border-b border-line-soft pb-4">
+        <Figure label={t("kpi.firstResponse")} value={minutes(d.first_response_p50_minutes)} sub={t("kpi.median")} />
+        <Figure label={t("kpi.resolution")} value={minutes(d.resolution_p50_minutes)} sub={t("kpi.median")} />
+      </div>
+      <div className="label-caps mb-3 mt-4">{t("response.fastest")}</div>
+      {ranked.length ? (
+        <ul className="flex flex-col gap-3">
+          {ranked.slice(0, 6).map((a) => (
+            <li key={a.user.id} className="flex items-center gap-2.5">
+              <Avatar name={a.user.name} src={a.user.avatar_url} size="sm" />
+              <span className="w-28 shrink-0 truncate text-[12.5px] text-fg-2">{a.user.name}</span>
+              <Bar pct={(a.first_response_p50_minutes! / max) * 100} tone="blue" />
+              <span className="mono w-14 shrink-0 text-right text-xs tabular-nums text-fg">{minutes(a.first_response_p50_minutes)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[12.5px] text-fg-4">{t("response.none")}</p>
+      )}
+    </Card>
+  );
+}
+
+function BarsSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-hidden>
+      {[70, 45, 30].map((w) => (
+        <div key={w} className="flex flex-col gap-2">
+          <Skeleton className="h-2.5 w-24" />
+          <Skeleton className="h-1.5" style={{ width: `${w}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReportSkeleton() {
+  const { t } = useTranslation("reports");
+  const card = "rounded-lg border border-line bg-surface p-4";
+  return (
+    <div className="flex flex-col gap-4 px-4 pt-4 md:px-6 md:pt-5" aria-busy="true" aria-label={t("loading")}>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         {Array.from({ length: 7 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-3 px-4 py-4">
+          <div key={i} className={cn(card, "flex flex-col gap-3")}>
             <Skeleton className="h-2 w-14" />
-            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-6 w-16" />
             <Skeleton className="h-2 w-10 opacity-60" />
           </div>
         ))}
       </div>
-      <div className="rounded-lg border border-line p-4">
-        <Skeleton className="h-3 w-28" />
-        <Skeleton className="mt-6 h-[220px] w-full opacity-50" />
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className={cn(card, "xl:col-span-2")}>
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="mt-6 h-[260px] w-full opacity-50" />
+        </div>
+        <div className={card}>
+          <Skeleton className="h-3 w-24" />
+          <div className="mt-6">
+            <BarsSkeleton />
+          </div>
+        </div>
       </div>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_3fr]">
-        <div className="rounded-lg border border-line p-4">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="mt-5 h-24 w-full opacity-50" />
-        </div>
-        <div className="rounded-lg border border-line p-4">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="mt-5 h-24 w-full opacity-50" />
-        </div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className={card}>
+            <Skeleton className="h-3 w-24" />
+            <div className="mt-6">
+              <BarsSkeleton />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

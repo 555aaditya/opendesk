@@ -1,6 +1,7 @@
 import { format, parseISO } from "date-fns";
 import { useState } from "react";
 import type { ReportsOverview } from "@/lib/api/types";
+import { SERIES, toneVar } from "@/lib/tones";
 import { monotonePath, niceTicks, useWidth } from "./useSize";
 
 type Day = ReportsOverview["by_day"][number];
@@ -12,8 +13,8 @@ const MR = 40;
 const MT = 12;
 
 export const series = [
-  { key: "created", label: "Created", color: "var(--fg)" },
-  { key: "solved", label: "Solved", color: "var(--fg-3)" },
+  { key: "created", label: "Created", color: toneVar(SERIES[0]) },
+  { key: "solved", label: "Solved", color: toneVar(SERIES[2]) },
 ] as const;
 
 /** Created vs solved per day: two lines on one axis, crosshair + tooltip on hover and arrow keys. */
@@ -73,13 +74,7 @@ export function VolumeChart({ days }: { days: Day[] }) {
             </text>
           ))}
 
-          <defs>
-            <linearGradient id="od-vol-wash" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--fg)" stopOpacity={0.1} />
-              <stop offset="100%" stopColor="var(--fg)" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <path d={area} fill="url(#od-vol-wash)" />
+          <path d={area} fill={series[0].color} fillOpacity={0.07} />
           {[...paths].reverse().map((p) => (
             <path key={p.key} d={p.d} fill="none" stroke={p.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
           ))}
@@ -90,7 +85,7 @@ export function VolumeChart({ days }: { days: Day[] }) {
               <g key={e.key}>
                 <circle cx={x(last)} cy={y(e.v)} r={4} fill={e.color} stroke="var(--surface)" strokeWidth={2} />
                 {!endsCollide && (
-                  <text x={x(last) + 9} y={y(e.v)} dy="0.32em" className="mono" fontSize={11} fill={e.key === "created" ? "var(--fg)" : "var(--fg-2)"}>
+                  <text x={x(last) + 9} y={y(e.v)} dy="0.32em" className="mono" fontSize={11} fill="var(--fg-2)">
                     {e.v}
                   </text>
                 )}
@@ -131,13 +126,13 @@ export function VolumeChart({ days }: { days: Day[] }) {
       {h && (
         <div
           role="status"
-          className="pointer-events-none absolute z-10 min-w-[148px] rounded-md border border-line bg-raised px-2.5 py-2 shadow-pop"
+          className="pointer-events-none absolute z-10 min-w-[148px] rounded-lg border border-line bg-raised px-3 py-2 shadow-pop transition-[left] duration-100 ease-out motion-reduce:transition-none"
           style={{ left: flip ? tipLeft - 12 : tipLeft + 12, top: MT + 4, transform: flip ? "translateX(-100%)" : undefined }}
         >
           <div className="mono mb-1.5 text-[10.5px] text-fg-3">{format(parseISO(h.date), "EEE, MMM d")}</div>
           {series.map((s) => (
             <div key={s.key} className="flex items-center gap-2 py-px">
-              <span className="h-0.5 w-3 rounded-full" style={{ background: s.color }} />
+              <span className="size-2 rounded-xs" style={{ background: s.color }} />
               <span className="mono min-w-6 text-[12.5px] font-semibold text-fg">{h[s.key]}</span>
               <span className="text-xs text-fg-3">{s.label}</span>
             </div>
@@ -153,7 +148,7 @@ export function VolumeLegend() {
     <div className="flex items-center gap-3">
       {series.map((s) => (
         <span key={s.key} className="flex items-center gap-1.5 text-xs text-fg-2">
-          <span className="h-0.5 w-3.5 rounded-full" style={{ background: s.color }} />
+          <span className="size-2 rounded-xs" style={{ background: s.color }} />
           {s.label}
         </span>
       ))}
@@ -188,18 +183,18 @@ export function VolumeTable({ days }: { days: Day[] }) {
 }
 
 /** A 12-point de-emphasised trend for a stat tile. */
-export function Sparkline({ values }: { values: number[] }) {
+export function Sparkline({ values, color = "var(--fg-4)", width = 72 }: { values: number[]; color?: string; width?: number }) {
   const v = values.slice(-12);
   if (v.length < 2) return null;
-  const w = 72;
-  const hh = 22;
+  const w = width;
+  const hh = 20;
   const max = Math.max(1, ...v);
   const pts = v.map((n, i) => [(i / (v.length - 1)) * (w - 4) + 2, hh - 2 - (n / max) * (hh - 4)] as [number, number]);
   const lastPt = pts[pts.length - 1];
   return (
     <svg width={w} height={hh} aria-hidden className="shrink-0 overflow-visible">
-      <path d={monotonePath(pts)} fill="none" stroke="var(--fg-4)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastPt[0]} cy={lastPt[1]} r={2.5} fill="var(--fg)" />
+      <path d={monotonePath(pts)} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastPt[0]} cy={lastPt[1]} r={2.5} fill={color} stroke="var(--surface)" strokeWidth={1.5} />
     </svg>
   );
 }

@@ -1,17 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BookOpen, ExternalLink, Folder, FolderPlus, Library, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/layout";
+import { PageHeader, Stat, StatStrip } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { ArticleStatus } from "@/components/kb/ArticleStatus";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty";
 import { Field, SearchInput, Textarea, TextInput } from "@/components/ui/input";
 import { Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/menu";
 import { Segmented } from "@/components/ui/tabs";
-import { Skeleton, SkeletonRows } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
 import { useDebounced } from "@/components/contacts/hooks";
@@ -19,7 +20,10 @@ import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { KbCollection } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
-import { compact, relShort } from "@/lib/format";
+import { compact, fullDate, relShort } from "@/lib/format";
+import { tone, type Tone } from "@/lib/tones";
+import { collectionTone } from "@/components/kb/tone";
+import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
 import { q, qk, removeFromList, upsertInList } from "@/lib/queries";
 import { atLeast, useRole, useWorkspace } from "@/lib/session";
 import { useAI } from "@/lib/ai";
@@ -31,11 +35,18 @@ const route = getRouteApi("/app/kb");
 
 type StatusFilter = "all" | "published" | "draft";
 
+const cols =
+  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_96px] md:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_96px_72px] xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)_96px_72px_minmax(0,1fr)_64px]";
+const md = "hidden md:flex";
+const xl = "hidden xl:flex";
+
 export default function KbPage() {
+  const { t } = useTranslation("kb");
   const search = route.useSearch();
   const navigate = route.useNavigate();
   const ws = useWorkspace();
   const role = useRole();
+  const reduce = useReducedMotion();
   const canEdit = atLeast(role, "agent");
   const [term, setTerm] = useState(search.q ?? "");
   const debounced = useDebounced(term, 250);
@@ -48,15 +59,30 @@ export default function KbPage() {
 
   const collections = useQuery(q.kbCollections());
   const articles = useQuery(q.kbArticles({ collection_id: search.collection, status: search.status, q: search.q }));
+  const all = useQuery(q.kbArticles({}));
   const sorted = [...(collections.data ?? [])].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
   const current = sorted.find((c) => c.id === search.collection);
-  const total = sorted.reduce((n, c) => n + c.article_count, 0);
   const collectionName = (id: string | null) => sorted.find((c) => c.id === id)?.name;
+  const everything = all.data ?? [];
+  const published = everything.filter((a) => a.status === "published");
+  const views = published.reduce((n, a) => n + a.views, 0);
+  const top = [...published].sort((a, b) => b.views - a.views)[0];
+  const viewsBy = (cid: string) => everything.filter((a) => a.collection_id === cid && a.status === "published").reduce((n, a) => n + a.views, 0);
+  const draftsBy = (cid: string) => everything.filter((a) => a.collection_id === cid && a.status === "draft").length;
+
+  const newArticle = canEdit ? (
+    <Button asChild variant="primary">
+      <Link to="/kb/articles/$articleId" params={{ articleId: "new" }} search={{ collection: search.collection }}>
+        <Plus className="size-3.5" />
+        {t("newArticle")}
+      </Link>
+    </Button>
+  ) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
-        title="Knowledge base"
+        title={t("title")}
         icon={<BookOpen />}
         actions={
           <>
@@ -64,157 +90,189 @@ export default function KbPage() {
               <Button asChild variant="ghost" size="sm">
                 <a href={`/help/${ws.slug}`} target="_blank" rel="noreferrer">
                   <ExternalLink className="size-3.5" />
-                  View help center
+                  {t("viewHelpCenter")}
                 </a>
               </Button>
             )}
             {canEdit && <DraftFromTicketsLink collection={search.collection} />}
-            {canEdit && (
-              <Button asChild variant="primary">
-                <Link to="/kb/articles/$articleId" params={{ articleId: "new" }} search={{ collection: search.collection }}>
-                  <Plus className="size-3.5" />
-                  New article
-                </Link>
-              </Button>
-            )}
+            {newArticle}
           </>
         }
       />
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line md:flex">
-          <div className="flex h-10 items-center justify-between px-3">
-            <span className="text-[11.5px] font-medium text-fg-3">Collections</span>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {all.data && everything.length > 0 && (
+          <StatStrip>
+            <Stat label={t("stat.articles")} value={<AnimatedNumber value={everything.length} />} sub={t("stat.inCollections", { count: sorted.length })} />
+            <Stat label={t("stat.published")} value={<AnimatedNumber value={published.length} />} sub={t("stat.live")} />
+            <Stat label={t("stat.drafts")} value={<AnimatedNumber value={everything.length - published.length} />} sub={t("stat.notLive")} />
+            <Stat label={t("stat.views")} value={<AnimatedNumber value={views} />} sub={top ? t("stat.top", { title: top.title }) : t("stat.noViews")} />
+          </StatStrip>
+        )}
+
+        <section className="px-4 pb-5 pt-4 md:px-5">
+          <div className="mb-3 flex h-7 items-center gap-2">
+            <h2 className="label-caps">{t("collections")}</h2>
+            <span className="mono text-[10.5px] tabular-nums text-fg-4">{sorted.length}</span>
             {canEdit && (
-              <button
-                type="button"
-                aria-label="New collection"
-                onClick={() => setEditing("new")}
-                className="flex size-6 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
-              >
-                <FolderPlus className="size-3.5" />
-              </button>
+              <Button size="xs" variant="ghost" className="ml-auto" icon={<FolderPlus className="size-3.5" />} onClick={() => setEditing("new")}>
+                {t("newCollection")}
+              </Button>
             )}
           </div>
-          <nav aria-label="Collections" className="flex-1 overflow-y-auto px-2 pb-3">
-            <CollectionLink active={!search.collection} label="All articles" count={total} icon={<Library />} collection={undefined} />
-            {collections.isLoading ? (
-              <div className="flex flex-col gap-2.5 px-2 pt-2">
-                <Skeleton className="h-2.5 w-3/4" />
-                <Skeleton className="h-2.5 w-2/3" />
-                <Skeleton className="h-2.5 w-4/5" />
-              </div>
-            ) : (
-              sorted.map((c) => (
-                <div key={c.id} className="group/c relative">
-                  <CollectionLink active={search.collection === c.id} label={c.name} count={c.article_count} icon={<Folder />} collection={c.id} />
-                  {canEdit && <CollectionMenu c={c} onRename={() => setEditing(c)} onDeleted={() => search.collection === c.id && void navigate({ search: (s) => ({ ...s, collection: undefined }) })} />}
-                </div>
-              ))
-            )}
-            {!collections.isLoading && sorted.length === 0 && canEdit && (
-              <button
-                type="button"
-                onClick={() => setEditing("new")}
-                className="mt-2 flex w-full items-center gap-2 rounded-md border border-dashed border-line px-2.5 py-2 text-left text-xs text-fg-3 hover:border-line-strong hover:text-fg-2"
-              >
-                <FolderPlus className="size-3.5" />
-                Group articles into collections
-              </button>
-            )}
+          <nav aria-label={t("collections")} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+            <CollectionTile
+              active={!search.collection}
+              name={t("allArticles")}
+              description={t("allArticlesHint")}
+              count={everything.length}
+              views={views}
+              collection={undefined}
+              icon={<Library />}
+              hue="gray"
+            />
+            {collections.isLoading
+              ? [0, 1, 2].map((i) => (
+                  <div key={i} className="flex h-[118px] flex-col gap-3 rounded-lg border border-line p-4">
+                    <Skeleton className="size-7 rounded-md" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-2.5 w-3/4 opacity-60" />
+                  </div>
+                ))
+              : sorted.map((c) => (
+                  <div key={c.id} className="group/c relative">
+                    <CollectionTile
+                      active={search.collection === c.id}
+                      name={c.name}
+                      description={c.description}
+                      count={c.article_count}
+                      drafts={draftsBy(c.id)}
+                      views={viewsBy(c.id)}
+                      collection={c.id}
+                      icon={<Folder />}
+                      hue={collectionTone(sorted, c.id)}
+                    />
+                    {canEdit && (
+                      <CollectionMenu
+                        c={c}
+                        onRename={() => setEditing(c)}
+                        onDeleted={() => search.collection === c.id && void navigate({ search: (s) => ({ ...s, collection: undefined }) })}
+                      />
+                    )}
+                  </div>
+                ))}
           </nav>
-        </aside>
+        </section>
 
-        <section className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-12 shrink-0 items-center gap-3 border-b border-line-soft px-4">
-            <div className="min-w-0">
-              <h2 className="truncate text-[13px] font-medium">{current?.name ?? "All articles"}</h2>
-            </div>
-            {current?.description && <p className="hidden truncate text-xs text-fg-3 lg:block">{current.description}</p>}
-            <div className="ml-auto flex items-center gap-2">
-              <Segmented<StatusFilter>
-                size="xs"
-                value={search.status ?? "all"}
-                onChange={(v) => void navigate({ search: (s) => ({ ...s, status: v === "all" ? undefined : v }) })}
-                options={[
-                  { value: "all", label: "All" },
-                  { value: "published", label: "Published" },
-                  { value: "draft", label: "Drafts" },
-                ]}
-              />
-              <div className="w-[220px]">
-                <SearchInput value={term} onChange={setTerm} placeholder="Search articles" />
-              </div>
+        <div className="sticky top-0 z-20 flex h-12 items-center gap-3 border-y border-line bg-surface px-4 md:px-5">
+          <h2 className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.01em]">{current?.name ?? t("allArticles")}</h2>
+          {articles.data && <span className="mono text-[11px] tabular-nums text-fg-4">{articles.data.length}</span>}
+          <div className="ml-auto flex items-center gap-2">
+            <Segmented<StatusFilter>
+              size="xs"
+              value={search.status ?? "all"}
+              onChange={(v) => void navigate({ search: (s) => ({ ...s, status: v === "all" ? undefined : v }) })}
+              options={[
+                { value: "all", label: t("filter.all") },
+                { value: "published", label: t("filter.published") },
+                { value: "draft", label: t("filter.drafts") },
+              ]}
+            />
+            <div className="hidden w-[240px] sm:block">
+              <SearchInput value={term} onChange={setTerm} placeholder={t("searchArticles")} />
             </div>
           </div>
+        </div>
+        <div className={`${cols} sticky top-12 z-10 h-9 border-b border-line bg-surface px-4 md:px-5`}>
+          <span className="label-caps">{t("col.title")}</span>
+          <span className={`label-caps ${md}`}>{t("col.collection")}</span>
+          <span className="label-caps">{t("col.status")}</span>
+          <span className={`label-caps justify-end ${md}`}>{t("col.views")}</span>
+          <span className={`label-caps ${xl}`}>{t("col.author")}</span>
+          <span className={`label-caps justify-end ${xl}`}>{t("col.updated")}</span>
+        </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {articles.isLoading ? (
-              <SkeletonRows rows={7} />
-            ) : !articles.data?.length ? (
-              <EmptyState
-                lit={search.q ? 3 : 1}
-                title={search.q ? "No articles match" : search.status === "draft" ? "No drafts" : "No articles yet"}
-                description={
-                  search.q
-                    ? "Try different words, or clear the filters."
-                    : "Write answers once and share them in replies, the chat widget and your help center."
-                }
-                action={
-                  search.q ? (
-                    <Button onClick={() => setTerm("")}>Clear search</Button>
-                  ) : canEdit ? (
-                    <Button asChild variant="primary">
-                      <Link to="/kb/articles/$articleId" params={{ articleId: "new" }} search={{ collection: search.collection }}>
-                        <Plus className="size-3.5" />
-                        Write an article
-                      </Link>
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              <ul role="list">
-                {articles.data.map((a) => (
-                  <li key={a.id}>
+        {articles.isLoading ? (
+          <ArticleSkeleton />
+        ) : articles.error ? (
+          <EmptyState lit={3} title={t("error.title")} description={errorMessage(articles.error)} action={<Button onClick={() => void articles.refetch()}>{t("retry")}</Button>} />
+        ) : !articles.data?.length ? (
+          <EmptyState
+            className="min-h-[320px]"
+            lit={search.q ? 3 : 1}
+            title={search.q ? t("empty.noMatch") : search.status === "draft" ? t("empty.noDrafts") : t("empty.title")}
+            description={search.q ? t("empty.noMatchHint") : t("empty.description")}
+            action={
+              search.q ? (
+                <Button onClick={() => setTerm("")}>{t("clearSearch")}</Button>
+              ) : canEdit ? (
+                <Button asChild variant="primary">
+                  <Link to="/kb/articles/$articleId" params={{ articleId: "new" }} search={{ collection: search.collection }}>
+                    <Plus className="size-3.5" />
+                    {t("writeArticle")}
+                  </Link>
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <ul role="list" className="pb-10">
+            <AnimatePresence initial={false}>
+              {articles.data.map((a) => {
+                const cname = collectionName(a.collection_id);
+                return (
+                  <motion.li
+                    key={a.id}
+                    layout={reduce ? false : "position"}
+                    initial={reduce ? false : { opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={reduce ? undefined : { opacity: 0, transition: { duration: 0.12 } }}
+                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                  >
                     <Link
                       to="/kb/articles/$articleId"
                       params={{ articleId: a.id }}
                       search={{ collection: undefined }}
-                      className="group flex items-center gap-4 border-b border-line-soft px-4 py-3 transition-colors hover:bg-hover/60"
+                      className={`${cols} min-h-14 border-b border-line-soft px-4 py-2.5 transition-colors duration-100 hover:bg-sunken md:px-5`}
                     >
-                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-sunken text-fg-3">
-                        <BookOpen className="size-3.5" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-medium">{a.title || t("untitled")}</span>
+                        <span className="mt-0.5 block truncate text-xs text-fg-3">{a.excerpt || t("noExcerpt")}</span>
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="truncate text-[13px] font-medium">{a.title || "Untitled"}</span>
-                          {a.status === "draft" && <Badge tone="outline">Draft</Badge>}
-                        </span>
-                        <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-fg-3">
-                          {!search.collection && collectionName(a.collection_id) && (
-                            <>
-                              <span className="shrink-0">{collectionName(a.collection_id)}</span>
-                              <span className="text-fg-4">·</span>
-                            </>
-                          )}
-                          <span className="truncate">{a.excerpt || "No excerpt"}</span>
-                        </span>
+                      <span className={`min-w-0 items-center gap-2 ${md}`}>
+                        {cname ? (
+                          <>
+                            <span className={cn("size-2 shrink-0 rounded-xs", tone[collectionTone(sorted, a.collection_id)].solid)} />
+                            <span className="truncate text-[12.5px] text-fg-2">{cname}</span>
+                          </>
+                        ) : (
+                          <span className="text-[12.5px] text-fg-4">{t("noCollection")}</span>
+                        )}
                       </span>
-                      <span className="mono hidden w-20 shrink-0 text-right text-[11.5px] text-fg-3 sm:block">
-                        {a.status === "published" ? `${compact(a.views)} views` : ""}
+                      <span>
+                        <ArticleStatus status={a.status} />
                       </span>
-                      <span className="flex w-24 shrink-0 items-center justify-end gap-2">
-                        {a.author && <Avatar name={a.author.name} src={a.author.avatar_url} size="sm" />}
-                        <span className="mono text-[11px] text-fg-3">{relShort(a.updated_at)}</span>
+                      <span className={`mono justify-end text-xs tabular-nums text-fg-2 ${md}`}>{a.status === "published" ? compact(a.views) : <span className="text-fg-4">–</span>}</span>
+                      <span className={`min-w-0 items-center gap-2 ${xl}`}>
+                        {a.author ? (
+                          <>
+                            <Avatar name={a.author.name} src={a.author.avatar_url} size="sm" />
+                            <span className="truncate text-[12.5px] text-fg-2">{a.author.name}</span>
+                          </>
+                        ) : (
+                          <span className="text-fg-4">–</span>
+                        )}
+                      </span>
+                      <span className={`mono justify-end text-[11px] text-fg-3 ${xl}`} title={fullDate(a.updated_at)}>
+                        {relShort(a.updated_at)}
                       </span>
                     </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+          </ul>
+        )}
       </div>
 
       <CollectionDialog value={editing} onClose={() => setEditing(null)} onCreated={(id) => void navigate({ search: (s) => ({ ...s, collection: id }) })} />
@@ -222,24 +280,74 @@ export default function KbPage() {
   );
 }
 
-function CollectionLink({ active, label, count, icon, collection }: { active: boolean; label: string; count: number; icon: React.ReactNode; collection: string | undefined }) {
+function ArticleSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className={`${cols} min-h-14 border-b border-line-soft px-4 py-2.5 md:px-5`} style={{ opacity: 1 - i * 0.09 }}>
+          <span className="flex flex-col gap-2">
+            <Skeleton className="h-2.5" style={{ width: `${40 + ((i * 17) % 35)}%` }} />
+            <Skeleton className="h-2 opacity-60" style={{ width: `${55 + ((i * 13) % 30)}%` }} />
+          </span>
+          <Skeleton className={`h-2.5 w-20 ${md}`} />
+          <Skeleton className="h-4 w-16 rounded-sm" />
+          <Skeleton className={`ml-auto h-2.5 w-8 ${md}`} />
+          <Skeleton className={`h-2.5 w-24 ${xl}`} />
+          <Skeleton className={`ml-auto h-2.5 w-8 ${xl}`} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CollectionTile({
+  active,
+  name,
+  description,
+  count,
+  drafts,
+  views,
+  icon,
+  hue,
+  collection,
+}: {
+  active: boolean;
+  name: string;
+  description: string;
+  count: number;
+  drafts?: number;
+  views: number;
+  icon: React.ReactNode;
+  hue: Tone;
+  collection: string | undefined;
+}) {
+  const { t } = useTranslation("kb");
   return (
     <Link
       to="/kb"
       search={(s) => ({ ...s, collection })}
+      aria-current={active ? "true" : undefined}
       className={cn(
-        "flex h-7 items-center gap-2 rounded-md px-2 pr-7 text-[13px] text-fg-2 transition-colors hover:bg-hover hover:text-fg [&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:text-fg-3",
-        active && "bg-active font-medium text-fg [&_svg]:text-fg",
+        "flex h-full min-h-[118px] flex-col rounded-lg border bg-surface p-4 transition-[border-color,box-shadow,background-color] duration-150 active:scale-[0.995] motion-reduce:active:scale-100",
+        active ? "border-fg-3 shadow-xs" : "border-line hover:border-line-strong hover:bg-sunken/50",
       )}
     >
-      {icon}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <span className="mono text-[11px] tabular-nums text-fg-3 group-hover/c:opacity-0">{count}</span>
+      <span className="flex items-center gap-2.5 pr-6">
+        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-md [&_svg]:size-3.5", tone[hue].chip)}>{icon}</span>
+        <span className="min-w-0 truncate text-[13px] font-semibold tracking-[-0.01em] text-fg">{name}</span>
+      </span>
+      <span className="mt-2 line-clamp-2 text-xs leading-[18px] text-fg-3">{description || t("noDescription")}</span>
+      <span className="mt-auto flex items-center gap-3 pt-3 text-[11px] text-fg-4">
+        <span className="mono tabular-nums">{t("articleCount", { count })}</span>
+        {!!drafts && <span className="mono tabular-nums text-tone-amber">{t("draftCount", { count: drafts })}</span>}
+        <span className="mono ml-auto tabular-nums">{t("viewCount", { count: views, n: compact(views) })}</span>
+      </span>
     </Link>
   );
 }
 
 function CollectionMenu({ c, onRename, onDeleted }: { c: KbCollection; onRename: () => void; onDeleted: () => void }) {
+  const { t } = useTranslation("kb");
   const qc = useQueryClient();
   const confirm = useConfirm();
   const remove = useMutation({
@@ -262,28 +370,28 @@ function CollectionMenu({ c, onRename, onDeleted }: { c: KbCollection; onRename:
       <MenuTrigger asChild>
         <button
           type="button"
-          aria-label={`${c.name} options`}
-          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded text-fg-3 opacity-100 hover:bg-active hover:text-fg data-[state=open]:opacity-100 md:opacity-0 md:group-hover/c:opacity-100 focus-visible:opacity-100"
+          aria-label={t("collection.options", { name: c.name })}
+          className="absolute right-3 top-3.5 flex size-6 items-center justify-center rounded-md text-fg-3 opacity-100 transition-opacity hover:bg-hover hover:text-fg data-[state=open]:opacity-100 md:opacity-0 md:group-hover/c:opacity-100 focus-visible:opacity-100"
         >
           <MoreHorizontal className="size-3.5" />
         </button>
       </MenuTrigger>
       <MenuContent align="start">
         <MenuItem icon={<Pencil />} onSelect={onRename}>
-          Rename
+          {t("collection.rename")}
         </MenuItem>
         <MenuItem
           danger
           icon={<Trash2 />}
           onSelect={() =>
             confirm.show(
-              c.article_count ? `Its ${c.article_count} articles stay in the knowledge base without a collection.` : "This collection is empty.",
+              c.article_count ? t("collection.deleteBody", { count: c.article_count }) : t("collection.deleteEmpty"),
               () => remove.mutateAsync(),
-              { title: `Delete ${c.name}?`, confirmLabel: "Delete collection", danger: true },
+              { title: t("collection.deleteTitle", { name: c.name }), confirmLabel: t("collection.deleteConfirm"), danger: true },
             )
           }
         >
-          Delete
+          {t("collection.delete")}
         </MenuItem>
       </MenuContent>
     </Menu>
@@ -291,6 +399,7 @@ function CollectionMenu({ c, onRename, onDeleted }: { c: KbCollection; onRename:
 }
 
 function CollectionDialog({ value, onClose, onCreated }: { value: KbCollection | "new" | null; onClose: () => void; onCreated: (id: string) => void }) {
+  const { t } = useTranslation("kb");
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -311,7 +420,7 @@ function CollectionDialog({ value, onClose, onCreated }: { value: KbCollection |
         : api.kb.collections.update((value as KbCollection).id, { name: name.trim(), description: description.trim() }),
     onSuccess: (c) => {
       upsertInList(qc, qk.kbCollections, c);
-      toast.success(isNew ? "Collection created" : "Collection renamed");
+      toast.success(isNew ? t("collection.created") : t("collection.renamed"));
       onClose();
       if (isNew) onCreated(c.id);
     },
@@ -322,16 +431,20 @@ function CollectionDialog({ value, onClose, onCreated }: { value: KbCollection |
     <Dialog
       open={!!value}
       onOpenChange={(o) => !o && onClose()}
-      title={isNew ? "New collection" : "Edit collection"}
+      title={isNew ? t("newCollection") : t("collection.edit")}
       size="sm"
       footer={
         <>
-          {error && <p className="mr-auto text-xs text-danger-fg">{error}</p>}
+          {error && (
+            <p role="alert" className="mr-auto text-xs text-danger-fg">
+              {error}
+            </p>
+          )}
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="primary" type="submit" form="kb-collection" loading={save.isPending}>
-            {isNew ? "Create" : "Save"}
+            {isNew ? t("collection.create") : t("collection.save")}
           </Button>
         </>
       }
@@ -341,12 +454,12 @@ function CollectionDialog({ value, onClose, onCreated }: { value: KbCollection |
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!name.trim()) return setError("Add a name.");
+          if (!name.trim()) return setError(t("collection.nameRequired"));
           save.mutate();
         }}
       >
-        <Field label="Name">{(p) => <TextInput {...p} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Getting started" />}</Field>
-        <Field label="Description" optional hint="Shown under the collection title in your help center.">
+        <Field label={t("collection.name")}>{(p) => <TextInput {...p} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("collection.namePlaceholder")} />}</Field>
+        <Field label={t("collection.description")} optional hint={t("collection.descriptionHint")}>
           {(p) => <Textarea {...p} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />}
         </Field>
       </form>

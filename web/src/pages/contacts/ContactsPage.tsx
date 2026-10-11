@@ -1,37 +1,50 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { Building2, Plus, Users, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Plus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/layout";
+import { useTranslation } from "react-i18next";
+import { PageHeader, Stat, StatStrip } from "@/components/layout";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty";
 import { Field, SearchInput, TextInput } from "@/components/ui/input";
-import { SkeletonRows } from "@/components/ui/skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { DirectoryNav } from "@/components/contacts/DirectoryNav";
 import { ContactDrawer } from "@/components/contacts/ContactDrawer";
 import { CompanyPicker } from "@/components/contacts/CompanyPicker";
+import { CompanyGlyph, Labels, labelsOf } from "@/components/contacts/bits";
 import { useDebounced, useSentinel } from "@/components/contacts/hooks";
+import { AnimatedNumber } from "@/components/reports/AnimatedNumber";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { CompanyRef } from "@/lib/api/types";
-import { relShort } from "@/lib/format";
+import { fullDate, relShort, shortDate } from "@/lib/format";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
 
 const route = getRouteApi("/app/contacts/{-$contactId}");
 
-const cols = "grid grid-cols-[minmax(0,1.4fr)_minmax(0,1.3fr)_minmax(0,1fr)_72px_80px] items-center gap-4";
+// Name and tickets always; email, company and updated from md; labels and created from xl.
+const colsLabels =
+  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_64px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)_64px_88px_72px]";
+const colsPlain =
+  "grid items-center gap-4 grid-cols-[minmax(0,1fr)_64px] md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_72px] xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.3fr)_minmax(0,1fr)_64px_88px_72px]";
+const md = "hidden md:block";
+const xl = "hidden xl:flex";
+const xlLabels = (on: boolean) => (on ? "hidden xl:flex" : "hidden");
 
 export default function ContactsPage() {
+  const { t } = useTranslation("contacts");
   const search = route.useSearch();
   const { contactId } = route.useParams();
   const navigate = route.useNavigate();
   const role = useRole();
+  const reduce = useReducedMotion();
   const [term, setTerm] = useState(search.q ?? "");
   const debounced = useDebounced(term, 250);
   const [creating, setCreating] = useState(false);
@@ -48,103 +61,133 @@ export default function ContactsPage() {
     if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
   }, !!list.hasNextPage);
 
-  const open = (id: string | undefined) =>
-    navigate({ to: "/contacts/{-$contactId}", params: { contactId: id }, search: (s) => s });
+  const open = (id: string | undefined) => navigate({ to: "/contacts/{-$contactId}", params: { contactId: id }, search: (s) => s });
+
+  const companies = new Set(rows.map((c) => c.company?.id).filter(Boolean)).size;
+  const tickets = rows.reduce((a, c) => a + c.ticket_count, 0);
+  const blocked = rows.filter((c) => c.blocked).length;
+  const more = list.hasNextPage ? "+" : "";
+  const canEdit = atLeast(role, "agent");
+  const hasLabels = rows.some((r) => labelsOf(r).length > 0);
+  const cols = hasLabels ? colsLabels : colsPlain;
+
+  const newButton = canEdit ? (
+    <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
+      {t("newContact")}
+    </Button>
+  ) : undefined;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title="Contacts"
-        icon={<Users />}
-        actions={
-          atLeast(role, "agent") ? (
-            <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-              New contact
-            </Button>
-          ) : undefined
-        }
-      >
+      <PageHeader title={t("title")} icon={<Users />} actions={newButton}>
         <DirectoryNav current="contacts" />
-        <div className="ml-auto w-[260px]">
-          <SearchInput value={term} onChange={setTerm} placeholder="Search name, email or company" />
+        <div className="ml-auto hidden w-[280px] sm:block">
+          <SearchInput value={term} onChange={setTerm} placeholder={t("searchPeople")} />
         </div>
       </PageHeader>
 
-      {search.company && (
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line-soft px-4">
-          <span className="text-xs text-fg-3">Filtered by</span>
-          <span className="inline-flex h-6 items-center gap-1.5 rounded-md border border-line bg-surface pl-2 pr-0.5 text-xs">
-            <Building2 className="size-3 text-fg-3" />
-            {company.data?.name ?? "Company"}
-            <button
-              type="button"
-              aria-label="Clear company filter"
-              onClick={() => void navigate({ search: (s) => ({ ...s, company: undefined }) })}
-              className="flex size-5 items-center justify-center rounded text-fg-4 hover:bg-hover hover:text-fg"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        </div>
-      )}
-
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className={`${cols} sticky top-0 z-10 h-8 border-b border-line bg-surface/95 px-4 backdrop-blur`}>
-          <span className="label-caps">Name</span>
-          <span className="label-caps">Email</span>
-          <span className="label-caps">Company</span>
-          <span className="label-caps text-right">Tickets</span>
-          <span className="label-caps text-right">Updated</span>
+        {!list.isLoading && rows.length > 0 && (
+          <StatStrip>
+            <Stat label={t("stat.people")} value={<><AnimatedNumber value={rows.length} />{more}</>} sub={search.q || search.company ? t("stat.matching") : t("stat.inDirectory")} />
+            <Stat label={t("stat.companies")} value={<AnimatedNumber value={companies} />} sub={t("stat.represented")} />
+            <Stat label={t("stat.tickets")} value={<AnimatedNumber value={tickets} />} sub={t("stat.fromThesePeople")} />
+            <Stat label={t("stat.blocked")} value={<AnimatedNumber value={blocked} />} sub={t("stat.blockedHint")} />
+          </StatStrip>
+        )}
+
+        {search.company && (
+          <div className="flex h-10 items-center gap-2 border-b border-line-soft px-4 md:px-5">
+            <span className="text-xs text-fg-3">{t("filteredBy")}</span>
+            <span className="inline-flex h-6 items-center gap-1.5 rounded-sm bg-hover pl-1 pr-0.5 text-xs">
+              <CompanyGlyph name={company.data?.name ?? "?"} size="xs" />
+              {company.data?.name ?? t("company")}
+              <button
+                type="button"
+                aria-label={t("clearCompany")}
+                onClick={() => void navigate({ search: (s) => ({ ...s, company: undefined }) })}
+                className="flex size-5 items-center justify-center rounded-sm text-fg-4 transition-colors hover:bg-active hover:text-fg"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          </div>
+        )}
+
+        <div className={`${cols} sticky top-0 z-10 h-9 border-b border-line bg-surface px-4 md:px-5`}>
+          <span className="label-caps">{t("col.name")}</span>
+          <span className={`label-caps ${md}`}>{t("col.email")}</span>
+          <span className={`label-caps ${md}`}>{t("col.company")}</span>
+          <span className={`label-caps ${xlLabels(hasLabels)}`}>{t("col.labels")}</span>
+          <span className="label-caps text-right">{t("col.tickets")}</span>
+          <span className={`label-caps text-right ${xl} justify-end`}>{t("col.created")}</span>
+          <span className={`label-caps text-right ${md}`}>{t("col.updated")}</span>
         </div>
 
         {list.isLoading ? (
-          <SkeletonRows rows={10} />
+          <TableSkeleton />
+        ) : list.error ? (
+          <EmptyState lit={3} title={t("error.listTitle")} description={errorMessage(list.error)} action={<Button onClick={() => void list.refetch()}>{t("retry")}</Button>} />
         ) : rows.length === 0 ? (
           <EmptyState
             lit={2}
-            title={search.q ? "No contacts match" : "No contacts yet"}
-            description={
-              search.q
-                ? "Try a different name, email or company."
-                : "Contacts are created when customers email or chat with you. You can also add one yourself."
-            }
-            action={
-              search.q ? (
-                <Button onClick={() => setTerm("")}>Clear search</Button>
-              ) : atLeast(role, "agent") ? (
-                <Button variant="primary" icon={<Plus className="size-3.5" />} onClick={() => setCreating(true)}>
-                  New contact
-                </Button>
-              ) : undefined
-            }
+            title={search.q ? t("empty.noMatch") : t("empty.title")}
+            description={search.q ? t("empty.noMatchHint") : t("empty.description")}
+            action={search.q ? <Button onClick={() => setTerm("")}>{t("clearSearch")}</Button> : newButton}
           />
         ) : (
           <ul role="list">
-            {rows.map((c) => (
-              <li key={c.id}>
-                <Link
-                  to="/contacts/{-$contactId}"
-                  params={{ contactId: c.id }}
-                  search={(s) => s}
-                  data-active={contactId === c.id || undefined}
-                  className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors hover:bg-hover/60 data-[active]:bg-hover`}
+            <AnimatePresence initial={false}>
+              {rows.map((c) => (
+                <motion.li
+                  key={c.id}
+                  layout={reduce ? false : "position"}
+                  initial={reduce ? false : { opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={reduce ? undefined : { opacity: 0, transition: { duration: 0.12 } }}
+                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
                 >
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="md" />
-                    <span className="truncate font-medium" data-ph-mask>
-                      {c.name || <span className="text-fg-4">Unnamed</span>}
+                  <Link
+                    to="/contacts/{-$contactId}"
+                    params={{ contactId: c.id }}
+                    search={(s) => s}
+                    data-active={contactId === c.id || undefined}
+                    className={`${cols} h-11 border-b border-line-soft px-4 text-[13px] transition-colors duration-100 hover:bg-sunken data-[active]:bg-hover md:px-5`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <Avatar name={c.name || c.email || "?"} src={c.avatar_url} size="md" />
+                      <span className="truncate font-medium" data-ph-mask>
+                        {c.name || <span className="font-normal text-fg-4">{t("unnamed")}</span>}
+                      </span>
+                      {c.blocked && <Badge tone="danger">{t("blocked")}</Badge>}
                     </span>
-                    {c.blocked && <Badge tone="danger">Blocked</Badge>}
-                  </span>
-                  <span className="mono truncate text-xs text-fg-2" data-ph-mask>
-                    {c.email ?? <span className="text-fg-4">–</span>}
-                  </span>
-                  <span className="truncate text-fg-2">{c.company?.name ?? <span className="text-fg-4">–</span>}</span>
-                  <span className="mono text-right text-xs tabular-nums text-fg-2">{c.ticket_count}</span>
-                  <span className="mono text-right text-[11px] text-fg-3">{relShort(c.updated_at)}</span>
-                </Link>
-              </li>
-            ))}
+                    <span className={`mono truncate text-xs text-fg-2 ${md}`} data-ph-mask>
+                      {c.email ?? <span className="text-fg-4">–</span>}
+                    </span>
+                    <span className={`min-w-0 ${md}`}>
+                      {c.company ? (
+                        <span className="flex min-w-0 items-center gap-2">
+                          <CompanyGlyph name={c.company.name} size="xs" />
+                          <span className="truncate text-fg-2">{c.company.name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-fg-4">–</span>
+                      )}
+                    </span>
+                    <span className={`min-w-0 ${xlLabels(hasLabels)}`}>
+                      <Labels labels={labelsOf(c)} />
+                    </span>
+                    <span className="mono text-right text-xs tabular-nums text-fg-2">{c.ticket_count}</span>
+                    <span className={`mono justify-end text-right text-[11px] text-fg-3 ${xl}`} title={fullDate(c.created_at)}>
+                      {shortDate(c.created_at)}
+                    </span>
+                    <span className={`mono text-right text-[11px] text-fg-3 ${md}`} title={fullDate(c.updated_at)}>
+                      {relShort(c.updated_at)}
+                    </span>
+                  </Link>
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
         )}
         <div ref={sentinel} className="flex h-12 items-center justify-center">
@@ -154,6 +197,27 @@ export default function ContactsPage() {
 
       <ContactDrawer contactId={contactId ?? null} onClose={() => void open(undefined)} />
       <NewContactDialog open={creating} onOpenChange={setCreating} onCreated={(id) => void open(id)} defaultCompany={company.data ?? null} />
+    </div>
+  );
+}
+
+/** Rows shaped like the table, so nothing shifts when data lands. */
+function TableSkeleton({ rows = 12 }: { rows?: number }) {
+  return (
+    <div aria-busy="true" aria-label="Loading">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className={`${colsPlain} h-11 border-b border-line-soft px-4 md:px-5`} style={{ opacity: 1 - i * (0.75 / rows) }}>
+          <span className="flex items-center gap-2.5">
+            <Skeleton className="size-6 rounded-sm" />
+            <Skeleton className="h-2.5" style={{ width: `${40 + ((i * 17) % 35)}%` }} />
+          </span>
+          <Skeleton className={`h-2.5 ${md}`} style={{ width: `${50 + ((i * 13) % 30)}%` }} />
+          <Skeleton className={`h-2.5 ${md}`} style={{ width: `${35 + ((i * 11) % 30)}%` }} />
+                    <Skeleton className="ml-auto h-2.5 w-5" />
+          <Skeleton className={`ml-auto h-2.5 w-12 ${xl}`} />
+          <Skeleton className={`ml-auto h-2.5 w-8 ${md}`} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -169,6 +233,7 @@ function NewContactDialog({
   onCreated: (id: string) => void;
   defaultCompany: CompanyRef | null;
 }) {
+  const { t } = useTranslation("contacts");
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -187,12 +252,11 @@ function NewContactDialog({
   }, [open, defaultCompany]);
 
   const create = useMutation({
-    mutationFn: () =>
-      api.contacts.create({ name: name.trim(), email: email.trim() || null, phone: phone.trim(), company_id: company?.id ?? null }),
+    mutationFn: () => api.contacts.create({ name: name.trim(), email: email.trim() || null, phone: phone.trim(), company_id: company?.id ?? null }),
     onSuccess: (c) => {
       qc.setQueryData(qk.contact(c.id), c);
       void qc.invalidateQueries({ queryKey: qk.contactLists });
-      toast.success("Contact created");
+      toast.success(t("toast.created"));
       onOpenChange(false);
       onCreated(c.id);
     },
@@ -201,8 +265,8 @@ function NewContactDialog({
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() && !email.trim()) return setError("Add a name or an email.");
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError("That email doesn't look right.");
+    if (!name.trim() && !email.trim()) return setError(t("error.addNameOrEmail"));
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError(t("error.badEmail"));
     setError(null);
     create.mutate();
   };
@@ -211,29 +275,33 @@ function NewContactDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="New contact"
+      title={t("newContact")}
       footer={
         <>
-          {error && <p className="mr-auto text-xs text-danger-fg">{error}</p>}
+          {error && (
+            <p role="alert" className="mr-auto text-xs text-danger-fg">
+              {error}
+            </p>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="primary" type="submit" form="new-contact" loading={create.isPending}>
-            Create contact
+            {t("createContact")}
           </Button>
         </>
       }
     >
       <form id="new-contact" onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="Name">{(p) => <TextInput {...p} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" />}</Field>
-        <Field label="Email">
+        <Field label={t("field.name")}>{(p) => <TextInput {...p} autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" />}</Field>
+        <Field label={t("field.email")}>
           {(p) => <TextInput {...p} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ada@example.com" className="mono" />}
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Phone" optional>
+          <Field label={t("field.phone")} optional>
             {(p) => <TextInput {...p} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+44 20 7946 0000" />}
           </Field>
-          <Field label="Company" optional>
+          <Field label={t("field.company")} optional>
             {({ id }) => <CompanyPicker id={id} value={company} onChange={setCompany} />}
           </Field>
         </div>

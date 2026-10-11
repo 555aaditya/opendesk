@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { shortcutGroups } from "@/lib/hotkeys";
@@ -5,16 +6,29 @@ import { shell, useShell } from "./shellStore";
 
 export function ShortcutsSheet() {
   const open = useShell((s) => s.shortcutsOpen);
+  const { t } = useTranslation("shell");
+  // Shortcuts bound in AppLayout that the shared list may not name yet.
+  const extra: Record<string, { keys: string; label: string }[]> = {
+    General: [
+      { keys: "b", label: t("shortcuts.toggleSidebar") },
+      { keys: "g m", label: t("shortcuts.goMine") },
+      { keys: "g r", label: t("shortcuts.goReports") },
+    ],
+  };
+  const groups = shortcutGroups.map((g) => {
+    const have = new Set(g.items.map((i) => i.keys));
+    return { ...g, items: [...g.items, ...(extra[g.title] ?? []).filter((i) => !have.has(i.keys))] };
+  });
   return (
     <Dialog open={open} onOpenChange={(o) => shell.shortcuts(o)} title="Keyboard shortcuts" description="Most things in opendesk work without a mouse." size="lg">
-      <div className="grid grid-cols-1 gap-x-8 gap-y-5 pb-2 sm:grid-cols-2">
-        {shortcutGroups.map((g) => (
+      <div className="grid grid-cols-1 gap-x-8 gap-y-6 pb-2 sm:grid-cols-2">
+        {groups.map((g) => (
           <section key={g.title} className={g.title === "General" ? "sm:row-span-2" : undefined}>
-            <h3 className="label-caps mb-2">{g.title}</h3>
+            <h3 className="label-caps mb-1.5">{g.title}</h3>
             <ul className="flex flex-col">
               {g.items.map((i) => (
-                <li key={i.label} className="flex h-8 items-center justify-between border-b border-line-soft text-[12.5px] text-fg-2 last:border-0">
-                  {i.label}
+                <li key={i.label} className="flex h-8 items-center justify-between gap-4 border-b border-line-soft text-[12.5px] text-fg-2 last:border-0">
+                  <span className="truncate">{i.label}</span>
                   <Kbd>{i.keys}</Kbd>
                 </li>
               ))}

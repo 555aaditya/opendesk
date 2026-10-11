@@ -1,7 +1,9 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Building2, Pencil, Trash2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Drawer } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar } from "@/components/ui/avatar";
@@ -14,47 +16,44 @@ import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { Company } from "@/lib/api/types";
-import { shortDate } from "@/lib/format";
+import { fullDate, relShort, shortDate } from "@/lib/format";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
+import { CompanyGlyph, Detail, fieldLabel, fieldsOf, fieldText, Labels, labelsOf, MiniStat, none } from "./bits";
+import { DrawerSkeleton } from "./ContactDrawer";
 import { dropCompany, patchCompany, restore, snapshot } from "./cache";
 
-export function CompanyGlyph({ name, size = "md" }: { name: string; size?: "md" | "lg" }) {
-  return (
-    <span
-      aria-hidden
-      className={
-        size === "lg"
-          ? "flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-sunken text-[12px] font-semibold text-fg-2"
-          : "flex size-6 shrink-0 items-center justify-center rounded-md border border-line bg-sunken text-[10px] font-semibold text-fg-2"
-      }
-    >
-      {name.trim().charAt(0).toUpperCase() || "?"}
-    </span>
-  );
-}
+export { CompanyGlyph } from "./bits";
 
-type Tab = "overview" | "people" | "edit";
+type Tab = "overview" | "people";
+
+const swap = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.16, ease: [0.16, 1, 0.3, 1] } } as const;
 
 export function CompanyDrawer({ companyId, onClose }: { companyId: string | null; onClose: () => void }) {
+  const { t } = useTranslation("contacts");
   const confirm = useConfirm();
+  const reduce = useReducedMotion();
+  const canEdit = atLeast(useRole(), "agent");
   const [tab, setTab] = useState<Tab>("overview");
+  const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const { data: c, isLoading, error } = useQuery({ ...q.company(companyId ?? ""), enabled: !!companyId });
   useEffect(() => {
     setTab("overview");
+    setEditing(false);
     setDirty(false);
   }, [companyId]);
   const requestClose = () => {
     if (!dirty) return onClose();
-    confirm.show("Your changes to this company will be lost.", onClose, { title: "Discard changes?", confirmLabel: "Discard", danger: true });
+    confirm.show(t("drawer.discardCompany"), onClose, { title: t("drawer.discardTitle"), confirmLabel: t("drawer.discard"), danger: true });
   };
 
   return (
     <Drawer
       open={!!companyId}
       onOpenChange={(o) => !o && requestClose()}
-      title={c?.name ?? "Company"}
+      title={c?.name ?? t("company")}
+      width={560}
       onEscapeKeyDown={(e) => {
         if (dirty) {
           e.preventDefault();
@@ -68,76 +67,99 @@ export function CompanyDrawer({ companyId, onClose }: { companyId: string | null
         }
       }}
       header={
-        c ? (
-          <div className="flex min-w-0 items-center gap-2.5">
-            <CompanyGlyph name={c.name} />
-            <span className="truncate text-[13.5px] font-semibold">{c.name}</span>
-            {c.domain && <span className="mono truncate text-xs text-fg-3">{c.domain}</span>}
-          </div>
-        ) : (
-          <Skeleton className="h-3 w-40" />
-        )
+        <div className="flex min-w-0 items-center gap-2 text-[12.5px] text-fg-3">
+          <Building2 className="size-3.5" />
+          <span>{t("company")}</span>
+        </div>
       }
     >
       {error ? (
-        <EmptyState lit={3} title="Company not found" description={errorMessage(error)} />
+        <EmptyState lit={3} title={t("drawer.companyNotFound")} description={errorMessage(error)} />
       ) : isLoading || !c ? (
-        <div className="flex flex-col gap-3 p-5">
-          <Skeleton className="h-3 w-1/2" />
-          <Skeleton className="h-3 w-1/3" />
-        </div>
+        <DrawerSkeleton />
       ) : (
-        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-          <TabsList className="sticky top-0 z-10 bg-surface">
-            <TabsTrigger value="overview" icon={<Building2 />}>
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="people" icon={<Users />} count={c.contact_count}>
-              People
-            </TabsTrigger>
-            <TabsTrigger value="edit" icon={<Pencil />}>
-              Edit
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview" className="outline-none">
-            <div className="flex flex-col gap-6 px-5 py-4">
-              <dl className="divide-y divide-line-soft">
-                <div className="grid grid-cols-[120px_1fr] gap-3 py-2">
-                  <dt className="text-[12.5px] text-fg-3">Domain</dt>
-                  <dd className="mono text-xs">{c.domain || <span className="text-fg-4">–</span>}</dd>
-                </div>
-                <div className="grid grid-cols-[120px_1fr] gap-3 py-2">
-                  <dt className="text-[12.5px] text-fg-3">People</dt>
-                  <dd className="mono text-xs">{c.contact_count}</dd>
-                </div>
-                <div className="grid grid-cols-[120px_1fr] gap-3 py-2">
-                  <dt className="text-[12.5px] text-fg-3">Created</dt>
-                  <dd className="text-[13px]">{shortDate(c.created_at)}</dd>
-                </div>
-              </dl>
-              <section>
-                <h3 className="label-caps mb-2">Notes</h3>
-                {c.notes ? (
-                  <p className="whitespace-pre-wrap rounded-md bg-sunken px-3 py-2.5 text-[13px] leading-5 text-fg-2">{c.notes}</p>
-                ) : (
-                  <p className="text-[12.5px] text-fg-4">No notes</p>
-                )}
-              </section>
+        <div className="flex min-h-full flex-col">
+          <div className="flex items-start gap-3.5 px-5 pb-4 pt-5">
+            <CompanyGlyph name={c.name} size="xl" />
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate text-[16px] font-semibold tracking-[-0.015em]">{c.name}</h2>
+              <div className="mono mt-1 truncate text-xs text-fg-3">{c.domain || t("noDomain")}</div>
+              {labelsOf(c).length > 0 && <Labels labels={labelsOf(c)} max={6} className="mt-2.5 flex-wrap" />}
             </div>
-          </TabsContent>
-          <TabsContent value="people" className="outline-none">
-            <People companyId={c.id} />
-          </TabsContent>
-          <TabsContent value="edit" className="outline-none">
-            <EditCompany key={c.id + c.updated_at} c={c} onDirty={setDirty} onDeleted={onClose} onSaved={() => setTab("overview")} />
-          </TabsContent>
-        </Tabs>
+            {canEdit && !editing && (
+              <Button size="sm" variant="secondary" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(true)}>
+                {t("drawer.edit")}
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-line-soft border-y border-line-soft">
+            <MiniStat label={t("col.people")} value={c.contact_count.toLocaleString()} />
+            <MiniStat label={t("col.created")} value={<span title={fullDate(c.created_at)}>{shortDate(c.created_at)}</span>} />
+            <MiniStat label={t("col.updated")} value={<span title={fullDate(c.updated_at)}>{relShort(c.updated_at)}</span>} />
+          </div>
+
+          <AnimatePresence mode="wait" initial={false}>
+            {editing ? (
+              <motion.div key="edit" {...(reduce ? {} : swap)}>
+                <EditCompany
+                  key={c.id + c.updated_at}
+                  c={c}
+                  onDirty={setDirty}
+                  onDeleted={onClose}
+                  onDone={() => {
+                    setDirty(false);
+                    setEditing(false);
+                  }}
+                />
+              </motion.div>
+            ) : (
+              <motion.div key="view" className="flex flex-1 flex-col" {...(reduce ? {} : swap)}>
+                <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="flex flex-1 flex-col">
+                  <TabsList className="sticky top-0 z-10 bg-surface px-4">
+                    <TabsTrigger value="overview" icon={<Building2 />}>
+                      {t("drawer.overview")}
+                    </TabsTrigger>
+                    <TabsTrigger value="people" icon={<Users />} count={c.contact_count}>
+                      {t("drawer.people")}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="overview" className="outline-none">
+                    <div className="flex flex-col gap-6 px-5 py-4">
+                      <dl className="divide-y divide-line-soft">
+                        <Detail label={t("field.domain")} mono>
+                          {c.domain || none}
+                        </Detail>
+                        {fieldsOf(c).map(([k, v]) => (
+                          <Detail key={k} label={fieldLabel(k)} mono>
+                            {fieldText(v)}
+                          </Detail>
+                        ))}
+                      </dl>
+                      <section>
+                        <h3 className="label-caps mb-2">{t("field.notes")}</h3>
+                        {c.notes ? (
+                          <p className="whitespace-pre-wrap rounded-lg bg-sunken px-3.5 py-3 text-[13px] leading-5 text-fg-2">{c.notes}</p>
+                        ) : (
+                          <p className="text-[12.5px] text-fg-4">{t("drawer.noNotes")}</p>
+                        )}
+                      </section>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="people" className="flex-1 outline-none">
+                    <People companyId={c.id} />
+                  </TabsContent>
+                </Tabs>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
     </Drawer>
   );
 }
 
 function People({ companyId }: { companyId: string }) {
+  const { t } = useTranslation("contacts");
   const list = useInfiniteQuery(q.contacts({ company_id: companyId }));
   const rows = list.data?.pages.flatMap((p) => p.data) ?? [];
   if (list.isLoading)
@@ -147,7 +169,7 @@ function People({ companyId }: { companyId: string }) {
         <Skeleton className="h-3 w-1/2" />
       </div>
     );
-  if (!rows.length) return <EmptyState compact lit={2} title="No people yet" description="Contacts linked to this company appear here." />;
+  if (!rows.length) return <EmptyState compact lit={2} title={t("drawer.noPeople")} description={t("drawer.noPeopleHint")} />;
   return (
     <ul className="py-1">
       {rows.map((p) => (
@@ -156,25 +178,25 @@ function People({ companyId }: { companyId: string }) {
             to="/contacts/{-$contactId}"
             params={{ contactId: p.id }}
             search={{ q: undefined, company: undefined }}
-            className="flex items-center gap-2.5 border-b border-line-soft px-5 py-2.5 hover:bg-hover/60"
+            className="flex items-center gap-2.5 border-b border-line-soft px-5 py-2.5 transition-colors hover:bg-sunken"
           >
-            <Avatar name={p.name || p.email || "?"} src={p.avatar_url} size="md" />
+            <Avatar name={p.name || p.email || "?"} src={p.avatar_url} size="lg" />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px]" data-ph-mask>
-                {p.name || "Unnamed"}
+              <span className="block truncate text-[13px] font-medium" data-ph-mask>
+                {p.name || t("unnamed")}
               </span>
               <span className="mono block truncate text-[11.5px] text-fg-3" data-ph-mask>
                 {p.email}
               </span>
             </span>
-            <span className="mono text-[11px] text-fg-4">{p.ticket_count} tickets</span>
+            <span className="mono text-[11px] text-fg-4">{t("ticketCount", { count: p.ticket_count })}</span>
           </Link>
         </li>
       ))}
       {list.hasNextPage && (
         <li className="flex justify-center py-3">
           <Button size="xs" variant="ghost" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
-            Show more
+            {t("showMore")}
           </Button>
         </li>
       )}
@@ -182,10 +204,10 @@ function People({ companyId }: { companyId: string }) {
   );
 }
 
-function EditCompany({ c, onDirty, onDeleted, onSaved }: { c: Company; onDirty: (d: boolean) => void; onDeleted: () => void; onSaved: () => void }) {
+function EditCompany({ c, onDirty, onDeleted, onDone }: { c: Company; onDirty: (d: boolean) => void; onDeleted: () => void; onDone: () => void }) {
+  const { t } = useTranslation("contacts");
   const qc = useQueryClient();
   const confirm = useConfirm();
-  const canEdit = atLeast(useRole(), "agent");
   const [name, setName] = useState(c.name);
   const [domain, setDomain] = useState(c.domain);
   const [notes, setNotes] = useState(c.notes);
@@ -209,8 +231,8 @@ function EditCompany({ c, onDirty, onDeleted, onSaved }: { c: Company; onDirty: 
     onSuccess: (u) => {
       patchCompany(qc, u);
       onDirty(false);
-      toast.success("Company saved");
-      onSaved();
+      toast.success(t("toast.companySaved"));
+      onDone();
     },
   });
   const remove = useMutation({
@@ -219,47 +241,50 @@ function EditCompany({ c, onDirty, onDeleted, onSaved }: { c: Company; onDirty: 
       dropCompany(qc, c.id);
       qc.removeQueries({ queryKey: qk.company(c.id) });
       void qc.invalidateQueries({ queryKey: qk.contactLists });
-      toast.success("Company deleted");
+      toast.success(t("toast.companyDeleted"));
       onDeleted();
     },
   });
 
   return (
     <form
-      className="flex flex-col gap-4 px-5 py-4"
+      className="flex flex-col gap-4 px-5 py-5"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!name.trim()) return setError("A company needs a name.");
+        if (!name.trim()) return setError(t("error.companyName"));
         setError(null);
         save.mutate();
       }}
     >
-      <fieldset disabled={!canEdit} className="flex flex-col gap-4">
-        <Field label="Name">{(p) => <TextInput {...p} value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-        <Field label="Domain">{(p) => <TextInput {...p} className="mono" value={domain} onChange={(e) => setDomain(e.target.value)} />}</Field>
-        <Field label="Notes">{(p) => <Textarea {...p} rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
-      </fieldset>
-      {error && <p className="text-xs text-danger-fg">{error}</p>}
-      {canEdit && (
-        <div className="flex items-center justify-between border-t border-line-soft pt-4">
-          <Button
-            variant="danger"
-            icon={<Trash2 className="size-3.5" />}
-            onClick={() =>
-              confirm.show("People stay, but they are no longer linked to this company.", () => remove.mutateAsync(), {
-                title: `Delete ${c.name}?`,
-                confirmLabel: "Delete company",
-                danger: true,
-              })
-            }
-          >
-            Delete
-          </Button>
-          <Button variant="primary" type="submit" loading={save.isPending} disabled={!dirty}>
-            Save changes
-          </Button>
-        </div>
+      <Field label={t("field.name")}>{(p) => <TextInput {...p} autoFocus value={name} onChange={(e) => setName(e.target.value)} />}</Field>
+      <Field label={t("field.domain")}>{(p) => <TextInput {...p} className="mono" value={domain} onChange={(e) => setDomain(e.target.value)} />}</Field>
+      <Field label={t("field.notes")}>{(p) => <Textarea {...p} rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />}</Field>
+      {error && (
+        <p role="alert" className="text-xs text-danger-fg">
+          {error}
+        </p>
       )}
+      <div className="flex items-center gap-2 border-t border-line-soft pt-4">
+        <Button
+          variant="danger"
+          icon={<Trash2 className="size-3.5" />}
+          onClick={() =>
+            confirm.show(t("confirm.deleteCompanyBody"), () => remove.mutateAsync(), {
+              title: t("confirm.deleteTitle", { name: c.name }),
+              confirmLabel: t("confirm.deleteCompanyConfirm"),
+              danger: true,
+            })
+          }
+        >
+          {t("drawer.delete")}
+        </Button>
+        <Button variant="ghost" className="ml-auto" onClick={onDone}>
+          {t("cancel")}
+        </Button>
+        <Button variant="primary" type="submit" loading={save.isPending} disabled={!dirty}>
+          {t("drawer.save")}
+        </Button>
+      </div>
     </form>
   );
 }

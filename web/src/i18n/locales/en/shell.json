@@ -42,6 +42,40 @@
     "unread": "Notifications, {{count}} unread",
     "markAll": "Mark all read",
     "empty": "You're all caught up",
-    "emptyHint": "Assignments, mentions and replies show up here."
+    "emptyHint": "Assignments, mentions and replies show up here.",
+    "all": "All",
+    "unreadTab": "Unread",
+    "filter": "Filter notifications",
+    "unreadDot": "Unread",
+    "noneUnread": "Nothing unread",
+    "noneUnreadHint": "You've seen everything. Older ones stay under All.",
+    "type": {
+      "assigned": "{{who}} assigned you a ticket",
+      "assignedAnon": "A ticket was assigned to you",
+      "mentioned": "{{who}} mentioned you",
+      "mentionedAnon": "You were mentioned in a note",
+      "replied": "{{who}} replied",
+      "repliedAnon": "The customer replied",
+      "sla": "SLA breached",
+      "handoff": "{{who}} asked for a person",
+      "handoffAnon": "A customer asked for a person",
+      "other": "Notification"
+    }
+  },
+  "shortcuts": {
+    "toggleSidebar": "Toggle sidebar",
+    "goMine": "Go to my tickets",
+    "goReports": "Go to reports"
+  },
+  "route": {
+    "loading": "Loading",
+    "notFoundTitle": "Not found",
+    "notFoundBody": "It may have been deleted, or you don't have access.",
+    "errorTitle": "This page couldn't load",
+    "retry": "Try again",
+    "toInbox": "Go to inbox",
+    "pageNotFound": "Page not found",
+    "pageNotFoundBody": "The link may be broken, or the page may have moved.",
+    "home": "Go home"
   }
 }
