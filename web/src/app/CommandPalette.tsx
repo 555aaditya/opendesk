@@ -101,7 +101,7 @@ export function CommandPalette() {
                   type="button"
                   onClick={() => setAiMode(false)}
                   aria-label={t("palette.exit")}
-                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[5px] border border-line bg-sunken px-1.5 text-[12px] font-medium text-fg-2 hover:text-fg"
+                  className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-sm border border-line bg-sunken px-1.5 text-[12px] font-medium text-fg-2 hover:text-fg"
                 >
                   <AiIcon className="size-3" />
                   {t("palette.mode")}

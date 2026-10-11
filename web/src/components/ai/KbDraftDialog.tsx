@@ -99,7 +99,7 @@ export function KbDraftDialog({
           <Label>{t("kb_draft.tickets")}</Label>
           <div className="flex min-h-9 flex-wrap items-center gap-1.5 rounded-md border border-line px-1.5 py-1.5">
             {picked.map((x) => (
-              <span key={x.id} className="inline-flex h-6 max-w-[260px] items-center gap-1.5 rounded-[5px] border border-line bg-sunken pl-1.5 pr-0.5 text-[12px]">
+              <span key={x.id} className="inline-flex h-6 max-w-[260px] items-center gap-1.5 rounded-sm border border-line bg-sunken pl-1.5 pr-0.5 text-[12px]">
                 <span className="mono text-[11px] text-fg-3">#{x.number}</span>
                 <span className="truncate text-fg-2">{x.subject}</span>
                 <button
@@ -127,7 +127,7 @@ export function KbDraftDialog({
                 hint: <span className="mono">#{x.number}</span>,
               }))}
               trigger={
-                <button type="button" className="inline-flex h-6 items-center gap-1 rounded-[5px] px-1.5 text-[12px] text-fg-3 hover:bg-hover hover:text-fg">
+                <button type="button" className="inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-[12px] text-fg-3 hover:bg-hover hover:text-fg">
                   <Plus className="size-3" />
                   {t("kb_draft.add_ticket")}
                 </button>

@@ -172,7 +172,7 @@ export function useComposerAi(editor: RefObject<RichEditorHandle | null>, ticket
 }
 
 const itemCls =
-  "relative flex h-8 cursor-default select-none items-center gap-2 rounded-[6px] px-2 text-[12.5px] text-fg outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-fg-3";
+  "relative flex h-8 cursor-default select-none items-center gap-2 rounded-sm px-2 text-[12.5px] text-fg outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-fg-3";
 
 function Item({ icon, children, hint, onSelect, disabled }: { icon?: ReactNode; children: ReactNode; hint?: ReactNode; onSelect: () => void; disabled?: boolean }) {
   return (
@@ -327,7 +327,7 @@ export function ComposerSources({ ai }: { ai: ComposerAi }) {
           href={s.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-5 max-w-[220px] items-center gap-1 rounded-[5px] border border-line bg-surface px-1.5 text-[11px] text-fg-2 hover:border-line-strong hover:text-fg"
+          className="inline-flex h-5 max-w-[220px] items-center gap-1 rounded-sm border border-line bg-surface px-1.5 text-[11px] text-fg-2 hover:border-line-strong hover:text-fg"
         >
           <BookOpen className="size-3 shrink-0 text-fg-4" />
           <span className="truncate">{s.title}</span>

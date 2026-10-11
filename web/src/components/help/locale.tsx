@@ -97,7 +97,7 @@ export function LanguageSwitcher({ current, className }: { current: Locale; clas
                   lang={l}
                   dir={l === "ar" ? "rtl" : "ltr"}
                   onClick={() => choose(l)}
-                  className="flex h-8 w-full items-center gap-2 rounded-[6px] px-2.5 text-start text-[13px] text-fg-2 outline-none hover:bg-hover hover:text-fg focus-visible:bg-hover"
+                  className="flex h-8 w-full items-center gap-2 rounded-sm px-2.5 text-start text-[13px] text-fg-2 outline-none hover:bg-hover hover:text-fg focus-visible:bg-hover"
                 >
                   <span className="flex-1">{LOCALE_NAMES[l]}</span>
                   {l === current && <Check className="size-3.5 text-fg" />}

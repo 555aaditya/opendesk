@@ -13,7 +13,7 @@ export function Kbd({ children, className }: { children: React.ReactNode; classN
       {parts.map((p, i) => (
         <kbd
           key={i}
-          className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[4px] border border-line bg-surface px-1 font-mono text-[10.5px] leading-none text-fg-3 shadow-[0_1px_0_var(--line)]"
+          className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[2px] border border-line bg-surface px-1 font-mono text-[10px] leading-none text-fg-3"
         >
           {p}
         </kbd>

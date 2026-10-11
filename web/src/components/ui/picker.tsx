@@ -106,7 +106,7 @@ export function Picker(props: Single | Multi) {
                         value={`${i.label} ${i.value}`}
                         keywords={i.keywords}
                         onSelect={() => choose(i.value)}
-                        className="flex h-7 cursor-default items-center gap-2 rounded-[6px] px-2 text-[12.5px] text-fg data-[selected=true]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0"
+                        className="flex h-7 cursor-default items-center gap-2 rounded-sm px-2 text-[12.5px] text-fg data-[selected=true]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0"
                       >
                         {props.multi && (
                           <span
@@ -133,7 +133,7 @@ export function Picker(props: Single | Multi) {
                     props.onCreate!(query.trim());
                     setQuery("");
                   }}
-                  className="flex h-7 cursor-default items-center gap-2 rounded-[6px] px-2 text-[12.5px] text-fg-2 data-[selected=true]:bg-hover"
+                  className="flex h-7 cursor-default items-center gap-2 rounded-sm px-2 text-[12.5px] text-fg-2 data-[selected=true]:bg-hover"
                 >
                   <Plus className="size-3.5" />
                   {props.createLabel ?? "Create"} <span className="font-medium text-fg">“{query.trim()}”</span>

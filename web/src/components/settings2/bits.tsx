@@ -19,7 +19,7 @@ export function ReorderButtons({
   disabled?: boolean;
 }) {
   const btn =
-    "flex size-6 items-center justify-center rounded-[6px] text-fg-3 transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-30";
+    "flex size-6 items-center justify-center rounded-sm text-fg-3 transition-colors hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-30";
   return (
     <span className="flex items-center" onClick={(e) => e.stopPropagation()}>
       <Tooltip content="Move up">
@@ -39,7 +39,7 @@ export function ReorderButtons({
 /** A small rounded scope/event chip in mono. */
 export function MonoChip({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className={cn("mono inline-flex h-[18px] shrink-0 items-center rounded-[5px] border border-line px-1.5 text-[10.5px] text-fg-2", className)}>
+    <span className={cn("mono inline-flex h-[18px] shrink-0 items-center rounded-sm border border-line px-1.5 text-[10.5px] text-fg-2", className)}>
       {children}
     </span>
   );

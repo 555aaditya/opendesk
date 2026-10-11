@@ -106,10 +106,10 @@ export default function SettingsLayout() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <nav aria-label="Settings" className="hidden w-[232px] shrink-0 overflow-y-auto border-r border-line px-2.5 pb-6 pt-4 md:block">
+      <nav aria-label="Settings" className="hidden w-[232px] shrink-0 overflow-y-auto border-r border-line px-3 pb-6 pt-5 md:block">
         {groups.map((g, gi) => (
           <div key={g.title} className={gi ? "mt-4" : undefined}>
-            <div className="label-caps px-2 pb-1">{g.title}</div>
+            <div className="label-caps px-2.5 pb-1.5">{g.title}</div>
             <div className="flex flex-col gap-px">
               {g.items.map((i) => {
                 const active = current === i.to;
@@ -119,15 +119,16 @@ export default function SettingsLayout() {
                     to={i.to}
                     aria-current={active ? "page" : undefined}
                     className={cn(
-                      "group relative flex h-7 items-center gap-2.5 rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:shadow-[0_0_0_2px_var(--focus)] [&_svg]:relative [&_svg]:z-10 [&_svg]:size-[14px] [&_svg]:shrink-0",
+                      "group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-[13px] outline-none transition-colors focus-visible:shadow-[0_0_0_1.5px_var(--focus)] [&_svg]:relative [&_svg]:z-10 [&_svg]:size-[14px] [&_svg]:shrink-0",
                       active ? "font-medium text-fg [&_svg]:text-fg-2" : "text-fg-2 hover:bg-hover hover:text-fg [&_svg]:text-fg-4 hover:[&_svg]:text-fg-3",
                     )}
                   >
                     {active && (
                       <motion.span
-                        layoutId="settings-active"
-                        className="absolute inset-0 rounded-md bg-active"
-                        transition={{ type: "spring", stiffness: 520, damping: 42 }}
+                        layoutId="settings-active-dot"
+                        aria-hidden
+                        className="absolute -left-[5px] top-1/2 -mt-[2.5px] size-[5px] rounded-full bg-fg"
+                        transition={{ type: "spring", stiffness: 700, damping: 45 }}
                       />
                     )}
                     {i.icon}

@@ -30,7 +30,7 @@ export function Dialog({
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-50 bg-scrim backdrop-blur-[1.5px] data-[state=open]:animate-fade-in" />
+        <D.Overlay className="fixed inset-0 z-50 bg-scrim data-[state=open]:animate-fade-in" />
         <D.Content
           onEscapeKeyDown={onEscapeKeyDown}
           onInteractOutside={onInteractOutside}
@@ -42,7 +42,7 @@ export function Dialog({
         >
           <div className="flex items-start justify-between gap-4 px-5 pb-2 pt-[18px]">
             <div className="min-w-0">
-              <D.Title className="text-[15px] font-semibold leading-5 tracking-[-0.015em] text-fg">{title}</D.Title>
+              <D.Title className="heading text-[15px] leading-5 text-fg">{title}</D.Title>
               {description ? (
                 <D.Description className="mt-1 text-[12.5px] leading-[18px] text-fg-3">{description}</D.Description>
               ) : (

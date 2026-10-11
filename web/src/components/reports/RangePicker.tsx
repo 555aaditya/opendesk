@@ -66,7 +66,7 @@ export function RangePicker({ value, onChange }: { value: ReportsRange; onChange
               setOpen(false);
             }}
             className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[12.5px] hover:bg-hover",
+              "flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-[12.5px] hover:bg-hover",
               active === p.id ? "font-medium text-fg" : "text-fg-2",
             )}
           >

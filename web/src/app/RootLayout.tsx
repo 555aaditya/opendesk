@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, useMatches, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { LucideProvider } from "lucide-react";
 import { ConfirmProvider } from "@/components/ui/confirm";
 import { Toaster } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,12 +26,14 @@ export function RootLayout() {
   usePageviews();
   return (
     <QueryClientProvider client={queryClient}>
+      <LucideProvider strokeWidth={1.5}>
       <TooltipProvider delayDuration={400} skipDelayDuration={200}>
         <ConfirmProvider>
           <Outlet />
           <Toaster />
         </ConfirmProvider>
       </TooltipProvider>
+      </LucideProvider>
     </QueryClientProvider>
   );
 }

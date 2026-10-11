@@ -26,7 +26,7 @@ export function PageHeader({
     <header className={cn("flex h-12 shrink-0 items-center gap-3 border-b border-line bg-surface px-4 md:px-5", className)}>
       <div className="flex min-w-0 items-center gap-2">
         {icon && <span className="flex text-fg-3 [&_svg]:size-4">{icon}</span>}
-        <h1 className="truncate text-[13.5px] font-semibold tracking-[-0.015em]">{title}</h1>
+        <h1 className="heading truncate text-[14px]">{title}</h1>
         {subtitle && (
           <>
             <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-line" />
@@ -56,7 +56,7 @@ export function Stat({ label, value, sub, extra }: { label: ReactNode; value: Re
         <span className="label-caps truncate">{label}</span>
         {extra}
       </div>
-      <div className="mt-1.5 text-[24px] font-light leading-none tracking-[-0.02em] tabular-nums text-fg">{value}</div>
+      <div className="heading mt-2 text-[26px] leading-none tabular-nums text-fg">{value}</div>
       {sub && <div className="mono mt-1.5 truncate text-[10.5px] text-fg-4">{sub}</div>}
     </div>
   );
@@ -111,7 +111,7 @@ export function SettingsPage({
         <div className={cn("flex flex-wrap items-start gap-4 px-5 pb-5 pt-6 md:px-8 md:pt-7", wide ? "max-w-[1120px]" : "max-w-[880px]")}>
           <div className="min-w-0 flex-1 basis-60">
             {back && <div className="mb-2">{back}</div>}
-            <h1 className="text-[17px] font-semibold leading-6 tracking-[-0.025em]">{title}</h1>
+            <h1 className="heading text-[20px] leading-7">{title}</h1>
             {description && <p className="mt-1 max-w-[600px] text-[12.5px] leading-[19px] text-fg-3">{description}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
@@ -146,7 +146,7 @@ export function Section({
       {(title || actions) && (
         <div className="mb-3 flex items-end justify-between gap-4">
           <div className="min-w-0">
-            {title && <h2 className={cn("text-[13px] font-semibold tracking-[-0.01em]", danger && "text-danger-fg")}>{title}</h2>}
+            {title && <h2 className={cn("text-[13px] font-semibold tracking-[-0.02em]", danger && "text-danger-fg")}>{title}</h2>}
             {description && <p className="mt-0.5 text-[12px] leading-[18px] text-fg-3">{description}</p>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
@@ -154,7 +154,7 @@ export function Section({
       )}
       <div
         className={cn(
-          "overflow-hidden rounded-[10px] border border-line bg-surface shadow-xs",
+          "overflow-hidden rounded-lg border border-line bg-surface",
           !flush && "px-4 py-0.5",
           danger && "border-[color-mix(in_srgb,var(--danger)_28%,var(--line))]",
         )}
@@ -240,7 +240,7 @@ export function ListRow({
 /** Shown in place of a settings page to roles that can't manage it. */
 export function NoAccess({ what = "these settings" }: { what?: string }) {
   return (
-    <div className="rounded-[10px] border border-dashed border-line px-6 py-12 text-center">
+    <div className="rounded-lg border border-dashed border-line px-6 py-12 text-center">
       <p className="text-[13px] font-medium">Admins only</p>
       <p className="mt-1 text-[12.5px] text-fg-3">Ask a workspace admin if you need to change {what}.</p>
     </div>

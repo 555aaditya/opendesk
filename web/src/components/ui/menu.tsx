@@ -38,7 +38,7 @@ export function MenuContent({
 }
 
 const itemCls =
-  "relative flex h-7 cursor-default select-none items-center gap-2 rounded-[6px] px-2 text-[12.5px] text-fg outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-fg-3";
+  "relative flex h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 text-[12.5px] text-fg outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-hover [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-fg-3";
 
 export function MenuItem({
   children,

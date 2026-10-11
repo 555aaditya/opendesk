@@ -32,7 +32,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps & Omit<React.HTMLAtt
           align={align}
           sideOffset={6}
           collisionPadding={8}
-          className="z-[60] flex items-center gap-2 rounded-md bg-inverse px-2 py-1 text-xs font-medium text-inverse-fg shadow-pop data-[state=delayed-open]:animate-fade-in"
+          className="z-[60] flex items-center gap-2 rounded-sm bg-inverse px-2 py-1 text-[11.5px] font-medium text-inverse-fg data-[state=delayed-open]:animate-fade-in"
         >
           {content}
           {shortcut && (

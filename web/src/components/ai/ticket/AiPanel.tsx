@@ -410,7 +410,7 @@ function AskBox({ t: ticket }: { t: Ticket }) {
             type="submit"
             aria-label={t("ask.send")}
             disabled={!question.trim() || busy}
-            className="flex size-6 shrink-0 items-center justify-center rounded-[5px] bg-inverse text-inverse-fg transition-opacity disabled:opacity-25"
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm bg-inverse text-inverse-fg transition-opacity disabled:opacity-25"
           >
             <ArrowUp className="size-3.5" />
           </button>
