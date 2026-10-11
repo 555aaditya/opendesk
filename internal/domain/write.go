@@ -184,6 +184,7 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 			message_count = message_count + 1, updated_at = now(),
 			last_customer_message_at = CASE WHEN $5 THEN $3 ELSE last_customer_message_at END,
 			status = $6, solved_at = CASE WHEN $6 = 'open' THEN NULL ELSE solved_at END,
+			snoozed_until = CASE WHEN $6 = 'on_hold' THEN snoozed_until ELSE NULL END,
 			first_responded_at = CASE WHEN $7 THEN $3 ELSE first_responded_at END
 			WHERE workspace_id = $1 AND id = $2`, nm.WorkspaceID, nm.TicketID, nm.CreatedAt, preview, customer, newStatus, setFirst)
 		if err != nil {

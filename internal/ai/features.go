@@ -648,7 +648,7 @@ func (s *Service) Translate(ctx context.Context, p *auth.Principal, in Translate
 	if isHTML {
 		format = "HTML"
 	}
-	req := Request{Model: s.models.Default, MaxTokens: 12000, Effort: "low", JSONSchema: translateSchema, SchemaName: "translation",
+	req := Request{Model: s.models.Fast, MaxTokens: 12000, Effort: "low", JSONSchema: translateSchema, SchemaName: "translation",
 		System: []Block{{Text: translateSystem, Cache: true}},
 		Messages: []Message{{Role: "user", Blocks: []Block{
 			{Text: block("text", []string{"format", format}, body)},

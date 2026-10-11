@@ -147,6 +147,9 @@ func Router(d *deps.Deps) http.Handler {
 	hc.OpenAPIPath = "/v1/openapi"
 	hc.DocsPath = "/docs"
 	hc.SchemasPath = "/v1/schemas"
+	// No "$schema" member on responses: clients send objects back as PATCH bodies, and
+	// bodies refuse unknown members. The schemas stay at /v1/schemas and in the spec.
+	hc.CreateHooks = nil
 	hc.Servers = []*huma.Server{{URL: cfg.APIURL}}
 	hc.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
 		"bearer": {Type: "http", Scheme: "bearer", Description: "Access token (JWT) or API key (od_live_...)"},

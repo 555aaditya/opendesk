@@ -10,9 +10,13 @@ it exists, and this file is the contract the parts are built against.
 - Errors: RFC 9457 problem+json `{ "status", "title", "detail", "code"?, "errors"? }`.
   `code` is a stable machine string (`invalid_credentials`, `mfa_required`, `forbidden`,
   `not_found`, `conflict`, `rate_limited`, `validation_failed`).
+- Responses carry no `$schema` member, so a client can send an object it read back as a PATCH
+  body; request bodies refuse unknown members (`422 validation_failed`).
 - Lists: `?limit=` (default 50, max 100) and `?cursor=`; response
   `{ "data": [...], "next_cursor": "..." | null }`.
 - Workspace-scoped routes need `OD-Workspace: <id>` (agents) or an API key.
+- PATCH bodies: an omitted or `null` member is left unchanged. Clear an optional reference with `""`
+  (mailbox `team_id`, KB article `collection_id`) unless the route documents `null` (ticket PATCH, contact `company_id`).
 - Idempotency: `Idempotency-Key` header on POST create routes (24h).
 - Rate limits: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` headers.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
@@ -26,7 +30,7 @@ it exists, and this file is the contract the parts are built against.
 type User = { id: string; email: string; name: string; avatar_url: string; email_verified: boolean; totp_enabled: boolean; created_at: string };
 type UserRef = { id: string; name: string; email: string; avatar_url: string };
 type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; created_at: string };
-type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean; auto_assign?: "none" | "round_robin" };
+type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean; auto_assign?: "none" | "round_robin"; locale?: string /* BCP 47 default for customer-facing pages (help center, CSAT, widget); "" = the visitor's browser */ };
 type Membership = { workspace: Workspace; role: Role };
 type Role = "owner" | "admin" | "agent" | "viewer";
 type Member = { user: UserRef; role: Role; created_at: string };
@@ -84,7 +88,10 @@ type ApiKey = { id: string; name: string; prefix: string; scopes: string[]; last
 type Webhook = { id: string; url: string; description: string; events: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = { id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed"; attempts: number; response_code: number | null; duration_ms: number | null; created_at: string };
 type AuditLog = { id: string; actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null }; action: string; entity_type: string; entity_id: string | null; data: Record<string, unknown>; ip: string; created_at: string };
-type Notification = { id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached"; ticket: { id: string; number: number; subject: string } | null; data: Record<string, unknown>; read_at: string | null; created_at: string };
+type Notification = { id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff"; ticket: { id: string; number: number; subject: string } | null; data: Record<string, unknown>; read_at: string | null; created_at: string };
+// Notification.data: assigned {by, actor_type, actor?: {id, name}}; mentioned {message_id, by, actor?: {id, name}, preview};
+// customer_replied {message_id?, preview?, contact?: {id, name}}; sla_breached {kind}; ai_handoff {via: "ai" | "contact", contact?: {id, name}}.
+// Mentions in note HTML: <span data-type="mention" data-id="<user_id>">@Name</span> (also data-mention="<user_id>"), or "@<full name or email>" in text.
 ```
 
 ## Endpoints
@@ -102,7 +109,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | POST | `/v1/auth/password/reset` | `{token,password}` → 204 |
 | POST | `/v1/auth/email/verify` | `{token}` → 204 |
 | POST | `/v1/auth/email/resend` | → 204 |
-| GET | `/v1/auth/oauth/{provider}/start?redirect_to=` | → 302 to provider |
+| GET | `/v1/auth/oauth/{provider}/start?redirect_to=` | → 302 to provider. `redirect_to` is the app path to land on after sign-in (e.g. `/inbox/mine`), returned by exchange/link; the callback itself always goes to `/auth/callback` |
 | GET | `/v1/auth/oauth/{provider}/callback` | → 302 to `APP_URL/auth/callback?code=<one-time>` or `?error=` |
 | POST | `/v1/auth/oauth/exchange` | `{code}` → `{access_token, expires_in, user, redirect_to?}` or `{mfa_required, mfa_token, redirect_to?}` or `{link_required: true, link_token, email, redirect_to?}` when the provider's verified email belongs to an existing password account |
 | POST | `/v1/auth/oauth/link` | `{link_token, password}` → same as exchange (tokens or `mfa_required`). Binds the provider identity after the account password is presented; `401 invalid_credentials` on a wrong password (the link token stays usable for 10 min) |
@@ -129,7 +136,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/invitations/lookup?token=` | → `{workspace_name, email, role}` public |
 | CRUD | `/v1/teams`, `/v1/teams/{id}` | `{name, member_ids}` |
 | CRUD | `/v1/api-keys`, `/v1/api-keys/{id}` | admin users only (not API keys). create `{name, scopes, expires_at?}` → `ApiKey & {secret}` (`secret` shown once; `prefix` is `od_live_` + 8 chars); PATCH `{name}`; DELETE revokes |
-| CRUD | `/v1/webhooks`, `/v1/webhooks/{id}` | `{url, description, events, enabled}` create → `Webhook & {secret}` |
+| CRUD | `/v1/webhooks`, `/v1/webhooks/{id}` | `{url, description, events, enabled}` create → `Webhook & {secret}`. `events: ["*"]` (or `[]`) is every event, including types added later; a list may use `resource.*` |
 | GET | `/v1/webhooks/{id}/deliveries` | list |
 | POST | `/v1/webhooks/{id}/test` | sends `webhook.test` → 202 `WebhookDelivery` |
 | GET | `/v1/audit-logs` | admin, list, optional `?action=&entity_type=` |
@@ -138,6 +145,9 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/notifications?unread=` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` → 204. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached, ai_handoff) with a `notification.created` event to `user:<uid>` |
 
 Core notes:
+- App links in system email: `/verify?token=`, `/reset?token=`, `/invite?token=` on `APP_URL`.
+- `401` with `code: "unauthenticated"` means the access token is missing or expired (refresh and retry); other
+  401 codes (`invalid_credentials`, `invalid_code`) answer the request itself and must not trigger a refresh.
 - OAuth: `start` sets an `od_oauth` binding cookie (Path=`/v1/auth/oauth`) and an `oauth_state` JWT (`data.flow = "login"`).
   Callback errors: `access_denied`, `invalid_state`, `invalid_request`, `provider_error`, `provider_unavailable`,
   `email_unverified`, `signup_disabled`, `server_error`. A first sign-in needs a provider-verified email (GitHub: verified
@@ -157,7 +167,7 @@ Core notes:
 | GET | `/v1/tickets/counts` | → `{ unassigned, mine, open, pending, on_hold, solved, spam, views: {<view_id>: n} }` |
 | POST | `/v1/tickets` | `{subject, contact_id? , contact?: {email,name}, channel?: "email"\|"api", mailbox_id?, body_html, kind?: "reply"\|"note", priority?, assignee_id?, team_id?, tags?: string[], status?}`; an email ticket with a reply is sent to the contact |
 | GET | `/v1/tickets/{id}` | id is uuid, or `#<number>` / numeric number |
-| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, assignee_id?, team_id?, snoozed_until?, spam?, tags?: string[], custom?}` |
+| PATCH | `/v1/tickets/{id}` | `{subject?, status?, priority?, assignee_id?, team_id?, snoozed_until?, spam?, tags?: string[] /* replaces */, add_tags?: string[], remove_tags?: string[], custom?}`. Setting `snoozed_until` without a `status` moves the ticket to `on_hold`; a status change that is not `on_hold` clears the snooze |
 | DELETE | `/v1/tickets/{id}` | soft delete |
 | POST | `/v1/tickets/bulk` | `{ids, patch: {...PATCH body}}` or `{ids, delete: true}` |
 | POST | `/v1/tickets/{id}/merge` | `{into_id}` |
@@ -182,18 +192,18 @@ Core notes:
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/public/help/{workspace_slug}` | `{title, collections: KbCollection[], featured: KbArticle[]}` published only |
+| GET | `/v1/public/help/{workspace_slug}` | `{title, collections: KbCollection[], featured: KbArticle[], locale}` published only |
 | GET | `/v1/public/help/{workspace_slug}/collections/{slug}` | `{collection, articles}` |
 | GET | `/v1/public/help/{workspace_slug}/articles/{slug}` | `KbArticle`, increments views |
 | GET | `/v1/public/help/{workspace_slug}/search?q=` | `KbArticle[]` |
-| GET/POST | `/v1/public/csat/{token}` | `{score, comment?}` |
+| GET/POST | `/v1/public/csat/{token}` | GET → `{workspace_name, brand_color, ticket: {number, subject}, score: number \| null, comment, locale}`; POST `{score: 1..5, comment?}` records the score and answers the same survey object |
 
 ### Widget (owner: backend-helpdesk; `Authorization: Visitor <token>` except session)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/widget/config?key=<widget_key>` | `{workspace_name, brand_color, greeting, help_center_url, require_email}` |
+| GET | `/v1/widget/config?key=<widget_key>` | `{workspace_name, brand_color, greeting, help_center_url, require_email, locale}` |
 | POST | `/v1/widget/session` | `{key, visitor_token?, email?, name?, user_id?, user_hash?}` → `{visitor_token, contact: ContactRef, ws_token, gateway_url}`; `user_hash` = hex HMAC-SHA256(widget_secret, user_id) marks the session verified |
-| GET | `/v1/widget/conversations` | visitor's chat tickets `{id, subject, status, last_message_preview, last_message_at}` |
+| GET | `/v1/widget/conversations` | visitor's chat tickets `{id, subject, status, last_message_preview, last_message_at, ai_handoff}` (`ai_handoff`: the visitor asked for a person, contracts/ai.md) |
 | POST | `/v1/widget/conversations` | `{body}` → conversation + first message |
 | GET | `/v1/widget/conversations/{id}/messages` | public messages only (no notes) |
 | POST | `/v1/widget/conversations/{id}/messages` | `{body, attachment_ids?}` |

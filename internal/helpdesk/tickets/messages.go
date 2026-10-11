@@ -259,7 +259,7 @@ func replySubject(s string) string {
 	return "Re: " + s
 }
 
-var mentionAttr = regexp.MustCompile(`data-mention="([0-9a-fA-F-]{36})"`)
+var mentionAttr = regexp.MustCompile(`data-(?:mention|id)="([0-9a-fA-F-]{36})"`)
 
 type member struct {
 	ID    uuid.UUID
@@ -267,7 +267,7 @@ type member struct {
 	Email string
 }
 
-// mentionedUsers finds members mentioned in a note: a data-mention user id in the HTML,
+// mentionedUsers finds members mentioned in a note: a data-id (or data-mention) user id in the HTML,
 // or "@" followed by a member's email or full name in the text.
 func mentionedUsers(html, text string, members []member, author *uuid.UUID) []uuid.UUID {
 	byID := map[uuid.UUID]bool{}
@@ -328,7 +328,7 @@ func containsMention(s, needle string) bool {
 }
 
 func notifyMentions(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, msg domain.Message, author *uuid.UUID) error {
-	if !strings.Contains(msg.BodyText, "@") && !strings.Contains(msg.BodyHTML, "data-mention") {
+	if !strings.Contains(msg.BodyText, "@") && !strings.Contains(msg.BodyHTML, "data-mention") && !strings.Contains(msg.BodyHTML, "data-id") {
 		return nil
 	}
 	rows, err := tx.Query(ctx, `SELECT u.id, u.name, u.email::text FROM members m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = $1`, wid)

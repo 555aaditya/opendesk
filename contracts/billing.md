@@ -82,11 +82,12 @@ Stripe webhook events handled: `checkout.session.completed`, `customer.subscript
 `Billing`) and is audit-logged (`billing.subscribed`, `billing.canceled`, `billing.credits_purchased`).
 
 ```ts
-// GET /v1/billing/usage?from&to (RFC 3339 or YYYY-MM-DD; default this month, UTC; at most a year)
+// GET /v1/billing/usage?from&to (RFC 3339 or YYYY-MM-DD; default this month, UTC; at most a year).
+// A YYYY-MM-DD `to` includes that day; an RFC 3339 `to` is exclusive. The response `from`/`to` are RFC 3339 (`to` exclusive).
 interface UsageReport {
   from: string; to: string; total_credits: number; total_calls: number
   by_feature: { feature: string; credits: number; calls: number }[]
-  by_day: { date: string /* YYYY-MM-DD UTC */; credits: number; calls: number }[]
+  by_day: { date: string /* YYYY-MM-DD UTC */; credits: number; calls: number; by_feature: Record<string, number> /* credits */ }[] // days with usage only
   by_member: { user: UserRef | null /* null: widget answers, automations */; credits: number; calls: number }[]
 }
 ```

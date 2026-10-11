@@ -471,5 +471,11 @@ func notifyCustomerReplied(ctx context.Context, tx pgx.Tx, wid, tid uuid.UUID, m
 			data["preview"] = hd.Excerpt(preview, 140)
 		}
 	}
+	var cid uuid.UUID
+	var cname string
+	if err := tx.QueryRow(ctx, `SELECT c.id, c.name FROM tickets t JOIN contacts c ON c.id = t.contact_id AND c.workspace_id = t.workspace_id
+		WHERE t.workspace_id = $1 AND t.id = $2`, wid, tid).Scan(&cid, &cname); err == nil {
+		data["contact"] = map[string]any{"id": cid.String(), "name": cname}
+	}
 	return hd.Notify(ctx, tx, wid, *assignee, hd.NotifyCustomerReplied, &tid, data)
 }

@@ -49,9 +49,10 @@ type FeatureUse struct {
 }
 
 type DayUse struct {
-	Date    string `json:"date" doc:"YYYY-MM-DD, UTC"`
-	Credits int    `json:"credits"`
-	Calls   int    `json:"calls"`
+	Date      string         `json:"date" doc:"YYYY-MM-DD, UTC"`
+	Credits   int            `json:"credits"`
+	Calls     int            `json:"calls"`
+	ByFeature map[string]int `json:"by_feature" doc:"Credits per feature that day"`
 }
 
 type MemberUsage struct {
@@ -226,7 +227,7 @@ func (s *svc) registerAPI(api huma.API) {
 		Summary: "AI credit usage by feature, day and member", Tags: tags},
 		func(ctx context.Context, in *struct {
 			From string `query:"from" doc:"RFC 3339 time or YYYY-MM-DD (default: start of this month, UTC)"`
-			To   string `query:"to" doc:"RFC 3339 time or YYYY-MM-DD, exclusive (default: now)"`
+			To   string `query:"to" doc:"RFC 3339 time (exclusive) or YYYY-MM-DD (that day included) (default: now)"`
 		}) (*struct{ Body UsageReport }, error) {
 			// AI usage is recorded on every instance, so self-hosted admins see it too.
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsRead)
@@ -244,6 +245,10 @@ func (s *svc) registerAPI(api huma.API) {
 			if in.To != "" {
 				if to, err = parseTime(in.To); err != nil {
 					return nil, httpx.Validation("to must be an RFC 3339 time or a YYYY-MM-DD date.")
+				}
+				// A date names a whole day, so "to" includes it (as in /v1/reports/overview).
+				if _, dateErr := time.Parse(time.DateOnly, in.To); dateErr == nil {
+					to = to.AddDate(0, 0, 1)
 				}
 			}
 			if !to.After(from) || to.Sub(from) > 367*24*time.Hour {
@@ -281,16 +286,30 @@ func usageReport(ctx context.Context, q db.Querier, wid uuid.UUID, from, to time
 		r.TotalCredits += f.Credits
 		r.TotalCalls += f.Calls
 	}
-	rows, err = q.Query(ctx, `SELECT to_char(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') d, sum(a.credits)::int, count(*)::int`+where+
-		` GROUP BY d ORDER BY d`, wid, from, to)
+	rows, err = q.Query(ctx, `SELECT to_char(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') d, a.feature, sum(a.credits)::int, count(*)::int`+where+
+		` GROUP BY d, a.feature ORDER BY d, a.feature`, wid, from, to)
 	if err != nil {
 		return r, err
 	}
-	if r.ByDay, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (DayUse, error) {
-		var d DayUse
-		return d, row.Scan(&d.Date, &d.Credits, &d.Calls)
-	}); err != nil {
+	type dayFeature struct {
+		day, feature   string
+		credits, calls int
+	}
+	parts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (dayFeature, error) {
+		var x dayFeature
+		return x, row.Scan(&x.day, &x.feature, &x.credits, &x.calls)
+	})
+	if err != nil {
 		return r, err
+	}
+	for _, x := range parts {
+		if n := len(r.ByDay); n == 0 || r.ByDay[n-1].Date != x.day {
+			r.ByDay = append(r.ByDay, DayUse{Date: x.day, ByFeature: map[string]int{}})
+		}
+		d := &r.ByDay[len(r.ByDay)-1]
+		d.Credits += x.credits
+		d.Calls += x.calls
+		d.ByFeature[x.feature] += x.credits
 	}
 	rows, err = q.Query(ctx, `SELECT u.id, u.name, u.email, u.avatar_url, sum(a.credits)::int, count(*)::int
 		FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id

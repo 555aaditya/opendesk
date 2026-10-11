@@ -39,7 +39,11 @@ func newRichPolicy() *bluemonday.Policy {
 	p.AddTargetBlankToFullyQualifiedLinks(true)
 	p.AllowAttrs("src").Matching(imgSrc).OnElements("img")
 	p.AllowAttrs("alt").OnElements("img")
+	// Mentions: the editor's <span data-type="mention" data-id="<user id>" class="mention">,
+	// and the older data-mention="<user id>".
 	p.AllowAttrs("data-mention").Matching(uuidAttr).OnElements("span", "a")
+	p.AllowAttrs("data-type", "class").Matching(regexp.MustCompile(`^mention$`)).OnElements("span")
+	p.AllowAttrs("data-id").Matching(uuidAttr).OnElements("span")
 	return p
 }
 

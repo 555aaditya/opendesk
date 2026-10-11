@@ -28,6 +28,7 @@ type WidgetConversation struct {
 	Status             string    `json:"status" enum:"open,pending,on_hold,solved,closed"`
 	LastMessagePreview string    `json:"last_message_preview"`
 	LastMessageAt      time.Time `json:"last_message_at"`
+	AIHandoff          bool      `json:"ai_handoff" doc:"The visitor asked for a person after an AI answer"`
 }
 
 type widgetMessageBody struct {
@@ -51,7 +52,8 @@ func cleanBody(s string) (string, error) {
 	return s, nil
 }
 
-const conversationCols = `SELECT id, subject, status, last_message_preview, last_message_at FROM tickets`
+const conversationCols = `SELECT id, subject, status, last_message_preview, last_message_at,
+	COALESCE(custom->>'ai_handoff' = 'true', false) FROM tickets`
 
 // loadConversation returns the visitor's own chat ticket, or not found.
 func loadConversation(ctx context.Context, q db.Querier, p *auth.Principal, rawID string) (WidgetConversation, error) {
@@ -62,7 +64,7 @@ func loadConversation(ctx context.Context, q db.Querier, p *auth.Principal, rawI
 	}
 	err := q.QueryRow(ctx, conversationCols+` WHERE workspace_id = $1 AND id = $2 AND contact_id = $3 AND channel = 'chat'
 		AND deleted_at IS NULL`, p.WorkspaceID, id, p.ContactID).
-		Scan(&c.ID, &c.Subject, &c.Status, &c.LastMessagePreview, &c.LastMessageAt)
+		Scan(&c.ID, &c.Subject, &c.Status, &c.LastMessagePreview, &c.LastMessageAt, &c.AIHandoff)
 	if db.IsNotFound(err) {
 		return c, httpx.NotFound("Conversation")
 	}
@@ -90,7 +92,7 @@ func (h *handler) registerConversations(api huma.API) {
 			}
 			list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (WidgetConversation, error) {
 				var c WidgetConversation
-				err := r.Scan(&c.ID, &c.Subject, &c.Status, &c.LastMessagePreview, &c.LastMessageAt)
+				err := r.Scan(&c.ID, &c.Subject, &c.Status, &c.LastMessagePreview, &c.LastMessageAt, &c.AIHandoff)
 				return c, err
 			})
 			if err != nil {

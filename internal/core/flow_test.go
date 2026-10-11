@@ -17,7 +17,7 @@ func TestAccountFlow(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	owner, ownerEmail := e.signup("owner")
-	if subj, text := e.lastMail(ownerEmail); subj != "Confirm your email" || !strings.Contains(text, "http://app.test/auth/verify?token=") {
+	if subj, text := e.lastMail(ownerEmail); subj != "Confirm your email" || !strings.Contains(text, "http://app.test/verify?token=") {
 		t.Fatalf("verify mail: %s %s", subj, text)
 	}
 	_, text := e.lastMail(ownerEmail)
@@ -142,7 +142,7 @@ func TestAccountFlow(t *testing.T) {
 	if subj != "Reset your opendesk password" {
 		t.Fatalf("reset mail: %s", subj)
 	}
-	reset := tokenFromText(text, "/auth/reset?token=")
+	reset := tokenFromText(text, "/reset?token=")
 	newPw := "a brand new passphrase 77"
 	if r := e.client().do("POST", "/v1/auth/password/reset", map[string]any{"token": reset, "password": newPw}); r.Status != 204 {
 		t.Fatalf("reset: %d %s", r.Status, r.Raw)

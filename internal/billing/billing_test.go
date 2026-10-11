@@ -2,6 +2,7 @@ package billing_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -329,6 +330,22 @@ func TestSpendConcurrency(t *testing.T) {
 	expect(t, r, 200, "")
 	if r.num("total_credits") != 18 || r.num("total_calls") != 6 {
 		t.Fatalf("usage: %s", r.Raw)
+	}
+	// A YYYY-MM-DD "to" includes that day; each day carries its per-feature split.
+	today := time.Now().UTC().Format(time.DateOnly)
+	r = owner.do("GET", "/v1/billing/usage?from="+today+"&to="+today, nil)
+	expect(t, r, 200, "")
+	var rep struct {
+		TotalCredits int `json:"total_credits"`
+		ByDay        []struct {
+			Date      string         `json:"date"`
+			Credits   int            `json:"credits"`
+			ByFeature map[string]int `json:"by_feature"`
+		} `json:"by_day"`
+	}
+	if err := json.Unmarshal(r.Raw, &rep); err != nil || rep.TotalCredits != 18 || len(rep.ByDay) != 1 ||
+		rep.ByDay[0].Date != today || rep.ByDay[0].Credits != 18 || rep.ByDay[0].ByFeature["draft_reply"] != 18 {
+		t.Fatalf("usage today: %s", r.Raw)
 	}
 }
 

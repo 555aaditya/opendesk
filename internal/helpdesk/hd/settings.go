@@ -27,6 +27,8 @@ type Settings struct {
 	HelpCenterTitle   string `json:"help_center_title"`
 	CSATEnabled       bool   `json:"csat_enabled"`
 	AutoAssign        string `json:"auto_assign"`
+	// Locale is the default language (BCP 47) of customer-facing pages; "" = the visitor's browser.
+	Locale string `json:"locale"`
 	// AutoCloseDays closes solved tickets after this many days; nil = 7, 0 = never.
 	AutoCloseDays *int            `json:"auto_close_days"`
 	Widget        *WidgetSettings `json:"widget"`

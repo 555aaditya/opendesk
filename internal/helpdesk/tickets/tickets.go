@@ -75,11 +75,14 @@ type ticketPatchBody struct {
 	SnoozedUntil Opt[time.Time] `json:"snoozed_until,omitempty" doc:"Snooze until, or null to wake"`
 	Spam         *bool          `json:"spam,omitempty"`
 	Tags         *[]string      `json:"tags,omitempty" maxItems:"50" doc:"Replaces the tags, by name; missing tags are created"`
+	AddTags      []string       `json:"add_tags,omitempty" maxItems:"50" doc:"Adds these tags, by name, keeping the others; missing tags are created"`
+	RemoveTags   []string       `json:"remove_tags,omitempty" maxItems:"50" doc:"Removes these tags, by name"`
 	Custom       map[string]any `json:"custom,omitempty" doc:"Merged into custom; null values remove keys"`
 }
 
 func (b ticketPatchBody) toPatch() (Patch, error) {
-	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Spam: b.Spam, Tags: b.Tags, Custom: b.Custom, Snooze: b.SnoozedUntil}
+	p := Patch{Subject: b.Subject, Status: b.Status, Priority: b.Priority, Spam: b.Spam, Tags: b.Tags, AddTags: b.AddTags,
+		RemoveTags: b.RemoveTags, Custom: b.Custom, Snooze: b.SnoozedUntil}
 	var err error
 	if p.Assignee, err = optID(b.AssigneeID, "assignee_id"); err != nil {
 		return p, err

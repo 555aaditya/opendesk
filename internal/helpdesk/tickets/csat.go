@@ -104,6 +104,7 @@ type CsatSurvey struct {
 	} `json:"ticket"`
 	Score   *int   `json:"score"`
 	Comment string `json:"comment"`
+	Locale  string `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
 }
 
 type csatRow struct {
@@ -133,7 +134,8 @@ func loadCSAT(ctx context.Context, q db.Querier, token string, lock bool) (csatR
 	if err != nil {
 		return r, err
 	}
-	r.view.BrandColor = hd.ParseSettings(settings).BrandColor
+	st := hd.ParseSettings(settings)
+	r.view.BrandColor, r.view.Locale = st.BrandColor, st.Locale
 	if score != nil {
 		v := int(*score)
 		r.view.Score = &v

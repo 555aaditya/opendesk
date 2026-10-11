@@ -92,7 +92,7 @@ func (s *svc) sendVerifyEmail(ctx context.Context, tx pgx.Tx, uid uuid.UUID, ema
 	}
 	html, text := mailer.Layout("Confirm your email",
 		[]string{"Confirm this address to finish setting up your opendesk account."},
-		"Confirm email", s.appLink("/auth/verify", "token", tok),
+		"Confirm email", s.appLink("/verify", "token", tok),
 		"The link works for 48 hours. If you did not create an account, ignore this email.")
 	return s.enqueueMail(ctx, tx, email, "Confirm your email", html, text)
 }
@@ -104,7 +104,7 @@ func (s *svc) sendResetEmail(ctx context.Context, tx pgx.Tx, uid uuid.UUID, emai
 	}
 	html, text := mailer.Layout("Reset your password",
 		[]string{"Someone asked to reset the password for your opendesk account. Choose a new one with the button below."},
-		"Choose a new password", s.appLink("/auth/reset", "token", tok),
+		"Choose a new password", s.appLink("/reset", "token", tok),
 		"The link works for one hour and only once. If you did not ask for this, ignore this email; your password stays the same.")
 	return s.enqueueMail(ctx, tx, email, "Reset your opendesk password", html, text)
 }

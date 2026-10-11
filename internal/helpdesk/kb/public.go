@@ -28,6 +28,7 @@ type helpCenterHome struct {
 	Title       string         `json:"title"`
 	Collections []KbCollection `json:"collections"`
 	Featured    []KbArticle    `json:"featured"`
+	Locale      string         `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
 }
 
 type helpCenterCollection struct {
@@ -105,7 +106,11 @@ func registerPublic(d *deps.Deps, api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			return &struct{ Body helpCenterHome }{helpCenterHome{Title: title, Collections: cols, Featured: publicList(featured)}}, nil
+			st, err := hd.LoadSettings(ctx, d.DB.Pool, wid)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return &struct{ Body helpCenterHome }{helpCenterHome{Title: title, Collections: cols, Featured: publicList(featured), Locale: st.Locale}}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "public-help-collection", Method: http.MethodGet,

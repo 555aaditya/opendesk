@@ -60,6 +60,7 @@ type widgetConfig struct {
 		Greeting      string `json:"greeting"`
 		HelpCenterURL string `json:"help_center_url"`
 		RequireEmail  bool   `json:"require_email"`
+		Locale        string `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
 	}
 }
 
@@ -105,6 +106,7 @@ func (h *handler) registerPublic(api huma.API) {
 			out.Body.BrandColor = w.Settings.BrandColor
 			out.Body.Greeting = ws.Greeting
 			out.Body.RequireEmail = ws.RequireEmail
+			out.Body.Locale = w.Settings.Locale
 			if w.Settings.HelpCenterEnabled {
 				out.Body.HelpCenterURL = h.d.Cfg.AppURL + "/help/" + w.Slug
 			}

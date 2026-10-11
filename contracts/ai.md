@@ -53,7 +53,7 @@ means English unless `instructions` name another language.
 | POST | `/v1/tickets/{id}/ai/triage` | agent | 1 | `{apply: boolean}` → `Triage`; `apply` sets tags/priority with `automation`-style activities attributed to `ai` |
 | POST | `/v1/ai/rewrite` | agent | 1 | `{html: string, mode: "friendlier"\|"more_formal"\|"shorter"\|"longer"\|"fix_grammar"\|"simplify", instructions?: string}` → `{html}` |
 | POST | `/v1/ai/translate` | agent | 1 | `{html?: string, text?: string, target: string /* BCP 47 */}` → `{html?, text?, source_language}` |
-| POST | `/v1/kb/articles/ai/draft` | agent | 5 | `{ticket_ids?: string[], topic?: string}` → `{title, body_html, excerpt}` (not saved) |
+| POST | `/v1/kb/articles/ai/draft` | agent | 5 | `{ticket_ids?: string[] /* at most 10 */, topic?: string /* up to 300 chars */}` → `{title, body_html, excerpt}` (not saved) |
 | GET | `/v1/ai/search` | viewer | 0 | `?q` semantic search over tickets and articles (embeddings), FTS fallback → same shape as `/v1/search` |
 
 `{id}` is a ticket uuid, `#123` (URL-encoded `%23123`) or `123`. API keys need the scope

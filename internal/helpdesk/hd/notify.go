@@ -49,6 +49,15 @@ func Notify(ctx context.Context, tx pgx.Tx, wid, userID uuid.UUID, typ string, t
 	if !member {
 		return nil
 	}
+	// Name who acted ("by", a user id) so the notification reads without another lookup.
+	if by, ok := data["by"].(string); ok && data["actor"] == nil {
+		if uid, err := uuid.Parse(by); err == nil {
+			var name string
+			if err := tx.QueryRow(ctx, `SELECT name FROM users WHERE id = $1`, uid).Scan(&name); err == nil {
+				data["actor"] = map[string]any{"id": uid.String(), "name": name}
+			}
+		}
+	}
 	n := Notification{ID: ids.New(), Type: typ, Data: data, CreatedAt: time.Now().UTC()}
 	if ticketID != nil {
 		var t NotificationTicket

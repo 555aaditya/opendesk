@@ -37,6 +37,7 @@ type CoreWorkspaceSettings struct {
 	HelpCenterTitle   *string `json:"help_center_title,omitempty" maxLength:"100"`
 	CSATEnabled       *bool   `json:"csat_enabled,omitempty"`
 	AutoAssign        *string `json:"auto_assign,omitempty" enum:"none,round_robin"`
+	Locale            *string `json:"locale,omitempty" maxLength:"35" doc:"Default language (BCP 47) of customer-facing pages: help center, CSAT, widget"`
 }
 
 type CoreWorkspace struct {
@@ -93,6 +94,8 @@ var (
 	slugDashRe = regexp.MustCompile(`-+`)
 )
 
+var localeRe = regexp.MustCompile(`^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{2,8}){0,3}$`)
+
 // validateSettings checks a settings patch and returns the JSON object to merge.
 func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	out := map[string]any{}
@@ -120,6 +123,12 @@ func validateSettings(s *CoreWorkspaceSettings) (map[string]any, error) {
 	}
 	if s.CSATEnabled != nil {
 		out["csat_enabled"] = *s.CSATEnabled
+	}
+	if s.Locale != nil {
+		if *s.Locale != "" && !localeRe.MatchString(*s.Locale) {
+			return nil, httpx.Validation("locale must be a language tag like en or pt-BR.")
+		}
+		out["locale"] = *s.Locale
 	}
 	if s.AutoAssign != nil {
 		if *s.AutoAssign != "none" && *s.AutoAssign != "round_robin" {

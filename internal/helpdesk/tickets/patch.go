@@ -101,6 +101,15 @@ func applyPatch(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, tid uuid.UUID
 	if err != nil {
 		return nil, err
 	}
+	// Snoozing puts the ticket on hold; any other status ends the snooze, so a solved
+	// or reopened ticket is not woken up later.
+	if p.Snooze.Set && !p.Snooze.Null && p.Status == nil {
+		onHold := domain.StatusOnHold
+		p.Status = &onHold
+	}
+	if p.Status != nil && *p.Status != domain.StatusOnHold && !p.Snooze.Set && cur.Snoozed != nil {
+		p.Snooze = Opt[time.Time]{Set: true, Null: true}
+	}
 	next := cur
 	var changes []string
 	type act struct {
