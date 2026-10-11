@@ -128,10 +128,14 @@ Errors, logging, data
 
 ## Web conventions (`web/`, `site/`, `docs/`)
 
-- Monochrome only. Tokens in `brand/tokens.css`: ink `#0A0A0A`, coal `#171717`,
-  charcoal `#262626`, graphite `#525252`, smoke `#8A8A8A`, ash `#E4E4E4`, mist `#F4F4F4`,
-  paper `#FFFFFF`. Status colours appear only as small semantic dots/badges in the product
-  (success green, warning amber, danger red), never as brand colour. Geist + Geist Mono.
+- Clean and white-first: layered surfaces (grey chrome and sidebar behind white panels), the
+  brand greys from `brand/tokens.css`, ink primary buttons, slightly square radii, Geist +
+  Geist Mono. Colour is semantic and soft (tinted pills): status, priority, severity, SLA,
+  labels, sentiment, AI (violet). The palette lives in the web tokens; the site matches it.
+- The AI is one persona, **Ollie** (the violet blob). Anything the AI does is attributed to
+  Ollie. Jev (TypeSafe) is a decision model behind triage, never a name in the UI.
+- Motion is subtle and fast (shared presets in `web/src/lib/motion.ts`), always honours
+  reduced motion. Empty pages use the shared EmptyState, never a lone icon and one line.
 - Light and dark themes. Dense, calm, keyboard-first. Learn from `~/projects/warmbly/web`
   for patterns (drawers, pickers, confirm dialogs, optimistic updates, realtime
   invalidation), but restyle everything to the opendesk palette.
