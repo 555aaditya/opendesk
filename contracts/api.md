@@ -17,7 +17,11 @@ it exists, and this file is the contract the parts are built against.
 - Workspace-scoped routes need `OD-Workspace: <id>` (agents) or an API key. An `OD-Workspace` the caller is not a member of (or that no longer exists) is treated as absent: `400 workspace_required`, the same answer either way.
 - PATCH bodies: an omitted or `null` member is left unchanged. Clear an optional reference with `""`
   (mailbox `team_id`, KB article `collection_id`) unless the route documents `null` (ticket PATCH, contact `company_id`).
-- Idempotency: `Idempotency-Key` header on POST create routes (24h).
+- Idempotency: `Idempotency-Key` header (1..255 printable ASCII) on authenticated POST routes, kept 24h per
+  workspace and principal. A retry with the same key, route and body replays the stored response with
+  `Idempotent-Replayed: true`; a different body or route is `422 idempotency_key_reused`, a retry while the first
+  is running `409 idempotency_in_progress`. `5xx`, `429`, streamed and >1 MiB responses are not stored. Not
+  applied to `/v1/auth/*`, `/v1/me/password`, `/v1/realtime/token`, inbound, Stripe, widget and public routes.
 - Rate limits: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` headers.
 - Roles: `owner` > `admin` > `agent` > `viewer`. Viewers read only. Settings routes
   (mailboxes, members, api keys, webhooks, automations, sla, widget settings) need `admin`.

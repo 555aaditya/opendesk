@@ -34,6 +34,7 @@ import (
 	"github.com/opendesk/opendesk/internal/events"
 	"github.com/opendesk/opendesk/internal/helpdesk"
 	"github.com/opendesk/opendesk/internal/httpx"
+	"github.com/opendesk/opendesk/internal/idempotency"
 	"github.com/opendesk/opendesk/internal/jobs"
 	"github.com/opendesk/opendesk/internal/mailer"
 	"github.com/opendesk/opendesk/internal/natsx"
@@ -134,7 +135,7 @@ func Router(d *deps.Deps) http.Handler {
 	r.Use(httpx.RequestID, httpx.Logger(d.Log), httpx.SecurityHeaders(strings.HasPrefix(cfg.APIURL, "https://")),
 		httpx.CORS(cfg.CORSOrigins))
 	resolver := &auth.Resolver{Pool: d.DB.Pool, Tokens: d.Tokens, ClientIP: httpx.ClientIP(cfg.TrustProxy)}
-	r.Use(resolver.Middleware)
+	r.Use(resolver.Middleware, idempotency.New(d.DB.Pool, d.Box, cfg.AuthSecret, d.Log).Middleware)
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")

@@ -48,6 +48,8 @@ The common codes:
 | `ai_disabled` | 404 | No AI provider is configured on this instance. |
 | `billing_disabled` | 404 | Billing is not enabled on this instance. |
 | `conflict` | 409 | The request conflicts with the current state, such as a duplicate. |
+| `idempotency_in_progress` | 409 | A request with the same [idempotency key](/api/idempotency/) is still running. Retry shortly. |
+| `idempotency_key_reused` | 422 | The idempotency key was used for a different request. Use a new key. |
 | `too_large` | 413 | The upload or message is too large. |
 | `rate_limited` | 429 | Too many requests. See [Rate limits](/api/rate-limits/). |
 | `internal` | 500 | Something went wrong on our side. |

@@ -175,7 +175,7 @@ func (w *forgotWorker) Work(ctx context.Context, job *river.Job[forgotArgs]) err
 	})
 }
 
-// cleanupArgs prunes expired credentials and old delivery logs.
+// cleanupArgs prunes expired credentials, old delivery logs and expired idempotency keys.
 type cleanupArgs struct{}
 
 func (cleanupArgs) Kind() string { return "core.cleanup" }
@@ -192,6 +192,7 @@ func (w *cleanupWorker) Work(ctx context.Context, _ *river.Job[cleanupArgs]) err
 		`DELETE FROM sessions WHERE (revoked_at IS NOT NULL AND revoked_at < now() - interval '30 days') OR expires_at < now() - interval '30 days'`,
 		`DELETE FROM invitations WHERE expires_at < now() - interval '30 days'`,
 		`DELETE FROM webhook_deliveries WHERE created_at < now() - interval '30 days'`,
+		`DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`,
 	} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			return err
