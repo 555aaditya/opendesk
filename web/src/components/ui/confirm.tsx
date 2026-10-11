@@ -52,9 +52,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       {children}
       <A.Root open={!!pending} onOpenChange={(o) => !o && !busy && setPending(null)}>
         <A.Portal>
-          <A.Overlay className="fixed inset-0 z-[70] bg-scrim data-[state=open]:animate-fade-in" />
-          <A.Content className="fixed left-1/2 top-[22vh] z-[70] w-[calc(100vw-32px)] max-w-[420px] -translate-x-1/2 rounded-lg border border-line bg-raised p-5 shadow-float outline-none data-[state=open]:animate-pop-in">
-            <A.Title className="text-[15px] font-semibold tracking-[-0.01em]">{pending?.title ?? "Are you sure?"}</A.Title>
+          <A.Overlay className="fixed inset-0 z-[70] bg-scrim backdrop-blur-[1.5px] data-[state=open]:animate-fade-in" />
+          <A.Content className="fixed left-1/2 top-[22vh] z-[70] w-[calc(100vw-32px)] max-w-[420px] -translate-x-1/2 overflow-hidden rounded-xl border border-line bg-raised shadow-float outline-none data-[state=open]:animate-dialog-in">
+            <div className="px-5 pb-4 pt-5"><A.Title className="text-[15px] font-semibold tracking-[-0.015em]">{pending?.title ?? "Are you sure?"}</A.Title>
             <A.Description className="mt-1.5 text-[13px] leading-5 text-fg-2">{pending?.text}</A.Description>
             {pending?.typeToConfirm && (
               <div className="mt-4 flex flex-col gap-1.5">
@@ -65,7 +65,8 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </div>
             )}
             {error && <p className="mt-3 text-xs text-danger-fg">{error}</p>}
-            <div className="mt-5 flex justify-end gap-2">
+            </div>
+            <div className="flex justify-end gap-2 border-t border-line bg-sunken px-5 py-3">
               <A.Cancel asChild>
                 <Button variant="ghost" disabled={busy}>
                   Cancel

@@ -30,34 +30,34 @@ export function Dialog({
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-50 bg-scrim data-[state=open]:animate-fade-in" />
+        <D.Overlay className="fixed inset-0 z-50 bg-scrim backdrop-blur-[1.5px] data-[state=open]:animate-fade-in" />
         <D.Content
           onEscapeKeyDown={onEscapeKeyDown}
           onInteractOutside={onInteractOutside}
           className={cn(
-            "fixed left-1/2 top-[12vh] z-50 flex max-h-[76vh] w-[calc(100vw-32px)] -translate-x-1/2 flex-col rounded-lg border border-line bg-raised shadow-float outline-none data-[state=open]:animate-pop-in",
+            "fixed left-1/2 top-[12vh] z-50 flex max-h-[76vh] w-[calc(100vw-32px)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border border-line bg-raised shadow-float outline-none data-[state=open]:animate-dialog-in",
             w,
             className,
           )}
         >
-          <div className="flex items-start justify-between gap-4 px-5 pb-1 pt-4">
+          <div className="flex items-start justify-between gap-4 px-5 pb-2 pt-[18px]">
             <div className="min-w-0">
-              <D.Title className="text-[15px] font-semibold tracking-[-0.01em] text-fg">{title}</D.Title>
+              <D.Title className="text-[15px] font-semibold leading-5 tracking-[-0.015em] text-fg">{title}</D.Title>
               {description ? (
-                <D.Description className="mt-1 text-[12.5px] text-fg-3">{description}</D.Description>
+                <D.Description className="mt-1 text-[12.5px] leading-[18px] text-fg-3">{description}</D.Description>
               ) : (
                 <D.Description className="sr-only">{typeof title === "string" ? title : "Dialog"}</D.Description>
               )}
             </div>
             <D.Close
               aria-label="Close"
-              className="-mr-1.5 flex size-7 shrink-0 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
+              className="-mr-2 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-md text-fg-4 transition-colors hover:bg-hover hover:text-fg"
             >
               <X className="size-4" />
             </D.Close>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">{children}</div>
-          {footer && <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">{footer}</div>}
+          {footer && <div className="flex items-center justify-end gap-2 border-t border-line bg-sunken px-5 py-3">{footer}</div>}
         </D.Content>
       </D.Portal>
     </D.Root>
@@ -87,9 +87,9 @@ export function Drawer({
   return (
     <D.Root open={open} onOpenChange={onOpenChange}>
       <D.Portal>
-        <D.Overlay className="fixed inset-0 z-40 bg-scrim/60 data-[state=open]:animate-fade-in" />
+        <D.Overlay className="fixed inset-0 z-40 bg-scrim/50 data-[state=open]:animate-fade-in" />
         <D.Content
-          style={{ width: `min(${width}px, 100vw)` }}
+          style={{ width: `min(${width}px, calc(100vw - 16px))` }}
           onEscapeKeyDown={onEscapeKeyDown}
           onInteractOutside={onInteractOutside}
           onOpenAutoFocus={(e) => {
@@ -99,7 +99,7 @@ export function Drawer({
             (el?.querySelector<HTMLElement>("[data-autofocus]") ?? el)?.focus({ preventScroll: true });
           }}
           tabIndex={-1}
-          className="fixed inset-y-0 right-0 z-40 flex flex-col border-l border-line bg-surface shadow-float outline-none data-[state=open]:animate-slide-in-right"
+          className="fixed inset-y-2 right-2 z-40 flex flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-float outline-none data-[state=open]:animate-slide-in-right max-sm:inset-0 max-sm:rounded-none"
         >
           <D.Title className="sr-only">{title}</D.Title>
           <D.Description className="sr-only">{title}</D.Description>

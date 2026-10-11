@@ -10,69 +10,89 @@
  * Every colour is a variable so the light and dark themes swap in one place.
  */
 :root {
-  --canvas: #fafafa;
+  color-scheme: light;
+  /* Chrome: the off-white frame behind the sidebar and header. */
+  --chrome: #f5f5f5;
+  --chrome-hover: rgb(10 10 10 / 0.045);
+  --chrome-active: rgb(10 10 10 / 0.075);
+  --chrome-line: rgb(10 10 10 / 0.07);
+  --canvas: #f5f5f5;
   --surface: #ffffff;
   --raised: #ffffff;
-  --sunken: #f4f4f4;
-  --hover: #f4f4f4;
-  --active: #ececec;
-  --line: #e4e4e4;
-  --line-soft: #efefef;
-  --line-strong: #d4d4d4;
+  --sunken: #fafafa;
+  --hover: #f6f6f6;
+  --active: #ededed;
+  --line: #e7e7e7;
+  --line-soft: #f0f0f0;
+  --line-strong: #d6d6d6;
   --fg: #0a0a0a;
-  --fg-2: #525252;
-  --fg-3: #6b6b6b;
+  --fg-2: #4a4a4a;
+  --fg-3: #737373;
   --fg-4: #a3a3a3;
   --inverse: #0a0a0a;
   --inverse-hover: #262626;
   --inverse-fg: #ffffff;
   --note: #fafafa;
   --note-line: #d4d4d4;
-  --focus: rgb(10 10 10 / 0.28);
+  --focus: rgb(10 10 10 / 0.14);
+  --focus-line: #a3a3a3;
   --ok: #16a34a;
   --warn: #d97706;
   --danger: #dc2626;
   --info: #525252;
   --danger-fg: #b91c1c;
-  --scrim: rgb(10 10 10 / 0.18);
-  --shadow-pop: 0 0 0 1px rgb(10 10 10 / 0.06), 0 2px 4px rgb(10 10 10 / 0.04), 0 12px 32px -8px rgb(10 10 10 / 0.16);
-  --shadow-float: 0 0 0 1px rgb(10 10 10 / 0.08), 0 8px 16px -4px rgb(10 10 10 / 0.1), 0 24px 48px -12px rgb(10 10 10 / 0.22);
+  --scrim: rgb(10 10 10 / 0.28);
+  --shadow-xs: 0 1px 2px rgb(10 10 10 / 0.04);
+  --shadow-pop: 0 4px 12px -2px rgb(10 10 10 / 0.08), 0 2px 4px rgb(10 10 10 / 0.04);
+  --shadow-float: 0 1px 2px rgb(10 10 10 / 0.04), 0 30px 70px -32px rgb(10 10 10 / 0.32);
 }
 
 .dark {
-  --canvas: #0a0a0a;
-  --surface: #0f0f0f;
-  --raised: #171717;
-  --sunken: #0a0a0a;
+  color-scheme: dark;
+  --chrome: #080808;
+  --chrome-hover: rgb(255 255 255 / 0.045);
+  --chrome-active: rgb(255 255 255 / 0.08);
+  --chrome-line: rgb(255 255 255 / 0.07);
+  --canvas: #080808;
+  --surface: #111111;
+  --raised: #191919;
+  --sunken: #0d0d0d;
   --hover: #1a1a1a;
-  --active: #222222;
+  --active: #232323;
   --line: #262626;
-  --line-soft: #1d1d1d;
-  --line-strong: #333333;
-  --fg: #fafafa;
-  --fg-2: #b4b4b4;
-  --fg-3: #8a8a8a;
-  --fg-4: #5c5c5c;
-  --inverse: #fafafa;
+  --line-soft: #1c1c1c;
+  --line-strong: #353535;
+  --fg: #f7f7f7;
+  --fg-2: #c4c4c4;
+  --fg-3: #8f8f8f;
+  --fg-4: #5f5f5f;
+  --inverse: #f7f7f7;
   --inverse-hover: #e4e4e4;
   --inverse-fg: #0a0a0a;
-  --note: #141414;
+  --note: #151515;
   --note-line: #3a3a3a;
-  --focus: rgb(255 255 255 / 0.32);
+  --focus: rgb(255 255 255 / 0.16);
+  --focus-line: #6b6b6b;
   --ok: #22c55e;
   --warn: #f59e0b;
   --danger: #ef4444;
   --info: #a3a3a3;
   --danger-fg: #f87171;
-  --scrim: rgb(0 0 0 / 0.55);
-  --shadow-pop: 0 0 0 1px rgb(255 255 255 / 0.07), 0 2px 4px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
-  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.08), 0 8px 16px -4px rgb(0 0 0 / 0.4), 0 24px 48px -12px rgb(0 0 0 / 0.7);
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px rgb(0 0 0 / 0.3);
+  --shadow-float: 0 30px 70px -32px rgb(0 0 0 / 0.8);
 }
 
 @theme inline {
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
 
+  --color-chrome: var(--chrome);
+  --color-chrome-hover: var(--chrome-hover);
+  --color-chrome-active: var(--chrome-active);
+  --color-chrome-line: var(--chrome-line);
+  --color-focus-line: var(--focus-line);
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-raised: var(--raised);
@@ -98,12 +118,15 @@
   --color-info: var(--info);
   --color-scrim: var(--scrim);
 
+  --shadow-xs: var(--shadow-xs);
   --shadow-pop: var(--shadow-pop);
   --shadow-float: var(--shadow-float);
 
   --radius-sm: 6px;
   --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
 
   --text-2xs: 11px;
   --text-2xs--line-height: 16px;
@@ -116,7 +139,11 @@
 
   --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 
-  --animate-pop-in: pop-in 140ms var(--ease-out-soft);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-pop-in: pop-in 160ms var(--ease-out-expo);
+  --animate-dialog-in: dialog-in 200ms var(--ease-out-expo);
+  --animate-card-float: card-float 700ms var(--ease-out-expo) both;
+  --animate-rise-in: rise-in 420ms var(--ease-out-expo) both;
   --animate-fade-in: fade-in 160ms ease-out;
   --animate-slide-in-right: slide-in-right 220ms var(--ease-out-soft);
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
@@ -124,8 +151,27 @@
 }
 
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(-2px) scale(0.98); }
+  from { opacity: 0; transform: translateY(-3px) scale(0.97); }
   to { opacity: 1; transform: none; }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate(-50%, 6px) scale(0.97); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes card-float {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes module-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
 @keyframes fade-in {
   from { opacity: 0; }
@@ -151,8 +197,7 @@
 @layer base {
   html {
     font-family: var(--font-sans);
-    font-size: 13px;
-    line-height: 20px;
+    font-size: 16px;
     color: var(--fg);
     background: var(--canvas);
     -webkit-font-smoothing: antialiased;
@@ -161,6 +206,8 @@
     font-feature-settings: "ss01", "cv11";
   }
   body {
+    font-size: 13px;
+    line-height: 20px;
     background: var(--canvas);
     min-height: 100dvh;
   }
@@ -205,13 +252,14 @@
     font-feature-settings: "zero";
     letter-spacing: -0.01em;
   }
+  /* Small tracked-uppercase eyebrow: section labels, stat labels, menu groups. */
   .label-caps {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 10px;
     line-height: 14px;
-    letter-spacing: 0.06em;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--fg-3);
+    color: var(--fg-4);
   }
   .skeleton {
     border-radius: 4px;

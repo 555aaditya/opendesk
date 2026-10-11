@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AtSign, Bell, CornerDownLeft, Hand, TimerOff, UserPlus } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api/endpoints";
 import type { Notification } from "@/lib/api/types";
 import { cn } from "@/lib/cn";
@@ -47,6 +48,7 @@ export function NotificationsButton() {
   const navigate = useNavigate();
   const { data, isLoading } = useQuery(q.notifications());
   const unread = data?.filter((n) => !n.read_at).length ?? 0;
+  const { t } = useTranslation("shell");
 
   const markRead = useMutation({
     mutationFn: (b: { ids?: string[]; all?: boolean }) => api.notifications.read(b),
@@ -76,31 +78,31 @@ export function NotificationsButton() {
     <Popover
       open={open}
       onOpenChange={setOpen}
-      side="top"
-      align="start"
-      className="w-[360px] p-0"
+      side="bottom"
+      align="end"
+      className="w-[380px] overflow-hidden p-0"
       trigger={
-        <Tooltip content="Notifications">
+        <Tooltip content={t("notifications.title")}>
           <button
             type="button"
-            aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
-            className="relative flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg data-[state=open]:bg-hover"
+            aria-label={unread ? t("notifications.unread", { count: unread }) : t("notifications.title")}
+            className="relative flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-chrome-hover hover:text-fg data-[state=open]:bg-chrome-active data-[state=open]:text-fg"
           >
             <Bell className="size-[15px]" />
-            {unread > 0 && <span className="absolute right-[5px] top-[5px] size-[7px] rounded-full bg-fg ring-2 ring-canvas" />}
+            {unread > 0 && <span className="absolute right-[5px] top-[5px] size-[7px] rounded-full bg-fg ring-2 ring-chrome" />}
           </button>
         </Tooltip>
       }
     >
-      <div className="flex h-10 items-center justify-between border-b border-line px-3">
-        <span className="text-[13px] font-medium">Notifications</span>
+      <div className="flex h-11 items-center justify-between border-b border-line px-3.5">
+        <span className="text-[13px] font-semibold tracking-[-0.01em]">{t("notifications.title")}</span>
         {unread > 0 && (
           <button
             type="button"
             onClick={() => markRead.mutate({ all: true })}
             className="rounded px-1.5 py-0.5 text-xs text-fg-3 hover:bg-hover hover:text-fg"
           >
-            Mark all read
+            {t("notifications.markAll")}
           </button>
         )}
       </div>
@@ -111,7 +113,7 @@ export function NotificationsButton() {
             <Skeleton className="h-3 w-1/2" />
           </div>
         ) : !data?.length ? (
-          <EmptyState compact lit={0} title="You're all caught up" description="Assignments, mentions and replies show up here." />
+          <EmptyState compact lit={0} title={t("notifications.empty")} description={t("notifications.emptyHint")} />
         ) : (
           data.map((n) => (
             <button

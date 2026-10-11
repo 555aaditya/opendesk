@@ -14,11 +14,11 @@ export function ConnectionIndicator({ className }: { className?: string }) {
   const status = useRealtime((s) => s.status);
   const c = copy[status];
   return (
-    <Tooltip content={c.label} side="top">
+    <Tooltip content={c.label} side="bottom">
       <span
         role="status"
         aria-label={c.label}
-        className={cn("inline-flex size-6 items-center justify-center rounded-md hover:bg-hover", className)}
+        className={cn("inline-flex size-6 items-center justify-center rounded-md hover:bg-chrome-hover", className)}
       >
         <span className="relative flex size-1.5">
           {c.pulse && <span className={cn("absolute inset-0 animate-ping rounded-full opacity-60", c.tone)} />}

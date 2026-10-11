@@ -6,29 +6,70 @@ import { ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
-/** The 48px bar at the top of a main panel. */
+/** The 48px bar at the top of a main panel: title, an optional subtitle, actions. */
 export function PageHeader({
   title,
   icon,
+  subtitle,
   children,
   actions,
   className,
 }: {
   title: ReactNode;
   icon?: ReactNode;
+  subtitle?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   className?: string;
 }) {
   return (
-    <header className={cn("flex h-12 shrink-0 items-center gap-3 border-b border-line px-4", className)}>
+    <header className={cn("flex h-12 shrink-0 items-center gap-3 border-b border-line bg-surface px-4 md:px-5", className)}>
       <div className="flex min-w-0 items-center gap-2">
         {icon && <span className="flex text-fg-3 [&_svg]:size-4">{icon}</span>}
-        <h1 className="truncate text-[13.5px] font-semibold tracking-[-0.01em]">{title}</h1>
+        <h1 className="truncate text-[13.5px] font-semibold tracking-[-0.015em]">{title}</h1>
+        {subtitle && (
+          <>
+            <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-line" />
+            <span className="truncate text-[12.5px] text-fg-3">{subtitle}</span>
+          </>
+        )}
       </div>
       {children && <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>}
       {actions && <div className={cn("flex shrink-0 items-center gap-1.5", !children && "ml-auto")}>{actions}</div>}
     </header>
+  );
+}
+
+/** Full-width strip of figures with vertical hairlines between cells. */
+export function StatStrip({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("grid grid-cols-2 border-b border-line md:auto-cols-fr md:grid-flow-col md:grid-cols-none [&>*:not(:last-child)]:md:border-r [&>*]:border-line", className)}>
+      {children}
+    </div>
+  );
+}
+
+export function Stat({ label, value, sub, extra }: { label: ReactNode; value: ReactNode; sub?: ReactNode; extra?: ReactNode }) {
+  return (
+    <div className="min-w-0 px-5 py-3.5 max-md:border-b max-md:odd:border-r">
+      <div className="flex items-center justify-between gap-2">
+        <span className="label-caps truncate">{label}</span>
+        {extra}
+      </div>
+      <div className="mt-1.5 text-[24px] font-light leading-none tracking-[-0.02em] tabular-nums text-fg">{value}</div>
+      {sub && <div className="mono mt-1.5 truncate text-[10.5px] text-fg-4">{sub}</div>}
+    </div>
+  );
+}
+
+/** A slim 36px toolbar inside a page body: an eyebrow, a count, actions. */
+export function SectionBar({ label, count, children, className }: { label: ReactNode; count?: ReactNode; children?: ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex min-h-9 shrink-0 items-center gap-2.5 border-b border-line-soft px-5 py-1", className)}>
+      <span className="label-caps">{label}</span>
+      {count !== undefined && <span className="mono text-[10.5px] tabular-nums text-fg-4">{count}</span>}
+      {children && <div className="ml-auto flex min-w-0 items-center gap-1.5">{children}</div>}
+    </div>
   );
 }
 
@@ -45,7 +86,10 @@ export function BackLink({ children, ...link }: { children: ReactNode } & React.
   );
 }
 
-/** A settings page: narrow, readable column with a title block. */
+/**
+ * A settings page: a continuous document. A title block, then sections
+ * separated by hairlines; rows inside a section sit in one bordered group.
+ */
 export function SettingsPage({
   title,
   description,
@@ -62,16 +106,18 @@ export function SettingsPage({
   wide?: boolean;
 }) {
   return (
-    <div className={cn("mx-auto w-full px-6 pb-24 pt-8 md:px-10", wide ? "max-w-[1040px]" : "max-w-[760px]")}>
-      {back && <div className="mb-3">{back}</div>}
-      <div className="mb-7 flex items-start justify-between gap-6">
-        <div className="min-w-0">
-          <h1 className="text-[20px] font-semibold leading-7 tracking-[-0.025em]">{title}</h1>
-          {description && <p className="mt-1 max-w-[560px] text-[13px] leading-5 text-fg-3">{description}</p>}
+    <div className="w-full pb-24">
+      <div className="border-b border-line">
+        <div className={cn("flex flex-wrap items-start gap-4 px-5 pb-5 pt-6 md:px-8 md:pt-7", wide ? "max-w-[1120px]" : "max-w-[880px]")}>
+          <div className="min-w-0 flex-1 basis-60">
+            {back && <div className="mb-2">{back}</div>}
+            <h1 className="text-[17px] font-semibold leading-6 tracking-[-0.025em]">{title}</h1>
+            {description && <p className="mt-1 max-w-[600px] text-[12.5px] leading-[19px] text-fg-3">{description}</p>}
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-      <div className="flex flex-col gap-8">{children}</div>
+      <div className={cn("flex flex-col gap-9 px-5 pt-7 md:px-8", wide ? "max-w-[1120px]" : "max-w-[880px]")}>{children}</div>
     </div>
   );
 }
@@ -96,21 +142,21 @@ export function Section({
   danger?: boolean;
 }) {
   return (
-    <section className={className}>
+    <section className={cn("animate-rise-in", className)}>
       {(title || actions) && (
-        <div className="mb-2.5 flex items-end justify-between gap-4">
+        <div className="mb-3 flex items-end justify-between gap-4">
           <div className="min-w-0">
-            {title && <h2 className={cn("text-[13.5px] font-semibold tracking-[-0.01em]", danger && "text-danger-fg")}>{title}</h2>}
-            {description && <p className="mt-0.5 text-[12.5px] text-fg-3">{description}</p>}
+            {title && <h2 className={cn("text-[13px] font-semibold tracking-[-0.01em]", danger && "text-danger-fg")}>{title}</h2>}
+            {description && <p className="mt-0.5 text-[12px] leading-[18px] text-fg-3">{description}</p>}
           </div>
-          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+          {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
         </div>
       )}
       <div
         className={cn(
-          "rounded-lg border border-line bg-surface",
-          !flush && "px-4 py-1",
-          danger && "border-[color-mix(in_srgb,var(--danger)_25%,var(--line))]",
+          "overflow-hidden rounded-[10px] border border-line bg-surface shadow-xs",
+          !flush && "px-4 py-0.5",
+          danger && "border-[color-mix(in_srgb,var(--danger)_28%,var(--line))]",
         )}
       >
         {children}
@@ -140,19 +186,19 @@ export function Row({
     <div
       className={cn(
         "flex gap-4 border-b border-line-soft py-3.5 last:border-0",
-        stack ? "flex-col gap-2.5" : "items-center justify-between",
+        stack ? "flex-col gap-2.5" : "flex-col sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
       <div className="min-w-0">
         {htmlFor ? (
-          <label htmlFor={htmlFor} className="text-[13px] font-medium text-fg">
+          <label htmlFor={htmlFor} className="text-[12.5px] font-medium text-fg">
             {label}
           </label>
         ) : (
-          <div className="text-[13px] font-medium text-fg">{label}</div>
+          <div className="text-[12.5px] font-medium text-fg">{label}</div>
         )}
-        {description && <div className="mt-0.5 text-[12.5px] leading-[18px] text-fg-3">{description}</div>}
+        {description && <div className="mt-0.5 text-[12px] leading-[18px] text-fg-3">{description}</div>}
       </div>
       {children && <div className={cn(stack ? "w-full" : "flex shrink-0 items-center gap-2")}>{children}</div>}
     </div>
@@ -182,7 +228,7 @@ export function ListRow({
       }}
       className={cn(
         "group flex min-h-12 items-center gap-3 border-b border-line-soft px-4 py-2.5 last:border-0",
-        onClick && "cursor-pointer transition-colors hover:bg-hover/60",
+        onClick && "cursor-pointer transition-colors hover:bg-sunken",
         className,
       )}
     >
@@ -194,7 +240,7 @@ export function ListRow({
 /** Shown in place of a settings page to roles that can't manage it. */
 export function NoAccess({ what = "these settings" }: { what?: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-line px-6 py-10 text-center">
+    <div className="rounded-[10px] border border-dashed border-line px-6 py-12 text-center">
       <p className="text-[13px] font-medium">Admins only</p>
       <p className="mt-1 text-[12.5px] text-fg-3">Ask a workspace admin if you need to change {what}.</p>
     </div>

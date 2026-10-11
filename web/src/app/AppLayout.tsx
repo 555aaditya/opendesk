@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useNavigate } from "@tanstack/react-router";
-import { Menu as MenuIcon } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Dialog as D } from "radix-ui";
 import { identify } from "@/lib/analytics";
@@ -11,9 +10,11 @@ import { useUpgrade } from "@/lib/upgrade";
 import { toast } from "@/components/ui/toast";
 import type { Notification } from "@/lib/api/types";
 import { Sidebar } from "./Sidebar";
+import { AppHeader } from "./AppHeader";
+import { cn } from "@/lib/cn";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsSheet } from "./ShortcutsSheet";
-import { shell, useShell } from "./shellStore";
+import { shell, toggleNav, useNav, useShell } from "./shellStore";
 
 const NewTicketDialog = lazy(() => import("@/components/tickets/NewTicketDialog"));
 const UpgradeDialog = lazy(() => import("@/components/billing/UpgradeDialog"));
@@ -77,6 +78,7 @@ export function AppLayout() {
   const newTicketOpen = useShell((s) => s.newTicketOpen);
   const sidebarOpen = useShell((s) => s.sidebarOpen);
   const upgradeReason = useUpgrade((s) => s.reason);
+  const collapsed = useNav((s) => s.collapsed);
   // Logging out, or deleting or leaving the last workspace, clears the session
   // before the router leaves the app; render nothing in between rather than
   // pages that read the signed-in user and the current workspace.
@@ -87,6 +89,7 @@ export function AppLayout() {
     "?": () => shell.shortcuts(),
     "shift+?": () => shell.shortcuts(),
     c: () => shell.newTicket(),
+    b: () => toggleNav(),
     "g i": () => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } }),
     "g m": () => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: undefined } }),
     "g c": () => void navigate({ to: "/contacts/{-$contactId}", params: { contactId: undefined } }),
@@ -98,32 +101,33 @@ export function AppLayout() {
   if (!authed) return null;
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-canvas text-fg">
-      <aside className="hidden w-[232px] shrink-0 md:flex">
-        <Sidebar />
-      </aside>
+    <div className="fixed inset-0 flex flex-col bg-chrome text-fg">
+      <AppHeader />
+      <div className="flex min-h-0 flex-1">
+        <aside className={cn("hidden shrink-0 transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex", collapsed ? "w-14" : "w-60")}>
+          <Sidebar />
+        </aside>
 
-      {/* Phone: the sidebar is a sheet. */}
-      <D.Root open={sidebarOpen} onOpenChange={(o) => shell.sidebar(o)}>
-        <D.Portal>
-          <D.Overlay className="fixed inset-0 z-40 bg-scrim md:hidden" />
-          <D.Content aria-describedby={undefined} className="fixed inset-y-0 left-0 z-40 w-[264px] bg-canvas shadow-float outline-none data-[state=open]:animate-fade-in md:hidden" onClick={(e) => (e.target as HTMLElement).closest("a") && shell.sidebar(false)}>
-            <D.Title className="sr-only">Navigation</D.Title>
-            <Sidebar />
-          </D.Content>
-        </D.Portal>
-      </D.Root>
+        {/* Phone: the sidebar is a sheet. */}
+        <D.Root open={sidebarOpen} onOpenChange={(o) => shell.sidebar(o)}>
+          <D.Portal>
+            <D.Overlay className="fixed inset-0 z-40 bg-scrim data-[state=open]:animate-fade-in md:hidden" />
+            <D.Content
+              aria-describedby={undefined}
+              className="fixed inset-y-0 left-0 z-40 flex w-[272px] flex-col bg-chrome pt-2 shadow-float outline-none data-[state=open]:animate-fade-in md:hidden"
+              onClick={(e) => (e.target as HTMLElement).closest("a") && shell.sidebar(false)}
+            >
+              <D.Title className="sr-only">Navigation</D.Title>
+              <Sidebar drawer />
+            </D.Content>
+          </D.Portal>
+        </D.Root>
 
-      <main className="relative flex min-w-0 flex-1 flex-col md:py-2 md:pr-2">
-        <div className="flex h-11 shrink-0 items-center border-b border-line bg-surface px-2 md:hidden">
-          <button type="button" aria-label="Open navigation" onClick={() => shell.sidebar(true)} className="flex size-8 items-center justify-center rounded-md text-fg-2 hover:bg-hover">
-            <MenuIcon className="size-4" />
-          </button>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface md:rounded-[10px] md:border md:border-line md:shadow-[0_1px_2px_rgb(0_0_0/0.03)]">
+        {/* The work panel: pure white, its inner corner softened where it meets the chrome. */}
+        <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden border-t border-line bg-surface md:rounded-tl-2xl md:border-l">
           <Outlet />
-        </div>
-      </main>
+        </main>
+      </div>
 
       <CommandPalette />
       <ShortcutsSheet />

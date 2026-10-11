@@ -5,6 +5,27 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
+import { motion } from "motion/react";
+import {
+  Bot,
+  Building2,
+  CreditCard,
+  Gauge,
+  Inbox,
+  KeyRound,
+  Layers,
+  ListChecks,
+  MessageCircle,
+  MessageSquareText,
+  Shield,
+  Tag,
+  User,
+  Users,
+  UsersRound,
+  Webhook,
+  Workflow,
+} from "lucide-react";
+import type { ReactNode } from "react";
 
 type NavPath =
   | "/settings/profile"
@@ -25,44 +46,44 @@ type NavPath =
   | "/settings/billing"
   | "/settings/ai";
 
-const groups: { title: string; items: { to: NavPath; label: string }[] }[] = [
+const groups: { title: string; items: { to: NavPath; label: string; icon: ReactNode }[] }[] = [
   {
     title: "Account",
     items: [
-      { to: "/settings/profile", label: "Profile" },
-      { to: "/settings/security", label: "Security" },
+      { to: "/settings/profile", label: "Profile", icon: <User /> },
+      { to: "/settings/security", label: "Security", icon: <Shield /> },
     ],
   },
   {
     title: "Workspace",
     items: [
-      { to: "/settings/workspace", label: "General" },
-      { to: "/settings/members", label: "Members" },
-      { to: "/settings/teams", label: "Teams" },
-      { to: "/settings/mailboxes", label: "Mailboxes" },
-      { to: "/settings/billing", label: "Plan and billing" },
-      { to: "/settings/ai", label: "AI" },
+      { to: "/settings/workspace", label: "General", icon: <Building2 /> },
+      { to: "/settings/members", label: "Members", icon: <Users /> },
+      { to: "/settings/teams", label: "Teams", icon: <UsersRound /> },
+      { to: "/settings/mailboxes", label: "Mailboxes", icon: <Inbox /> },
+      { to: "/settings/billing", label: "Plan and billing", icon: <CreditCard /> },
+      { to: "/settings/ai", label: "AI", icon: <Bot /> },
     ],
   },
   {
     title: "Inbox",
     items: [
-      { to: "/settings/tags", label: "Tags" },
-      { to: "/settings/saved-replies", label: "Saved replies" },
-      { to: "/settings/views", label: "Views" },
-      { to: "/settings/sla", label: "SLA policies" },
-      { to: "/settings/automations", label: "Automations" },
+      { to: "/settings/tags", label: "Tags", icon: <Tag /> },
+      { to: "/settings/saved-replies", label: "Saved replies", icon: <MessageSquareText /> },
+      { to: "/settings/views", label: "Views", icon: <Layers /> },
+      { to: "/settings/sla", label: "SLA policies", icon: <Gauge /> },
+      { to: "/settings/automations", label: "Automations", icon: <Workflow /> },
     ],
   },
-  { title: "Channels", items: [{ to: "/settings/widget", label: "Chat widget" }] },
+  { title: "Channels", items: [{ to: "/settings/widget", label: "Chat widget", icon: <MessageCircle /> }] },
   {
     title: "Developers",
     items: [
-      { to: "/settings/api-keys", label: "API keys" },
-      { to: "/settings/webhooks", label: "Webhooks" },
+      { to: "/settings/api-keys", label: "API keys", icon: <KeyRound /> },
+      { to: "/settings/webhooks", label: "Webhooks", icon: <Webhook /> },
     ],
   },
-  { title: "Admin", items: [{ to: "/settings/audit-log", label: "Audit log" }] },
+  { title: "Admin", items: [{ to: "/settings/audit-log", label: "Audit log", icon: <ListChecks /> }] },
 ];
 
 /**
@@ -85,27 +106,35 @@ export default function SettingsLayout() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-      <nav
-        aria-label="Settings"
-        className="hidden w-[220px] shrink-0 overflow-y-auto border-r border-line px-2 pb-6 pt-4 md:block"
-      >
-        <div className="px-2 pb-2 text-[13.5px] font-semibold tracking-[-0.01em]">Settings</div>
-        {groups.map((g) => (
-          <div key={g.title} className="mt-3">
-            <div className="px-2 pb-1 text-[11.5px] font-medium text-fg-3">{g.title}</div>
+      <nav aria-label="Settings" className="hidden w-[232px] shrink-0 overflow-y-auto border-r border-line px-2.5 pb-6 pt-4 md:block">
+        {groups.map((g, gi) => (
+          <div key={g.title} className={gi ? "mt-4" : undefined}>
+            <div className="label-caps px-2 pb-1">{g.title}</div>
             <div className="flex flex-col gap-px">
-              {g.items.map((i) => (
-                <Link
-                  key={i.to}
-                  to={i.to}
-                  className={cn(
-                    "flex h-7 items-center rounded-md px-2 text-[13px] text-fg-2 outline-none transition-colors duration-75 hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)]",
-                  )}
-                  activeProps={{ className: "bg-active !text-fg font-medium" }}
-                >
-                  {i.label}
-                </Link>
-              ))}
+              {g.items.map((i) => {
+                const active = current === i.to;
+                return (
+                  <Link
+                    key={i.to}
+                    to={i.to}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "group relative flex h-7 items-center gap-2.5 rounded-md px-2 text-[12.5px] outline-none transition-colors focus-visible:shadow-[0_0_0_2px_var(--focus)] [&_svg]:relative [&_svg]:z-10 [&_svg]:size-[14px] [&_svg]:shrink-0",
+                      active ? "font-medium text-fg [&_svg]:text-fg-2" : "text-fg-2 hover:bg-hover hover:text-fg [&_svg]:text-fg-4 hover:[&_svg]:text-fg-3",
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="settings-active"
+                        className="absolute inset-0 rounded-md bg-active"
+                        transition={{ type: "spring", stiffness: 520, damping: 42 }}
+                      />
+                    )}
+                    {i.icon}
+                    <span className="relative z-10 truncate">{i.label}</span>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -121,7 +150,9 @@ export default function SettingsLayout() {
       </div>
 
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-        <Outlet />
+        <div key={current ?? path} className="animate-rise-in">
+          <Outlet />
+        </div>
       </div>
     </div>
   );

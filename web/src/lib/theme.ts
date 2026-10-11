@@ -11,7 +11,8 @@ function read(): ThemePref {
   } catch {
     /* storage unavailable */
   }
-  return "system";
+  // White first: dark only when chosen, or when "system" is chosen and the OS is dark.
+  return "light";
 }
 
 let current: ThemePref = read();

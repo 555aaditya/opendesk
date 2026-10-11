@@ -1,39 +1,46 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { Slot } from "radix-ui";
+import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
 import { Spinner } from "./spinner";
 
-const variants = {
-  primary:
-    "bg-inverse text-inverse-fg hover:bg-inverse-hover shadow-[inset_0_1px_0_rgb(255_255_255/0.1),0_1px_2px_rgb(0_0_0/0.12)] disabled:opacity-40",
-  secondary:
-    "bg-surface text-fg border border-line hover:bg-hover hover:border-line-strong shadow-[0_1px_1px_rgb(0_0_0/0.03)] disabled:opacity-50",
-  ghost: "text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-40",
-  subtle: "bg-hover text-fg hover:bg-active disabled:opacity-40",
-  danger:
-    "bg-surface text-danger-fg border border-line hover:border-[color-mix(in_srgb,var(--danger)_40%,var(--line))] hover:bg-[color-mix(in_srgb,var(--danger)_6%,var(--surface))] disabled:opacity-50",
-  "danger-solid": "bg-danger text-white hover:opacity-90 disabled:opacity-40",
-} as const;
+export const buttonVariants = cva(
+  "relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium outline-none transition-[background-color,border-color,color,box-shadow,opacity,transform] duration-150 ease-out active:scale-[0.985] disabled:pointer-events-none disabled:cursor-not-allowed focus-visible:shadow-[0_0_0_1px_var(--surface),0_0_0_3px_var(--focus)] [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  {
+    variants: {
+      variant: {
+        primary: "bg-inverse text-inverse-fg hover:bg-inverse-hover disabled:opacity-40",
+        secondary:
+          "border border-line bg-surface text-fg shadow-xs hover:border-line-strong hover:bg-hover disabled:opacity-50",
+        ghost: "text-fg-2 hover:bg-hover hover:text-fg disabled:opacity-40",
+        subtle: "bg-hover text-fg hover:bg-active disabled:opacity-40",
+        danger:
+          "border border-line bg-surface text-danger-fg shadow-xs hover:border-[color-mix(in_srgb,var(--danger)_40%,var(--line))] hover:bg-[color-mix(in_srgb,var(--danger)_6%,var(--surface))] disabled:opacity-50",
+        "danger-solid": "bg-danger text-white hover:bg-[color-mix(in_srgb,var(--danger)_88%,black)] disabled:opacity-40",
+        link: "h-auto px-0 text-fg underline-offset-4 hover:underline active:scale-100",
+      },
+      size: {
+        xs: "h-6 gap-1 rounded-[6px] px-2 text-xs [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1.5 rounded-md px-2.5 text-[12.5px] [&_svg:not([class*='size-'])]:size-3.5",
+        md: "h-8 gap-1.5 rounded-md px-3 text-[13px] [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-10 gap-2 rounded-lg px-4 text-[13.5px] [&_svg:not([class*='size-'])]:size-4",
+      },
+    },
+    defaultVariants: { variant: "secondary", size: "sm" },
+  },
+);
 
-const sizes = {
-  xs: "h-6 px-2 text-xs gap-1 rounded-[6px]",
-  sm: "h-7 px-2.5 text-[12.5px] gap-1.5 rounded-[7px]",
-  md: "h-8 px-3 text-sm gap-1.5 rounded-md",
-  lg: "h-9 px-4 text-sm gap-2 rounded-md",
-} as const;
+const iconSizes = { xs: "size-6", sm: "size-7", md: "size-8", lg: "size-10" } as const;
 
-const iconSizes = { xs: "size-6", sm: "size-7", md: "size-8", lg: "size-9" } as const;
-
-export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: keyof typeof variants;
-  size?: keyof typeof sizes;
-  icon?: ReactNode;
-  iconRight?: ReactNode;
-  loading?: boolean;
-  asChild?: boolean;
-  /** Square, icon-only. Pass aria-label. */
-  square?: boolean;
-};
+export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
+  VariantProps<typeof buttonVariants> & {
+    icon?: ReactNode;
+    iconRight?: ReactNode;
+    loading?: boolean;
+    asChild?: boolean;
+    /** Square, icon-only. Pass aria-label. */
+    square?: boolean;
+  };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "secondary", size = "sm", icon, iconRight, loading, asChild, square, className, children, disabled, type, ...rest },
@@ -45,13 +52,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={asChild ? undefined : (type ?? "button")}
       disabled={disabled || loading}
-      className={cn(
-        "relative inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium transition-[background-color,border-color,color,box-shadow,opacity] duration-100 disabled:cursor-not-allowed [&_svg]:shrink-0",
-        variants[variant],
-        sizes[size],
-        square && cn(iconSizes[size], "px-0"),
-        className,
-      )}
+      aria-busy={loading || undefined}
+      className={cn(buttonVariants({ variant, size }), square && cn(iconSizes[size ?? "sm"], "px-0"), className)}
       {...rest}
     >
       {asChild ? (

@@ -1,0 +1,47 @@
+{
+  "nav": {
+    "main": "Main",
+    "inbox": "Inbox",
+    "views": "Views",
+    "workspace": "Workspace",
+    "contacts": "Contacts",
+    "kb": "Knowledge base",
+    "reports": "Reports",
+    "settings": "Settings",
+    "manageViews": "Manage views",
+    "createView": "Create a view",
+    "collapse": "Collapse",
+    "expand": "Expand sidebar",
+    "open": "Open navigation"
+  },
+  "workspaces": {
+    "title": "Workspaces",
+    "create": "Create workspace",
+    "settings": "Workspace settings"
+  },
+  "theme": {
+    "title": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "account": {
+    "menu": "Account menu",
+    "profile": "Profile",
+    "shortcuts": "Keyboard shortcuts",
+    "logout": "Log out"
+  },
+  "breadcrumb": "Breadcrumb",
+  "search": {
+    "open": "Search and commands",
+    "label": "Search"
+  },
+  "newTicket": "New ticket",
+  "notifications": {
+    "title": "Notifications",
+    "unread": "Notifications, {{count}} unread",
+    "markAll": "Mark all read",
+    "empty": "You're all caught up",
+    "emptyHint": "Assignments, mentions and replies show up here."
+  }
+}

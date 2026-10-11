@@ -1,9 +1,14 @@
+// The sidebar: sits on the chrome beside the white work panel. Small
+// tracked-uppercase section labels, 28px rows, hairlines between groups, and an
+// icon-only rail (`b` or the Collapse row) that keeps every row reachable.
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   BarChart3,
   BookOpen,
   Check,
+  ChevronDown,
   ChevronsUpDown,
   CircleCheck,
   CircleDashed,
@@ -14,29 +19,28 @@ import {
   LogOut,
   Monitor,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
-  Search,
   Settings,
   ShieldAlert,
-  SquarePen,
   Sun,
   User,
   Users,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Avatar } from "@/components/ui/avatar";
 import { Kbd } from "@/components/ui/kbd";
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuSub, MenuTrigger, MenuCheckItem } from "@/components/ui/menu";
+import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/menu";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/cn";
 import { folders, type FolderId } from "@/lib/folders";
 import { q } from "@/lib/queries";
 import { atLeast, selectWorkspace, signOut, useRole, useSession, useWorkspace } from "@/lib/session";
-import { useTheme } from "@/lib/theme";
+import { useTheme, type ThemePref } from "@/lib/theme";
 import { resetAnalytics } from "@/lib/analytics";
-import { shell } from "./shellStore";
-import { ConnectionIndicator } from "./ConnectionIndicator";
-import { NotificationsButton } from "./Notifications";
+import { shell, toggleNav, useNav } from "./shellStore";
 
 const folderIcons: Record<FolderId, ReactNode> = {
   unassigned: <CircleDashed />,
@@ -47,83 +51,133 @@ const folderIcons: Record<FolderId, ReactNode> = {
   spam: <ShieldAlert />,
 };
 
-const navItem =
-  "group flex h-7 items-center gap-2 rounded-md px-2 text-[13px] text-fg-2 outline-none transition-colors duration-75 hover:bg-hover hover:text-fg focus-visible:shadow-[0_0_0_2px_var(--focus)] [&_svg]:size-[15px] [&_svg]:shrink-0 [&_svg]:text-fg-3 [&_svg]:transition-colors";
-const navActive = "bg-active !text-fg font-medium [&_svg]:!text-fg";
+// The two row shapes share one element so the icon never moves while the label
+// fades and the column narrows.
+const rowBase =
+  "group relative flex items-center rounded-md text-left text-[12.5px] outline-none transition-[width,background-color,color] duration-200 ease-out focus-visible:shadow-[0_0_0_2px_var(--focus)] motion-reduce:transition-none [&>svg]:size-[15px] [&>svg]:shrink-0 [&>svg]:transition-colors";
+const rowShape = (rail: boolean) => (rail ? "mx-3 h-8 w-8 justify-center" : "mx-2.5 h-7 w-[calc(100%-1.25rem)] gap-2.5 px-2");
+const rowIdle = "text-fg-2 hover:bg-chrome-hover hover:text-fg [&>svg]:text-fg-3 hover:[&>svg]:text-fg-2";
+const rowActive = "bg-chrome-active text-fg font-medium [&>svg]:text-fg";
 
-function Count({ n }: { n: number | null | undefined }) {
-  if (n === null || n === undefined) return null;
-  return <span className="mono ml-auto text-[11px] tabular-nums text-fg-3 group-data-[status=active]:text-fg-2">{n > 999 ? "999+" : n}</span>;
+function NavTip({ rail, label, children }: { rail: boolean; label: string; children: React.ReactElement }) {
+  if (!rail) return children;
+  return (
+    <Tooltip content={label} side="right">
+      {children}
+    </Tooltip>
+  );
 }
 
-function SectionLabel({ children, action }: { children: ReactNode; action?: ReactNode }) {
+function Count({ n, rail }: { n: number | null | undefined; rail: boolean }) {
+  if (n === null || n === undefined || rail) return null;
+  return <span className="mono ml-auto text-[11px] tabular-nums text-fg-4 group-data-[status=active]:text-fg-2">{n > 999 ? "999+" : n}</span>;
+}
+
+function Label({ children, rail }: { children: ReactNode; rail: boolean }) {
+  return <span className={cn("min-w-0 flex-1 truncate transition-opacity duration-150", rail && "sr-only")}>{children}</span>;
+}
+
+function Section({
+  id,
+  label,
+  rail,
+  action,
+  first,
+  children,
+}: {
+  id: string;
+  label: string;
+  rail: boolean;
+  action?: ReactNode;
+  first?: boolean;
+  children: ReactNode;
+}) {
+  const key = `od-nav-fold-${id}`;
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(key) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setFolded(!folded);
+    try {
+      localStorage.setItem(key, folded ? "0" : "1");
+    } catch {
+      /* storage unavailable */
+    }
+  };
   return (
-    <div className="group/section flex h-7 items-center justify-between px-2 pt-2">
-      <span className="text-[11.5px] font-medium text-fg-3">{children}</span>
-      {action}
+    <div className={cn(!first && "mt-5")}>
+      {!rail && (
+        <div className="group/section mx-2.5 mb-0.5 flex h-6 items-center px-2">
+          <button
+            type="button"
+            aria-expanded={!folded}
+            onClick={toggle}
+            className="label-caps flex min-w-0 flex-1 items-center gap-1 text-left outline-none transition-colors hover:text-fg-2 focus-visible:text-fg"
+          >
+            {label}
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                "size-3 shrink-0 transition-[transform,opacity] duration-200",
+                folded ? "-rotate-90 opacity-100" : "opacity-0 group-hover/section:opacity-100",
+              )}
+            />
+          </button>
+          {action}
+        </div>
+      )}
+      {(!folded || rail) && <div className="flex flex-col gap-px">{children}</div>}
     </div>
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ drawer }: { drawer?: boolean }) {
   const { data: counts } = useQuery(q.counts());
   const { data: views } = useQuery(q.views());
   const role = useRole();
+  const collapsed = useNav((s) => s.collapsed);
+  const rail = collapsed && !drawer;
+  const { t } = useTranslation("shell");
 
   return (
-    <nav aria-label="Main" className="flex h-full w-full flex-col">
-      <div className="flex items-center gap-1 px-2 pb-2 pt-2.5">
-        <WorkspaceSwitcher />
-        <Tooltip content="Search" shortcut="mod k">
-          <button
-            type="button"
-            aria-label="Search and commands"
-            onClick={() => shell.palette()}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-fg-3 hover:bg-hover hover:text-fg"
-          >
-            <Search className="size-[15px]" />
-          </button>
-        </Tooltip>
-        {atLeast(role, "agent") && (
-          <Tooltip content="New ticket" shortcut="c">
-            <button
-              type="button"
-              aria-label="New ticket"
-              onClick={() => shell.newTicket()}
-              className="flex size-7 shrink-0 items-center justify-center rounded-md border border-line bg-surface text-fg-2 shadow-[0_1px_1px_rgb(0_0_0/0.04)] hover:border-line-strong hover:text-fg"
-            >
-              <SquarePen className="size-[14px]" />
-            </button>
-          </Tooltip>
-        )}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
-        <SectionLabel>Inbox</SectionLabel>
-        <div className="flex flex-col gap-px">
+    <nav aria-label={t("nav.main")} className="flex h-full w-full flex-col">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
+        <Section id="inbox" label={t("nav.inbox")} rail={rail} first>
           {folders.map((f) => (
-            <Link
-              key={f.id}
-              to="/inbox/$folder/{-$ticketId}"
-              params={{ folder: f.id, ticketId: undefined }}
-              className={navItem}
-              activeProps={{ className: navActive, "data-status": "active" } as Record<string, string>}
-            >
-              {folderIcons[f.id]}
-              <span className="truncate">{f.label}</span>
-              {counts && f.id !== "solved" && f.id !== "spam" && <Count n={f.count(counts)} />}
-            </Link>
+            <NavTip key={f.id} rail={rail} label={f.label}>
+              <Link
+                to="/inbox/$folder/{-$ticketId}"
+                params={{ folder: f.id, ticketId: undefined }}
+                className={cn(rowBase, rowShape(rail), rowIdle)}
+                activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
+                aria-label={rail ? f.label : undefined}
+              >
+                {folderIcons[f.id]}
+                <Label rail={rail}>{f.label}</Label>
+                {counts && f.id !== "solved" && f.id !== "spam" && <Count n={f.count(counts)} rail={rail} />}
+                {rail && counts && f.id === "unassigned" && (f.count(counts) ?? 0) > 0 && (
+                  <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />
+                )}
+              </Link>
+            </NavTip>
           ))}
-        </div>
+        </Section>
 
-        <SectionLabel
+        <Section
+          id="views"
+          label={t("nav.views")}
+          rail={rail}
           action={
             atLeast(role, "agent") ? (
-              <Tooltip content="Manage views">
+              <Tooltip content={t("nav.manageViews")}>
                 <Link
                   to="/settings/views"
-                  aria-label="Manage views"
-                  className="flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100"
+                  aria-label={t("nav.manageViews")}
+                  className="flex size-5 items-center justify-center rounded text-fg-4 opacity-0 transition-opacity hover:bg-chrome-hover hover:text-fg group-hover/section:opacity-100 focus-visible:opacity-100"
                 >
                   <Plus className="size-3.5" />
                 </Link>
@@ -131,84 +185,112 @@ export function Sidebar() {
             ) : undefined
           }
         >
-          Views
-        </SectionLabel>
-        <div className="flex flex-col gap-px">
           {views?.length ? (
             [...views]
               .sort((a, b) => a.position - b.position)
               .map((v) => (
-                <Link
-                  key={v.id}
-                  to="/views/$viewId/{-$ticketId}"
-                  params={{ viewId: v.id, ticketId: undefined }}
-                  className={navItem}
-                  activeProps={{ className: navActive, "data-status": "active" } as Record<string, string>}
-                >
-                  <Layers />
-                  <span className="truncate">{v.name}</span>
-                  <Count n={counts?.views?.[v.id]} />
-                </Link>
+                <NavTip key={v.id} rail={rail} label={v.name}>
+                  <Link
+                    to="/views/$viewId/{-$ticketId}"
+                    params={{ viewId: v.id, ticketId: undefined }}
+                    className={cn(rowBase, rowShape(rail), rowIdle)}
+                    activeProps={{ className: rowActive, "data-status": "active" } as Record<string, string>}
+                    aria-label={rail ? v.name : undefined}
+                  >
+                    <Layers />
+                    <Label rail={rail}>{v.name}</Label>
+                    <Count n={counts?.views?.[v.id]} rail={rail} />
+                  </Link>
+                </NavTip>
               ))
           ) : (
-            <Link to="/settings/views" className={cn(navItem, "text-fg-4")}>
-              <Plus />
-              <span>Create a view</span>
-            </Link>
+            <NavTip rail={rail} label={t("nav.createView")}>
+              <Link to="/settings/views" className={cn(rowBase, rowShape(rail), rowIdle, "text-fg-3")}>
+                <Plus />
+                <Label rail={rail}>{t("nav.createView")}</Label>
+              </Link>
+            </NavTip>
           )}
-        </div>
+        </Section>
 
-        <div className="my-2.5 h-px bg-line-soft" />
-
-        <div className="flex flex-col gap-px">
-          <Link to="/contacts/{-$contactId}" params={{ contactId: undefined }} className={navItem} activeProps={{ className: navActive }}>
-            <Users />
-            Contacts
-          </Link>
-          <Link to="/kb" className={navItem} activeProps={{ className: navActive }}>
-            <BookOpen />
-            Knowledge base
-          </Link>
-          <Link to="/reports" className={navItem} activeProps={{ className: navActive }}>
-            <BarChart3 />
-            Reports
-          </Link>
-          <Link to="/settings" className={navItem} activeProps={{ className: navActive }}>
-            <Settings />
-            Settings
-          </Link>
-        </div>
+        <Section id="workspace" label={t("nav.workspace")} rail={rail}>
+          <NavTip rail={rail} label={t("nav.contacts")}>
+            <Link
+              to="/contacts/{-$contactId}"
+              params={{ contactId: undefined }}
+              className={cn(rowBase, rowShape(rail), rowIdle)}
+              activeProps={{ className: rowActive }}
+              aria-label={rail ? t("nav.contacts") : undefined}
+            >
+              <Users />
+              <Label rail={rail}>{t("nav.contacts")}</Label>
+            </Link>
+          </NavTip>
+          <NavTip rail={rail} label={t("nav.kb")}>
+            <Link to="/kb" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.kb") : undefined}>
+              <BookOpen />
+              <Label rail={rail}>{t("nav.kb")}</Label>
+            </Link>
+          </NavTip>
+          <NavTip rail={rail} label={t("nav.reports")}>
+            <Link to="/reports" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.reports") : undefined}>
+              <BarChart3 />
+              <Label rail={rail}>{t("nav.reports")}</Label>
+            </Link>
+          </NavTip>
+        </Section>
       </div>
 
-      <div className="flex items-center gap-1 border-t border-line-soft px-2 py-2">
-        <UserMenu />
-        <ConnectionIndicator />
-        <NotificationsButton />
+      <div className="flex shrink-0 flex-col gap-px py-1.5">
+        <NavTip rail={rail} label={t("nav.settings")}>
+          <Link to="/settings" className={cn(rowBase, rowShape(rail), rowIdle)} activeProps={{ className: rowActive }} aria-label={rail ? t("nav.settings") : undefined}>
+            <Settings />
+            <Label rail={rail}>{t("nav.settings")}</Label>
+          </Link>
+        </NavTip>
+        {!drawer && (
+          <Tooltip content={rail ? t("nav.expand") : t("nav.collapse")} shortcut="b" side="right">
+            <button
+              type="button"
+              aria-label={rail ? t("nav.expand") : t("nav.collapse")}
+              onClick={() => toggleNav()}
+              className={cn(rowBase, rowShape(rail), rowIdle, "hidden md:flex")}
+            >
+              {rail ? <PanelLeftOpen /> : <PanelLeftClose />}
+              <Label rail={rail}>{t("nav.collapse")}</Label>
+            </button>
+          </Tooltip>
+        )}
+      </div>
+
+      <div className="shrink-0 border-t border-chrome-line">
+        <UserMenu rail={rail} />
       </div>
     </nav>
   );
 }
 
-function WorkspaceSwitcher() {
+export function WorkspaceSwitcher() {
   const ws = useWorkspace();
   const memberships = useSession((s) => s.memberships);
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const { t } = useTranslation("shell");
   if (!ws) return null;
   return (
     <Menu>
       <MenuTrigger asChild>
         <button
           type="button"
-          className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-left outline-none hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-hover"
+          className="group flex h-8 min-w-0 max-w-[220px] items-center gap-2 rounded-md pl-1 pr-1.5 text-left outline-none transition-colors hover:bg-chrome-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-chrome-hover"
         >
           <WorkspaceGlyph name={ws.name} />
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.01em]">{ws.name}</span>
-          <ChevronsUpDown className="size-3.5 shrink-0 text-fg-4" />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-fg">{ws.name}</span>
+          <ChevronsUpDown className="size-3.5 shrink-0 text-fg-4 transition-colors group-hover:text-fg-2" />
         </button>
       </MenuTrigger>
       <MenuContent align="start" className="w-[240px]">
-        <MenuLabel>Workspaces</MenuLabel>
+        <MenuLabel>{t("workspaces.title")}</MenuLabel>
         {memberships.map((m) => (
           <MenuItem
             key={m.workspace.id}
@@ -220,18 +302,18 @@ function WorkspaceSwitcher() {
               void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: undefined } });
             }}
           >
-            <span className="flex items-center gap-2">
-              {m.workspace.name}
+            <span className="flex items-center justify-between gap-2">
+              <span className="truncate">{m.workspace.name}</span>
               {m.workspace.id === ws.id && <Check className="!size-3 !text-fg" />}
             </span>
           </MenuItem>
         ))}
         <MenuSeparator />
         <MenuItem icon={<Plus />} onSelect={() => void navigate({ to: "/onboarding" })}>
-          Create workspace
+          {t("workspaces.create")}
         </MenuItem>
         <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings/workspace" })}>
-          Workspace settings
+          {t("workspaces.settings")}
         </MenuItem>
       </MenuContent>
     </Menu>
@@ -243,8 +325,8 @@ export function WorkspaceGlyph({ name, small }: { name: string; small?: boolean 
     <span
       aria-hidden
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-[6px] bg-inverse font-semibold text-inverse-fg",
-        small ? "size-4 text-[9px] !text-inverse-fg" : "size-[22px] text-[11px]",
+        "flex shrink-0 items-center justify-center bg-inverse font-semibold tracking-tight text-inverse-fg",
+        small ? "size-4 rounded-[4px] text-[9px] !text-inverse-fg" : "size-6 rounded-md text-[10.5px]",
       )}
     >
       {name.trim().charAt(0).toUpperCase() || "?"}
@@ -252,51 +334,93 @@ export function WorkspaceGlyph({ name, small }: { name: string; small?: boolean 
   );
 }
 
-function UserMenu() {
-  const user = useSession((s) => s.user);
+/** Light, dark, system: a three-way segmented switch, used in the account menu. */
+export function ThemeSwitch() {
   const { pref, setTheme } = useTheme();
+  const { t } = useTranslation("shell");
+  const opts: { v: ThemePref; icon: ReactNode; label: string }[] = [
+    { v: "light", icon: <Sun />, label: t("theme.light") },
+    { v: "dark", icon: <Moon />, label: t("theme.dark") },
+    { v: "system", icon: <Monitor />, label: t("theme.system") },
+  ];
+  return (
+    <div role="radiogroup" aria-label={t("theme.title")} className="inline-flex items-center rounded-md bg-hover p-0.5">
+      {opts.map((o) => (
+        <Tooltip key={o.v} content={o.label}>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={pref === o.v}
+            aria-label={o.label}
+            onClick={(e) => {
+              e.preventDefault();
+              setTheme(o.v);
+            }}
+            className={cn(
+              "flex h-[22px] w-7 items-center justify-center rounded-[5px] text-fg-3 transition-[color,background-color,box-shadow] hover:text-fg [&_svg]:size-3.5",
+              pref === o.v && "bg-surface text-fg shadow-[0_0_0_1px_var(--line),0_1px_2px_rgb(0_0_0/0.06)]",
+            )}
+          >
+            {o.icon}
+          </button>
+        </Tooltip>
+      ))}
+    </div>
+  );
+}
+
+function UserMenu({ rail }: { rail: boolean }) {
+  const user = useSession((s) => s.user);
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { t } = useTranslation("shell");
   if (!user) return null;
+  const name = user.name || user.email;
   return (
     <Menu>
       <MenuTrigger asChild>
         <button
           type="button"
-          aria-label="Account menu"
-          className="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 text-left outline-none hover:bg-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-hover"
+          aria-label={t("account.menu")}
+          className={cn(
+            "my-2 flex items-center rounded-md text-left outline-none transition-[width,background-color] duration-200 hover:bg-chrome-hover focus-visible:shadow-[0_0_0_2px_var(--focus)] data-[state=open]:bg-chrome-hover",
+            rail ? "mx-3 w-8 justify-center py-0.5" : "mx-2.5 w-[calc(100%-1.25rem)] gap-2.5 px-1.5 py-1",
+          )}
         >
-          <Avatar name={user.name || user.email} src={user.avatar_url} size="sm" />
-          <span className="min-w-0 flex-1 truncate text-[12.5px] text-fg-2">{user.name || user.email}</span>
+          <Avatar name={name} src={user.avatar_url} size="lg" />
+          {!rail && (
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[12.5px] font-medium text-fg">{name}</span>
+              <span className="block truncate text-[11px] text-fg-3">{user.email}</span>
+            </span>
+          )}
         </button>
       </MenuTrigger>
-      <MenuContent align="start" side="top" className="w-[230px]">
-        <div className="px-2 pb-1.5 pt-1">
+      <MenuContent align="start" side="top" className="w-[244px]">
+        <div className="px-2 pb-2 pt-1.5">
           <div className="truncate text-[12.5px] font-medium">{user.name}</div>
-          <div className="truncate text-xs text-fg-3">{user.email}</div>
+          <div className="mono truncate text-[11px] text-fg-3">{user.email}</div>
+        </div>
+        <MenuSeparator />
+        <div className="flex h-8 items-center justify-between gap-3 pl-2 pr-0.5">
+          <span className="text-[12.5px] text-fg">{t("theme.title")}</span>
+          <ThemeSwitch />
         </div>
         <MenuSeparator />
         <MenuItem icon={<User />} onSelect={() => void navigate({ to: "/settings/profile" })}>
-          Profile
+          {t("account.profile")}
         </MenuItem>
-        <MenuSub label="Theme" icon={pref === "dark" ? <Moon /> : pref === "light" ? <Sun /> : <Monitor />}>
-          <MenuCheckItem checked={pref === "light"} onSelect={() => setTheme("light")} icon={<Sun />}>
-            Light
-          </MenuCheckItem>
-          <MenuCheckItem checked={pref === "dark"} onSelect={() => setTheme("dark")} icon={<Moon />}>
-            Dark
-          </MenuCheckItem>
-          <MenuCheckItem checked={pref === "system"} onSelect={() => setTheme("system")} icon={<Monitor />}>
-            System
-          </MenuCheckItem>
-        </MenuSub>
+        <MenuItem icon={<Settings />} onSelect={() => void navigate({ to: "/settings" })}>
+          {t("nav.settings")}
+        </MenuItem>
         <MenuItem icon={<Keyboard />} onSelect={() => shell.shortcuts()}>
           <span className="flex items-center justify-between">
-            Keyboard shortcuts <Kbd>?</Kbd>
+            {t("account.shortcuts")} <Kbd>?</Kbd>
           </span>
         </MenuItem>
         <MenuSeparator />
         <MenuItem
+          danger
           icon={<LogOut />}
           onSelect={async () => {
             await signOut();
@@ -305,7 +429,7 @@ function UserMenu() {
             void navigate({ to: "/login", search: { next: undefined, error: undefined } });
           }}
         >
-          Log out
+          {t("account.logout")}
         </MenuItem>
       </MenuContent>
     </Menu>

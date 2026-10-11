@@ -3,15 +3,17 @@ import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export const inputBase =
-  "w-full min-w-0 rounded-md border border-line bg-surface px-2.5 text-sm text-fg shadow-[0_1px_1px_rgb(0_0_0/0.02)] outline-none transition-[border-color,box-shadow] duration-100 placeholder:text-fg-4 hover:border-line-strong focus:border-fg-3 focus:shadow-[0_0_0_3px_var(--focus)] focus-visible:shadow-[0_0_0_3px_var(--focus)] disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger";
+  "w-full min-w-0 rounded-md border border-line bg-surface px-2.5 text-[13px] text-fg shadow-xs outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-fg-4 hover:border-line-strong focus:border-focus-line focus:shadow-[0_0_0_3px_var(--focus)] focus-visible:shadow-[0_0_0_3px_var(--focus)] disabled:cursor-not-allowed disabled:bg-sunken disabled:text-fg-3 aria-[invalid=true]:border-danger aria-[invalid=true]:focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--danger)_18%,transparent)]";
 
-type InputProps = InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean; leading?: ReactNode; trailing?: ReactNode; inputSize?: "sm" | "md" };
+const heights = { sm: "h-7 text-[12.5px]", md: "h-8", lg: "h-10 rounded-lg px-3 text-[14px]" } as const;
+
+type InputProps = InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean; leading?: ReactNode; trailing?: ReactNode; inputSize?: keyof typeof heights };
 
 export const TextInput = forwardRef<HTMLInputElement, InputProps>(function TextInput(
   { className, invalid, leading, trailing, inputSize = "md", ...rest },
   ref,
 ) {
-  const h = inputSize === "sm" ? "h-7 text-[12.5px]" : "h-8";
+  const h = heights[inputSize];
   if (!leading && !trailing)
     return <input ref={ref} aria-invalid={invalid || undefined} className={cn(inputBase, h, className)} {...rest} />;
   return (
@@ -20,7 +22,7 @@ export const TextInput = forwardRef<HTMLInputElement, InputProps>(function TextI
       <input
         ref={ref}
         aria-invalid={invalid || undefined}
-        className={cn(inputBase, h, leading && "pl-8", trailing && "pr-8")}
+        className={cn(inputBase, h, leading && (inputSize === "lg" ? "pl-9" : "pl-8"), trailing && (inputSize === "lg" ? "pr-10" : "pr-8"))}
         {...rest}
       />
       {trailing && <span className="absolute right-1.5 flex items-center text-fg-3">{trailing}</span>}
@@ -56,7 +58,7 @@ export function SearchInput({
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
-  inputSize?: "sm" | "md";
+  inputSize?: "sm" | "md" | "lg";
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
@@ -135,7 +137,7 @@ export function Field({
       )}
       {children({ id, "aria-describedby": describedBy, invalid: !!error })}
       {error ? (
-        <p id={`${id}-err`} className="text-xs text-danger-fg">
+        <p id={`${id}-err`} role="alert" className="animate-rise-in text-xs text-danger-fg">
           {error}
         </p>
       ) : hint ? (

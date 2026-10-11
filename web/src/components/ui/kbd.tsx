@@ -7,7 +7,7 @@ export function modKey() {
 }
 
 export function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
-  const parts = typeof children === "string" ? children.replace("mod", modKey()).split(" ") : [children];
+  const parts = typeof children === "string" ? children.replace("mod", modKey()).split(" ").map((k) => (k.length === 1 ? k.toUpperCase() : k)) : [children];
   return (
     <span className={cn("inline-flex items-center gap-0.5", className)}>
       {parts.map((p, i) => (

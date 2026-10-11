@@ -3,7 +3,7 @@
 (function () {
   var dark = false;
   try {
-    var t = localStorage.getItem("od-theme") || "system";
+    var t = localStorage.getItem("od-theme") || "light";
     dark = t === "dark" || (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   } catch (e) {}
   var root = document.documentElement;
