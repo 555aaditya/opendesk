@@ -21,12 +21,15 @@ import (
 
 	"github.com/useopendesk/opendesk/internal/ai"
 	"github.com/useopendesk/opendesk/internal/ai/assistant"
+	"github.com/useopendesk/opendesk/internal/ai/knowledge"
+	"github.com/useopendesk/opendesk/internal/ai/mcp"
 	"github.com/useopendesk/opendesk/internal/analytics"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/billing"
 	"github.com/useopendesk/opendesk/internal/captcha"
 	"github.com/useopendesk/opendesk/internal/config"
 	"github.com/useopendesk/opendesk/internal/core"
+	"github.com/useopendesk/opendesk/internal/core/mcpserver"
 	"github.com/useopendesk/opendesk/internal/crypto"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
@@ -61,6 +64,9 @@ var areas = []area{
 	{ai.Register, ai.RegisterWorkers, ai.Periodic, ai.Background},
 	{integrations.Register, integrations.RegisterWorkers, integrations.Periodic, integrations.Background},
 	{assistant.Register, assistant.RegisterWorkers, assistant.Periodic, assistant.Background},
+	{knowledge.Register, knowledge.RegisterWorkers, knowledge.Periodic, knowledge.Background},
+	{mcp.Register, mcp.RegisterWorkers, mcp.Periodic, mcp.Background},
+	{mcpserver.Register, mcpserver.RegisterWorkers, mcpserver.Periodic, mcpserver.Background},
 }
 
 // NewLogger returns a JSON logger in production and a text logger in development.
@@ -100,7 +106,7 @@ func Build(ctx context.Context, cfg *config.Config, log *slog.Logger) (*deps.Dep
 	turnstile := captcha.NewTurnstileFromConfig(captcha.TurnstileConfig{Secret: cfg.TurnstileSecret, Disabled: cfg.TurnstileSecret == ""})
 	d := &deps.Deps{Cfg: cfg, Log: log, DB: database, NATS: nc, Storage: store, Mailer: m,
 		Analytics: analytics.New(cfg.PosthogKey, cfg.PosthogHost, log), Box: box, Tokens: auth.NewTokens(cfg.AuthSecret),
-		Captcha: turnstile, Limiter: httpx.NewLimiter(), Plan: plan.New(cfg.BillingEnabled())}
+		Captcha: turnstile, Limiter: httpx.NewLimiter(), Plan: plan.New(cfg.BillingEnabled(), cfg.AICreditMarkup)}
 	domain.Configure(cfg.APIURL, cfg.AuthSecret)
 
 	workers := river.NewWorkers()

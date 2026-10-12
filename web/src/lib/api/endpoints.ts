@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { http, stream, type StreamHandlers } from "./client";
+import { http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 
 type ListQuery = { limit?: number; cursor?: string | null };
@@ -193,6 +193,19 @@ export const api = {
     create: (b: { name: string; scopes: string[]; expires_at?: string | null }) =>
       http.create<T.ApiKey & { secret: string }>("/v1/api-keys", b),
   },
+  /** Settings > AI clients: opendesk's MCP server and the clients connected with OAuth. */
+  aiClients: {
+    server: () => http.get<T.AIClientServer>("/v1/ai-clients/server"),
+    connections: () => http.get<{ data: T.AIClientConnection[] }>("/v1/ai-clients/connections"),
+    revoke: (id: string) => http.del(`/v1/ai-clients/connections/${id}`),
+  },
+  /** The MCP OAuth consent page. Signed-in user, no workspace header. */
+  oauth: {
+    request: (id: string) => http.get<T.OAuthRequest>(`/v1/oauth/requests/${id}`, { workspace: false }),
+    approve: (id: string, workspaceId: string) =>
+      http.post<T.OAuthDecision>(`/v1/oauth/requests/${id}/approve`, { workspace_id: workspaceId }, { workspace: false }),
+    deny: (id: string) => http.post<T.OAuthDecision>(`/v1/oauth/requests/${id}/deny`, undefined, { workspace: false }),
+  },
   webhooks: {
     ...crud<T.Webhook, { url: string; description: string; events: string[]; enabled: boolean }>("/v1/webhooks"),
     create: (b: { url: string; description: string; events: string[]; enabled: boolean }) =>
@@ -300,7 +313,7 @@ export const api = {
     update: (b: Partial<T.WidgetSettings>) => http.patch<T.WidgetSettings>("/v1/widget/settings", b),
   },
   mailboxes: {
-    ...crud<T.Mailbox, Partial<CreateMailboxBody> & Partial<Pick<T.Mailbox, "signature_html" | "auto_reply_enabled" | "auto_reply_subject" | "auto_reply_html" | "status">>>("/v1/mailboxes"),
+    ...crud<T.Mailbox, Partial<CreateMailboxBody> & Partial<Pick<T.Mailbox, "signature_html" | "auto_reply_enabled" | "auto_reply_subject" | "auto_reply_html" | "status" | "ai_answers" | "ai_answers_mode" | "ai_answers_outside_hours">>>("/v1/mailboxes"),
     create: (b: CreateMailboxBody) => http.create<T.Mailbox>("/v1/mailboxes", b),
     test: (id: string) => http.post<T.MailboxTest>(`/v1/mailboxes/${id}/test`),
     oauthStart: (provider: "google" | "microsoft", b: { mailbox_id?: string; name: string; email?: string }) =>
@@ -311,6 +324,8 @@ export const api = {
     checkout: (interval: "month" | "year") => http.post<{ url: string }>("/v1/billing/checkout", { interval }),
     portal: () => http.post<{ url: string }>("/v1/billing/portal"),
     creditsCheckout: (packs: number) => http.post<{ url: string }>("/v1/billing/credits/checkout", { packs }),
+    autoRecharge: (patch: T.AutoRechargePatch) => http.patch<T.Billing>("/v1/billing/auto-recharge", patch),
+    paymentMethod: () => http.post<{ url: string }>("/v1/billing/payment-method"),
     usage: (r: { from: string; to: string }) => http.get<T.BillingUsage>("/v1/billing/usage", { query: r }),
   },
   ai: {
@@ -322,12 +337,81 @@ export const api = {
     summary: (ticketId: string) => http.post<T.AISummary>(`/v1/tickets/${ticketId}/ai/summary`, {}),
     ask: (ticketId: string, question: string, h?: StreamHandlers) => stream<T.AIAnswer>(`/v1/tickets/${ticketId}/ai/ask`, { question }, h),
     triage: (ticketId: string, apply: boolean) => http.post<T.Triage>(`/v1/tickets/${ticketId}/ai/triage`, { apply }),
+    /** Ollie's pending suggested reply on an email ticket, sent or discarded by a teammate. */
+    suggestedReply: {
+      get: (ticketId: string) => http.get<{ suggested_reply: T.SuggestedReply | null }>(`/v1/tickets/${ticketId}/ai/suggested-reply`),
+      send: (ticketId: string, id: string) => http.post<T.Message>(`/v1/tickets/${ticketId}/ai/suggested-reply/${id}/send`),
+      discard: (ticketId: string, id: string) => http.del(`/v1/tickets/${ticketId}/ai/suggested-reply/${id}`),
+    },
     /** Dismisses Ollie's suggestion for one field; accepting is setting the field. */
     dismissSuggestion: (ticketId: string, field: T.SuggestionField) => http.del(`/v1/tickets/${ticketId}/ai/suggestions/${field}`),
     rewrite: (b: { html: string; mode: T.RewriteMode; instructions?: string }, h?: StreamHandlers) => stream<{ html: string }>("/v1/ai/rewrite", b, h),
     translate: (b: { html?: string; text?: string; target: string }) => http.post<T.TranslateResult>("/v1/ai/translate", b),
     kbDraft: (b: { ticket_ids?: string[]; topic?: string }) => http.post<T.KBArticleDraft>("/v1/kb/articles/ai/draft", b),
     search: (q: string) => http.get<T.SearchResults>("/v1/ai/search", { query: { q } }),
+    /** The models a workspace may choose from, with the instance defaults. */
+    models: () => http.get<T.AIModels>("/v1/ai/models"),
+    /** The workspace's provider: the instance's (credits) or its own key. */
+    provider: {
+      get: () => http.get<T.AIProvider>("/v1/ai/provider"),
+      test: (b: T.AIProviderKeyInput) => http.post<T.AIProviderTest>("/v1/ai/provider/test", b),
+      set: (b: T.AIProviderKeyInput) => http.put<T.AIProvider>("/v1/ai/provider", b),
+      remove: () => http.del("/v1/ai/provider"),
+    },
+    agent: {
+      report: (r: T.ReportsRange) => http.get<T.AgentReport>("/v1/ai/agent/report", { query: r }),
+      /** The setup checklist, computed from the workspace's data. Admin. */
+      setup: () => http.get<T.AgentSetup>("/v1/ai/agent/setup"),
+      /** Streams the agent's reply: `delta`, `tool`, `sources`, then `done`. An `error` event throws. */
+      playground: (b: T.PlaygroundBody, onEvent: (e: T.PlaygroundEvent) => void, signal?: AbortSignal) =>
+        streamEvents("/v1/ai/agent/playground", b, (event, data) => onEvent({ event, data } as T.PlaygroundEvent), signal),
+      /** Saved test conversations (contracts/agent.md "Tests"). */
+      tests: {
+        list: () => http.get<{ data: T.AgentTest[] }>("/v1/ai/agent/tests"),
+        create: (b: T.AgentTestBody) => http.create<T.AgentTest>("/v1/ai/agent/tests", b),
+        update: (id: string, b: Partial<T.AgentTestBody>) => http.patch<T.AgentTest>(`/v1/ai/agent/tests/${id}`, b),
+        remove: (id: string) => http.del(`/v1/ai/agent/tests/${id}`),
+      },
+      runs: {
+        list: () => http.get<{ data: T.AgentTestRun[] }>("/v1/ai/agent/test-runs"),
+        get: (id: string) => http.get<T.AgentTestRun>(`/v1/ai/agent/test-runs/${id}`),
+        start: (b: { test_ids?: string[]; settings?: T.PlaygroundSettings }) => http.post<T.AgentTestRun>("/v1/ai/agent/test-runs", b),
+        cancel: (id: string) => http.post<T.AgentTestRun>(`/v1/ai/agent/test-runs/${id}/cancel`),
+      },
+      improve: (b: T.ImproveAnswerBody) => http.create<T.ImproveAnswerResult>("/v1/ai/agent/improve", b),
+      review: {
+        list: () => http.get<{ data: T.AgentReviewItem[] }>("/v1/ai/agent/review"),
+        dismiss: (id: string) => http.post<void>(`/v1/ai/agent/review/${id}/dismiss`),
+      },
+    },
+    mcp: {
+      list: () => http.get<T.Page<T.McpServer>>("/v1/ai/mcp-servers"),
+      create: (b: { name: string; url: string; auth: T.McpAuthInput }) => http.create<T.McpServer>("/v1/ai/mcp-servers", b),
+      update: (id: string, b: T.McpServerPatch) => http.patch<T.McpServer>(`/v1/ai/mcp-servers/${id}`, b),
+      remove: (id: string) => http.del(`/v1/ai/mcp-servers/${id}`),
+      sync: (id: string) => http.post<T.McpServer>(`/v1/ai/mcp-servers/${id}/sync`),
+      /** The authorization URL to send the browser to. */
+      oauthStart: (id: string) => http.post<{ url: string }>(`/v1/ai/mcp-servers/${id}/oauth/start`),
+      testTool: (id: string, tool: string, b: { arguments: Record<string, unknown>; visitor?: T.PlaygroundVisitor }) =>
+        http.post<T.McpToolResult>(`/v1/ai/mcp-servers/${id}/tools/${encodeURIComponent(tool)}/test`, b),
+    },
+    knowledge: {
+      list: (q?: { kind?: T.KnowledgeKind }) => http.get<T.Page<T.KnowledgeSource>>("/v1/ai/knowledge", { query: q }),
+      get: (id: string) => http.get<T.KnowledgeSource>(`/v1/ai/knowledge/${id}`),
+      create: (b: T.KnowledgeCreate) => http.create<T.KnowledgeSource>("/v1/ai/knowledge", b),
+      /** PDF, DOCX, TXT, Markdown, HTML or CSV, at most 20 MB. */
+      upload: (file: File, name?: string) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        if (name) fd.append("name", name);
+        return http.create<T.KnowledgeSource>("/v1/ai/knowledge/files", fd);
+      },
+      update: (id: string, b: T.KnowledgePatch) => http.patch<T.KnowledgeSource>(`/v1/ai/knowledge/${id}`, b),
+      remove: (id: string) => http.del(`/v1/ai/knowledge/${id}`),
+      sync: (id: string) => http.post<T.KnowledgeSource>(`/v1/ai/knowledge/${id}/sync`),
+      docs: (id: string, q?: ListQuery) => http.get<T.Page<T.KnowledgeDoc>>(`/v1/ai/knowledge/${id}/docs`, { query: q }),
+      removeDoc: (id: string, docId: string) => http.del(`/v1/ai/knowledge/${id}/docs/${docId}`),
+    },
   },
   public: {
     help: (slug: string) => http.get<T.PublicHelpHome>(`/v1/public/help/${slug}`, pub),

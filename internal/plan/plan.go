@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,19 +37,45 @@ const (
 	CreditPackSize = 2000
 )
 
-// Credit cost of each AI feature. contracts/billing.md lists the same table.
-var Costs = map[string]int{
-	"summarize":    1,
-	"rewrite":      1,
-	"translate":    1,
-	"triage":       1, // every triage decision in one call (Jev, or the AI model)
-	"decide":       1, // the ai_decide automation conditions of one trigger run, in one call
-	"answer_check": 0, // the widget answer bot's relevance check on Jev; the answer itself is "answer"
-	"draft_reply":  3,
-	"answer":       3, // widget AI answer from the knowledge base
-	"kb_draft":     5, // knowledge base article draft from tickets
-	"copilot":      2, // free-form question about a ticket
-	"assistant":    2, // one model turn of the assistant (Ollie)
+// Milli is an amount of AI credits in thousandths of a credit. Balances and usage rows
+// are kept in Milli; the API reports credits as numbers with up to 3 decimals.
+type Milli int64
+
+// Credits returns m as a number of credits.
+func (m Milli) Credits() float64 { return float64(m) / 1000 }
+
+// CreditUSD is what one credit buys of AI usage at the markup (contracts/billing.md).
+const CreditUSD = 0.01
+
+// FromCost turns a provider cost in USD into credits at the given markup, rounded up to
+// a thousandth of a credit. A call with any cost is at least one thousandth.
+func FromCost(usd, markup float64) Milli {
+	if usd <= 0 {
+		return 0
+	}
+	if markup < 1 {
+		markup = 1
+	}
+	m := Milli(math.Ceil(usd * markup / CreditUSD * 1000))
+	return max(m, 1)
+}
+
+// Typical credits of a call per AI feature (contracts/billing.md "Metered credits"): the
+// minimum balance to start a call, and the charge when a provider reports no cost.
+var Typical = map[string]Milli{
+	"summarize":    1000,
+	"rewrite":      1000,
+	"translate":    1000,
+	"triage":       1000, // every triage decision in one call (Jev, or the AI model)
+	"decide":       1000, // the ai_decide automation conditions of one trigger run, in one call
+	"answer_check": 100,  // the widget agent's relevance check on Jev
+	"draft_reply":  3000,
+	"answer":       3000, // one model turn of a widget agent reply
+	"answer_email": 3000, // one model turn of an agent email answer or suggested reply
+	"playground":   3000, // one model turn of an agent playground reply
+	"kb_draft":     5000, // knowledge base article draft from tickets
+	"copilot":      2000, // free-form question about a ticket
+	"assistant":    2000, // one model turn of the assistant (Ollie)
 }
 
 var (
@@ -86,8 +113,14 @@ type Entitlements struct {
 // instance: no limits, unlimited AI.
 type Service struct {
 	Billing bool
+	// Markup turns a provider cost into credits (AI_CREDIT_MARKUP); below 1 counts as 1.
+	Markup float64
 	// OnLimit, when set, is told about every refused mailbox or member (analytics).
 	OnLimit func(wid uuid.UUID, resource string)
+	// OnSpend, when set, is told the balance before and after every call Spend charged
+	// (billing: auto-recharge and running-low notices). It runs after the charge commits
+	// and never fails the call.
+	OnSpend func(ctx context.Context, wid uuid.UUID, before, after Milli)
 }
 
 func (s *Service) enabled() bool { return s != nil && s.Billing }
@@ -106,7 +139,9 @@ func lock(ctx context.Context, q db.Querier, wid uuid.UUID) error {
 	return err
 }
 
-func New(billingEnabled bool) *Service { return &Service{Billing: billingEnabled} }
+func New(billingEnabled bool, markup float64) *Service {
+	return &Service{Billing: billingEnabled, Markup: markup}
+}
 
 // Ensure creates the subscription and credit rows for a workspace if they are missing.
 func Ensure(ctx context.Context, q db.Querier, wid uuid.UUID) error {
@@ -208,16 +243,16 @@ func BilledSeats(ctx context.Context, q db.Querier, wid uuid.UUID) (int, error) 
 	return max(n, 1), err
 }
 
-// Credits is a workspace's AI credit balance for the current period.
+// Credits is a workspace's AI credit balance for the current period, in Milli.
 type Credits struct {
-	Plan           string    `json:"plan"`
-	Unlimited      bool      `json:"unlimited"`
-	MonthlyCredits int       `json:"monthly_credits"`
-	IncludedUsed   int       `json:"included_used"`
-	Purchased      int       `json:"purchased"`
-	Remaining      int       `json:"remaining"`
-	PeriodStart    time.Time `json:"period_start"`
-	PeriodEnd      time.Time `json:"period_end"`
+	Plan         string
+	Unlimited    bool
+	Monthly      Milli
+	IncludedUsed Milli
+	Purchased    Milli
+	Remaining    Milli
+	PeriodStart  time.Time
+	PeriodEnd    time.Time
 }
 
 func periodStart(now time.Time) time.Time {
@@ -235,15 +270,15 @@ func (s *Service) Balance(ctx context.Context, q db.Querier, wid uuid.UUID) (Cre
 		return Credits{}, err
 	}
 	ps := periodStart(time.Now())
-	c := Credits{Plan: e.Plan, Unlimited: e.UnlimitedAI, MonthlyCredits: e.MonthlyCredits, PeriodStart: ps, PeriodEnd: ps.AddDate(0, 1, 0)}
+	c := Credits{Plan: e.Plan, Unlimited: e.UnlimitedAI, Monthly: Milli(e.MonthlyCredits) * 1000, PeriodStart: ps, PeriodEnd: ps.AddDate(0, 1, 0)}
 	if err := q.QueryRow(ctx, `UPDATE ai_credits SET
-			included_used = CASE WHEN period_start < $2 THEN 0 ELSE included_used END,
+			included_used_milli = CASE WHEN period_start < $2 THEN 0 ELSE included_used_milli END,
 			period_start = GREATEST(period_start, $2)
-		WHERE workspace_id = $1 RETURNING included_used, purchased_balance`, wid, ps).
+		WHERE workspace_id = $1 RETURNING included_used_milli, purchased_milli`, wid, ps).
 		Scan(&c.IncludedUsed, &c.Purchased); err != nil {
 		return Credits{}, err
 	}
-	c.Remaining = max(c.MonthlyCredits-c.IncludedUsed, 0) + c.Purchased
+	c.Remaining = max(c.Monthly-c.IncludedUsed, 0) + c.Purchased
 	return c, nil
 }
 
@@ -251,15 +286,41 @@ func (s *Service) Balance(ctx context.Context, q db.Querier, wid uuid.UUID) (Cre
 type Usage struct {
 	UserID       *uuid.UUID
 	TicketID     *uuid.UUID
-	Feature      string // a key of Costs
+	Feature      string // a key of Typical
 	Model        string
 	InputTokens  int
 	OutputTokens int
+	// CostUSD is the provider's cost of the call; 0 when unknown, which charges the
+	// feature's typical credits.
+	CostUSD float64
+	// OwnKey marks a call made on the workspace's own provider key: it is recorded
+	// (source own_key) and charges no credits.
+	OwnKey bool
 }
 
-// Reserve checks that a feature can run before calling the model. It does not spend.
+// Charge is what u costs in credits at the service's markup.
+func (s *Service) Charge(u Usage) (Milli, error) {
+	typical, ok := Typical[u.Feature]
+	if !ok {
+		return 0, fmt.Errorf("plan: unknown AI feature %q", u.Feature)
+	}
+	if u.CostUSD > 0 {
+		return FromCost(u.CostUSD, s.markup()), nil
+	}
+	return typical, nil
+}
+
+func (s *Service) markup() float64 {
+	if s == nil || s.Markup < 1 {
+		return 1
+	}
+	return s.Markup
+}
+
+// Reserve checks that a feature can run before calling the model: the balance must
+// cover the feature's typical credits. It does not spend.
 func (s *Service) Reserve(ctx context.Context, q db.Querier, wid uuid.UUID, feature string) error {
-	cost, ok := Costs[feature]
+	typical, ok := Typical[feature]
 	if !ok {
 		return fmt.Errorf("plan: unknown AI feature %q", feature)
 	}
@@ -267,49 +328,63 @@ func (s *Service) Reserve(ctx context.Context, q db.Querier, wid uuid.UUID, feat
 	if err != nil {
 		return err
 	}
-	if !c.Unlimited && c.Remaining < cost {
+	if !c.Unlimited && (c.Remaining < typical || c.Remaining <= 0) {
 		return ErrNoCredits
 	}
 	return nil
 }
 
-// Spend charges a completed AI call: the monthly allowance first, then purchased credits.
-// The row lock makes concurrent spends safe. Usage is always recorded.
-func (s *Service) Spend(ctx context.Context, pool db.Querier, wid uuid.UUID, u Usage) error {
-	cost, ok := Costs[u.Feature]
-	if !ok {
-		return fmt.Errorf("plan: unknown AI feature %q", u.Feature)
+// Spend charges a completed AI call on its real cost: the monthly allowance first, then
+// purchased credits. A call that costs more than what is left takes the balance to zero.
+// The row lock makes concurrent spends safe. Usage is always recorded. It returns the
+// credits charged. A call on the workspace's own key (u.OwnKey) is recorded and charges 0;
+// callers skip Reserve for it, since no balance is needed.
+func (s *Service) Spend(ctx context.Context, pool db.Querier, wid uuid.UUID, u Usage) (Milli, error) {
+	cost, err := s.Charge(u)
+	if err != nil {
+		return 0, err
+	}
+	if u.OwnKey {
+		_, err := pool.Exec(ctx, `INSERT INTO ai_usage (workspace_id, user_id, feature, millicredits, model, input_tokens, output_tokens, ticket_id, cost_usd, source)
+			VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, 'own_key')`, wid, u.UserID, u.Feature, u.Model, u.InputTokens, u.OutputTokens, u.TicketID, u.CostUSD)
+		return 0, err
 	}
 	e, err := s.Entitlements(ctx, pool, wid)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return pgx.BeginFunc(ctx, txStarter{pool}, func(tx pgx.Tx) error {
+	charged := cost
+	var before Milli
+	balanced := false
+	err = pgx.BeginFunc(ctx, txStarter{pool}, func(tx pgx.Tx) error {
 		if !e.UnlimitedAI {
 			if err := Ensure(ctx, tx, wid); err != nil {
 				return err
 			}
 			ps := periodStart(time.Now())
-			var used, purchased int
-			if err := tx.QueryRow(ctx, `SELECT CASE WHEN period_start < $2 THEN 0 ELSE included_used END, purchased_balance
+			var used, purchased Milli
+			if err := tx.QueryRow(ctx, `SELECT CASE WHEN period_start < $2 THEN 0 ELSE included_used_milli END, purchased_milli
 				FROM ai_credits WHERE workspace_id = $1 FOR UPDATE`, wid, ps).Scan(&used, &purchased); err != nil {
 				return err
 			}
-			fromIncluded := min(max(e.MonthlyCredits-used, 0), cost)
-			fromPurchased := cost - fromIncluded
-			if fromPurchased > purchased {
-				return ErrNoCredits
-			}
+			fromIncluded := min(max(Milli(e.MonthlyCredits)*1000-used, 0), cost)
+			fromPurchased := min(cost-fromIncluded, max(purchased, 0))
+			charged = fromIncluded + fromPurchased
+			before, balanced = max(Milli(e.MonthlyCredits)*1000-used, 0)+max(purchased, 0), true
 			if _, err := tx.Exec(ctx, `UPDATE ai_credits SET period_start = GREATEST(period_start, $2),
-				included_used = $3, purchased_balance = purchased_balance - $4, updated_at = now() WHERE workspace_id = $1`,
+				included_used_milli = $3, purchased_milli = purchased_milli - $4, updated_at = now() WHERE workspace_id = $1`,
 				wid, ps, used+fromIncluded, fromPurchased); err != nil {
 				return err
 			}
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO ai_usage (workspace_id, user_id, feature, credits, model, input_tokens, output_tokens, ticket_id)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, wid, u.UserID, u.Feature, cost, u.Model, u.InputTokens, u.OutputTokens, u.TicketID)
+		_, err := tx.Exec(ctx, `INSERT INTO ai_usage (workspace_id, user_id, feature, millicredits, model, input_tokens, output_tokens, ticket_id, cost_usd)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, wid, u.UserID, u.Feature, charged, u.Model, u.InputTokens, u.OutputTokens, u.TicketID, u.CostUSD)
 		return err
 	})
+	if err == nil && balanced && charged > 0 && s != nil && s.OnSpend != nil {
+		s.OnSpend(ctx, wid, before, before-charged)
+	}
+	return charged, err
 }
 
 // Grant adds purchased credits once per external id (a Stripe checkout session or invoice).
@@ -322,7 +397,7 @@ func Grant(ctx context.Context, tx pgx.Tx, wid uuid.UUID, credits int, source, e
 	if err != nil || tag.RowsAffected() == 0 {
 		return false, err
 	}
-	_, err = tx.Exec(ctx, `UPDATE ai_credits SET purchased_balance = purchased_balance + $2, updated_at = now() WHERE workspace_id = $1`, wid, credits)
+	_, err = tx.Exec(ctx, `UPDATE ai_credits SET purchased_milli = purchased_milli + $2, updated_at = now() WHERE workspace_id = $1`, wid, int64(credits)*1000)
 	return err == nil, err
 }
 

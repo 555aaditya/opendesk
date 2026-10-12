@@ -3,7 +3,7 @@
 // first asks the API for a fresh session (and ws_token).
 
 import { Socket } from "phoenix";
-import type { Envelope } from "./types";
+import type { Envelope, LiveEvent } from "./types";
 
 export type RtChannelLike = {
   join(): { receive(status: string, cb: (r: unknown) => void): unknown };
@@ -44,6 +44,8 @@ export function claim(token: string, name: string): string | null {
 export type LiveHandlers = {
   onEvent: (e: Envelope) => void;
   onTyping: (p: { ticket_id: string; user?: { id: string; name: string } }) => void;
+  /** The agent's reply as it is generated (contracts/realtime.md "Live events"). */
+  onLive?: (e: LiveEvent) => void;
   onStatus?: (live: boolean) => void;
   /** The socket came back after a drop. */
   onReconnect?: () => void;
@@ -94,6 +96,9 @@ export class Live {
     const ch = socket.channel(`contact:${wid}:${this.contactId}`, {});
     ch.on("event", (p) => this.h.onEvent(p as Envelope));
     ch.on("typing", (p) => this.h.onTyping(p as { ticket_id: string; user?: { id: string; name: string } }));
+    ch.on("live", (p) => {
+      if (p && typeof p === "object" && typeof (p as LiveEvent).type === "string" && (p as LiveEvent).data) this.h.onLive?.(p as LiveEvent);
+    });
     ch.join();
     this.channel = ch;
   }

@@ -52,7 +52,8 @@ export type Workspace = {
   images: WorkspaceImages;
   created_at: string;
 };
-export type WorkspaceImageSlot = "help_center_logo" | "help_center_favicon" | "widget_avatar" | "widget_launcher";
+/** `widget_bot` is the widget agent's picture; null means the Ollie mark. */
+export type WorkspaceImageSlot = "help_center_logo" | "help_center_favicon" | "widget_avatar" | "widget_launcher" | "widget_bot";
 export type WorkspaceImages = Record<WorkspaceImageSlot, string | null>;
 export type Membership = { workspace: Workspace; role: Role };
 export type Availability = "online" | "away" | "offline";
@@ -230,6 +231,8 @@ export type Ticket = {
   snoozed_until: string | null;
   last_message_at: string;
   last_customer_message_at: string | null;
+  /** The customer's first unanswered message; null once anyone (or the AI agent) replied. */
+  waiting_since: string | null;
   last_message_preview: string;
   message_count: number;
   spam: boolean;
@@ -266,10 +269,17 @@ export type Message = {
   attachments: Attachment[];
   delivery_status: DeliveryStatus;
   delivery_error: string;
-  /** An automatic answer from the widget answer bot (contracts/ai.md). */
+  /** A reply from the widget AI agent (contracts/agent.md). */
   ai: boolean;
+  /** An action the agent asks the visitor to confirm; set only on agent messages that carry one. */
+  ai_action?: AIAction | null;
+  /** The visitor's rating of an agent reply (agents only). */
+  ai_rating?: "up" | "down" | null;
   created_at: string;
 };
+/** contracts/agent.md "Visitor actions". */
+export type AIActionStatus = "pending" | "confirmed" | "declined" | "expired" | "failed";
+export type AIAction = { id: string; title: string; summary: string; status: AIActionStatus; tool: string };
 export type ActivityType =
   | "status_changed"
   | "priority_changed"
@@ -363,7 +373,8 @@ export type BusinessHours = {
   holidays: Holiday[];
 };
 export type OnboardingStepId =
-  | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie";
+  | "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie"
+  | "setup_ai_agent";
 export type OnboardingStep = {
   id: OnboardingStepId;
   title: string;
@@ -374,6 +385,36 @@ export type OnboardingStep = {
   requires: "admin" | "agent";
 };
 export type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
+
+// The AI agent's setup checklist (contracts/agent.md "Setup").
+export type AgentSetupStepId = "ai_on" | "identity" | "knowledge" | "tools" | "playground" | "widget" | "answers_on" | "email_answers";
+export type AgentSetupStep = { id: AgentSetupStepId; title: string; description: string; done: boolean; optional: boolean; href: string };
+/** Counts are of required steps; optional steps never block `complete`. */
+export type AgentSetup = { steps: AgentSetupStep[]; done_count: number; total: number; complete: boolean };
+
+// AI clients and MCP OAuth (contracts/agent.md "opendesk MCP server").
+export type OAuthClientInfo = { name: string; uri: string; redirect_host: string; /** The redirect goes to an app on this computer. */ local: boolean };
+export type OAuthRequest = {
+  id: string;
+  client: OAuthClientInfo;
+  scopes: string[];
+  /** Each workspace with the requested scopes the user's role there allows. */
+  workspaces: { id: string; name: string; role: Role; scopes: string[] }[];
+  expires_at: string;
+};
+export type OAuthDecision = { redirect_to: string };
+export type AIClientTool = { name: string; title: string; description: string; scopes: string[]; read_only: boolean; destructive: boolean };
+export type AIClientServer = { url: string; resource_metadata: string; authorization_server: string; scopes: string[]; tools: AIClientTool[] };
+export type AIClientConnection = {
+  id: string;
+  client: OAuthClientInfo;
+  user: UserRef;
+  /** The caller connected it. */
+  mine: boolean;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+};
 
 export type AutomationTrigger = "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated";
 export type ConditionField =
@@ -440,11 +481,18 @@ export type Mailbox = {
   auto_reply_enabled: boolean;
   auto_reply_subject: string;
   auto_reply_html: string;
+  /** Ollie answers emails to this mailbox (contracts/agent.md "Email"), off by default. */
+  ai_answers: boolean;
+  ai_answers_mode: MailboxAIMode;
+  /** Only while business hours are closed (ignored while business hours are off). */
+  ai_answers_outside_hours: boolean;
   status: "active" | "error" | "disabled";
   last_error: string;
   last_synced_at: string | null;
   created_at: string;
 };
+/** draft: a suggested reply a teammate sends; send: Ollie replies by email. */
+export type MailboxAIMode = "draft" | "send";
 
 export type KbCollection = {
   id: string;
@@ -549,7 +597,10 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff";
+export type NotificationType = "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "credits_low" | "credits_out" | "auto_recharge_failed" | "ai_key_failed";
+/** `ai_cap_reached`: data `{cap}`, ticket null; the widget agent reached `widget_monthly_cap` (once a month, owners and admins).
+ * `credits_low` / `credits_out`: data `{remaining}`; `auto_recharge_failed`: data `{reason: AutoRechargeFailure}` (billing, owners and admins, ticket null).
+ * `ai_key_failed`: data `{provider: AIKeyKind, reason: "rejected" | "no_funds"}`; the workspace's own AI key failed (at most hourly, owners and admins, ticket null). */
 export type Notification = {
   id: string;
   type: NotificationType;
@@ -630,11 +681,63 @@ export type ReportsOverview = {
 
 export type MailboxTest = { inbound: { ok: boolean; error: string }; outbound: { ok: boolean; error: string } };
 
+// The chat widget (contracts/api.md "Widget").
+export type WidgetTheme = "auto" | "light" | "dark";
+export type WidgetRadius = "square" | "soft" | "round";
 export type WidgetSettings = {
+  enabled: boolean;
+  /** Up to 300 chars, plain text with newlines. */
   greeting: string;
   require_email: boolean;
-  enabled: boolean;
+  /** At most 20. */
   allowed_origins: string[];
+  /** "#rrggbb", or "" for the workspace brand colour. */
+  color: string;
+  theme: WidgetTheme;
+  position: "right" | "left";
+  /** 0..200 px from the side. */
+  offset_x: number;
+  /** 0..200 px from the bottom. */
+  offset_y: number;
+  launcher: "icon" | "label";
+  /** Up to 24 chars; "" is the translated "Chat with us". */
+  launcher_label: string;
+  radius: WidgetRadius;
+  /** Up to 40 chars; "" is the workspace name. */
+  title: string;
+  /** Up to 80 chars; "" is the translated reply-time line. */
+  subtitle: string;
+  show_team: boolean;
+  /** At most 4 prompts of 2..60 chars. */
+  suggestions: string[];
+  sound: boolean;
+  /** The AI agent's name for visitors, up to 30 chars; "" is "Ollie". */
+  bot_name: string;
+};
+/** GET /v1/widget/config: what the widget renders. */
+export type WidgetConfig = {
+  workspace_name: string;
+  brand_color: string | null;
+  greeting: string;
+  help_center_url: string | null;
+  require_email: boolean;
+  locale: string | null;
+  avatar_url: string | null;
+  launcher_icon_url: string | null;
+  theme: WidgetTheme;
+  position: "right" | "left";
+  offset_x: number;
+  offset_y: number;
+  launcher: "icon" | "label";
+  launcher_label: string;
+  radius: WidgetRadius;
+  title: string;
+  subtitle: string;
+  suggestions: string[];
+  sound: boolean;
+  team: { name: string; avatar_url: string | null }[];
+  ai_answers: boolean;
+  bot: { name: string; avatar_url: string | null };
 };
 
 /** GET /v1/public/csat/{token}. `locale` is the workspace default ("" when not set). */
@@ -690,9 +793,29 @@ export type Billing = {
   usage: { mailboxes: number; members: number };
   credits: { unlimited: boolean; monthly: number; used: number; purchased: number; remaining: number; period_end: string };
   prices: { pro_month: Price | null; pro_year: Price | null; credit_pack: Price | null };
+  /** null when billing is disabled; older servers omit it. */
+  auto_recharge?: AutoRecharge | null;
 };
-export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "kb_draft" | "assistant";
-/** GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive. */
+export type AutoRechargeFailure = "card_declined" | "authentication_required" | "no_payment_method" | "payment_failed" | "unavailable";
+/** Billing.auto_recharge (contracts/billing.md "Auto-recharge"). Credits are numbers; amounts in minor units. */
+export type AutoRecharge = {
+  enabled: boolean;
+  threshold: number;
+  packs: number;
+  monthly_limit: number;
+  recharges_this_month: number;
+  /** Remaining credits below this read as running low. */
+  low_at: number;
+  last_recharge: { at: string; packs: number; credits: number; amount: number; currency: string } | null;
+  failure: { code: AutoRechargeFailure; at: string } | null;
+};
+export type AutoRechargePatch = Partial<Pick<AutoRecharge, "enabled" | "threshold" | "packs" | "monthly_limit">>;
+export type AIFeature =
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "answer_email" | "playground" | "kb_draft" | "assistant";
+/**
+ * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
+ * Every credits value is a number with up to 3 decimals.
+ */
 export type BillingUsage = {
   from: string;
   to: string;
@@ -701,6 +824,10 @@ export type BillingUsage = {
   by_feature: { feature: AIFeature; credits: number; calls: number }[];
   by_day: { date: string; credits: number; calls: number; by_feature?: Partial<Record<AIFeature, number>> }[];
   by_member: { user: UserRef | null; credits: number; calls: number }[];
+  /** Older servers omit it. */
+  by_model?: { model: string; credits: number; calls: number; input_tokens: number; output_tokens: number; source?: "credits" | "own_key" }[];
+  /** Calls made on the workspace's own AI provider key (0 credits). Older servers omit it. */
+  own_key_calls?: number;
 };
 
 // AI (contracts/ai.md).
@@ -715,19 +842,79 @@ export type AISettings = {
   tone: string;
   reply_language: "customer" | "workspace";
   instructions: string;
+  /** Drafts, summaries, copilot, KB drafts, Ollie; "" is the instance default. */
+  model?: string;
+  /** Rewrite, translate, LLM triage and decisions; "" is the instance fast model. */
+  fast_model?: string;
+  /** The widget agent; "" follows `model`. */
+  widget_model?: string;
+  /** What the widget agent should know, up to 4,000 chars. */
+  widget_instructions?: string;
+  /** 1..100, default 20: agent replies in one conversation before it hands off. */
+  widget_max_replies?: number;
+  /** At most 20 topics of 2..100 chars the agent declines. */
+  widget_blocked_topics?: string[];
+  /** Credits per calendar month the agent may use; 0 is no cap. */
+  widget_monthly_cap?: number;
+  /** Ask for an email before handing off when the visitor has none. Default true. */
+  widget_collect_email?: boolean;
 };
+/** A model the instance offers (GET /v1/ai/models). */
+export type AIModel = {
+  id: string;
+  name: string;
+  vendor: string;
+  context_length: number | null;
+  /** Credits per million tokens, markup included; null when the price is unknown. */
+  credits_per_mtok: { input: number; output: number } | null;
+};
+export type AIModels = { data: AIModel[]; default: string; fast: string };
 export type AIConfig = {
   enabled: boolean;
   provider: string;
   models: { default: string; fast: string };
   embeddings: boolean;
   features: AISettings;
+  /** Typical credits per call, also the minimum balance to start one. */
   costs: Partial<Record<AIFeature, number>>;
+  /** Credits follow real usage (model, thread and answer length). */
+  metered?: boolean;
   /** The name AI acts under everywhere ("Ollie"). */
   assistant_name?: string;
   /** The decision engine (Jev by TypeSafe, the LLM fallback, or none). */
   decisions?: DecisionEngine;
+  /** LLM calls run on the workspace's own provider key and use no credits (GET /v1/ai/provider). */
+  own_key?: boolean;
 };
+
+// The workspace's AI provider (contracts/ai.md "Provider per workspace").
+export type AIKeyKind = "openrouter" | "openai" | "anthropic";
+export type AIKeyStatus = "ok" | "rejected" | "no_funds";
+/** A saved key, never the key itself. */
+export type AIProviderKey = {
+  kind: AIKeyKind;
+  /** Host of an OpenAI-compatible endpoint, else "". */
+  base_url_host: string;
+  last4: string;
+  model: string;
+  fast_model: string;
+  /** What the provider last said about the key. */
+  status: AIKeyStatus;
+  status_at: string | null;
+  created_by: UserRef | null;
+  created_at: string;
+  updated_at: string;
+};
+export type AIProvider = {
+  mode: "instance" | "own_key";
+  instance_provider: string;
+  /** Calls on the instance's provider are charged in credits. */
+  billing: boolean;
+  key: AIProviderKey | null;
+};
+export type AIProviderKeyInput = { kind: AIKeyKind; api_key: string; base_url?: string; model?: string; fast_model?: string };
+export type AIProviderTestReason = "invalid_key" | "no_funds" | "unreachable" | "busy" | "model_unavailable";
+export type AIProviderTest = { ok: boolean; reason?: AIProviderTestReason; message?: string; models: string[] };
 
 // Decisions (contracts/ai.md "Decisions"), stored on tickets as custom.ai_decisions and custom.ai_suggestions.
 export type DecisionField =
@@ -778,3 +965,200 @@ export type Triage = {
 export type RewriteMode = "friendlier" | "more_formal" | "shorter" | "longer" | "fix_grammar" | "simplify";
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };
+
+// The widget AI agent (contracts/agent.md).
+
+/** A passage the agent answered from. */
+export type AgentSource = { kind: "article" | "page" | "file" | "snippet"; id: string; title: string; url: string | null };
+
+export type AgentReport = {
+  from: string;
+  to: string;
+  conversations: number;
+  replies: number;
+  resolved: number;
+  handoffs: number;
+  ratings: { up: number; down: number };
+  credits: number;
+  by_day: { date: string; conversations: number; replies: number; resolved: number; handoffs: number }[];
+  tools: { tool: string; calls: number; errors: number }[];
+  gaps: { question: string; count: number }[];
+  /** The totals split by the ticket's channel. */
+  channels?: { chat: AgentChannelReport; email: AgentChannelReport };
+};
+export type AgentChannelReport = {
+  conversations: number;
+  replies: number;
+  resolved: number;
+  handoffs: number;
+  /** Email only: suggested replies written (draft mode), and how many were sent as written. */
+  suggested: number;
+  suggested_sent: number;
+};
+
+/** Ollie's suggested reply on an email ticket (contracts/agent.md "Email"). */
+export type SuggestedReply = {
+  id: string;
+  ticket_id: string;
+  /** The customer message it answers. */
+  message_id: string;
+  body_html: string;
+  sources: AgentSource[];
+  tools: string[];
+  status: "pending" | "sent" | "discarded" | "superseded";
+  reply_id: string | null;
+  created_at: string;
+};
+
+export type PlaygroundMessage = { role: "visitor" | "agent"; text: string };
+export type PlaygroundVisitor = { name?: string; email?: string; verified?: boolean; user_id?: string };
+export type PlaygroundSettings = Partial<Pick<AISettings, "widget_model" | "widget_instructions" | "widget_blocked_topics" | "tone" | "reply_language" | "instructions">>;
+export type PlaygroundBody = { messages: PlaygroundMessage[]; settings?: PlaygroundSettings; visitor?: PlaygroundVisitor };
+export type PlaygroundToolEvent = { name: string; status: "running" | "done" | "error"; summary: string };
+export type PlaygroundDone = {
+  text_html: string;
+  sources: AgentSource[];
+  handoff: boolean;
+  action: { tool: string; title: string; summary: string } | null;
+  credits: number;
+};
+export type PlaygroundEvent =
+  | { event: "delta"; data: { text: string } }
+  | { event: "tool"; data: PlaygroundToolEvent }
+  | { event: "sources"; data: { sources: AgentSource[] } }
+  | { event: "done"; data: PlaygroundDone };
+
+/** contracts/agent.md "Tests". */
+export type AgentExpectationKind = "mentions" | "not_mentions" | "handoff" | "no_handoff" | "uses_tool" | "cites_knowledge";
+export type AgentExpectation = { kind: AgentExpectationKind; value?: string };
+export type AgentTestStatus = "pending" | "running" | "passed" | "failed" | "error";
+export type AgentTestCheck = { kind: AgentExpectationKind; value: string; passed: boolean; reason: string };
+export type AgentTestResult = {
+  run_id: string;
+  test_id: string;
+  status: AgentTestStatus;
+  answer_html: string;
+  handoff: boolean;
+  tools: string[];
+  sources: AgentSource[];
+  action: PlaygroundDone["action"];
+  checks: AgentTestCheck[];
+  error: string | null;
+  credits: number;
+  draft: boolean;
+  previous_status: "passed" | "failed" | "error" | null;
+  finished_at: string | null;
+};
+export type AgentTest = {
+  id: string;
+  name: string;
+  messages: PlaygroundMessage[];
+  expectations: AgentExpectation[];
+  visitor: PlaygroundVisitor | null;
+  last_result: AgentTestResult | null;
+  created_at: string;
+  updated_at: string;
+};
+export type AgentTestBody = { name?: string; messages: PlaygroundMessage[]; expectations: AgentExpectation[]; visitor?: PlaygroundVisitor };
+export type AgentTestRunStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+export type AgentTestRun = {
+  id: string;
+  status: AgentTestRunStatus;
+  draft: boolean;
+  test_ids: string[];
+  total: number;
+  passed: number;
+  failed: number;
+  errored: number;
+  credits: number;
+  error: string | null;
+  results?: AgentTestResult[];
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+/** contracts/agent.md "Improve answer". */
+export type ImproveAnswerBody = { question: string; answer: string; message_id?: string; save_test?: boolean };
+export type ImproveAnswerResult = { source: { id: string; kind: "snippet"; name: string }; test: AgentTest | null };
+/** contracts/agent.md "Review queue". */
+export type AgentReviewItem = {
+  id: string;
+  ticket_id: string;
+  ticket_number: number;
+  reason: "rated_down" | "handoff";
+  question: string;
+  answer: string;
+  contact_name: string;
+  created_at: string;
+};
+
+export type McpAuthKind = "none" | "bearer" | "header" | "oauth";
+export type McpTool = {
+  name: string;
+  title: string | null;
+  description: string;
+  input_schema: Record<string, unknown>;
+  read_only: boolean;
+  destructive: boolean;
+  enabled: boolean;
+  policy: "auto" | "confirm";
+  verified_only: boolean;
+};
+export type McpServerStatus = "connected" | "needs_auth" | "error" | "connecting";
+export type McpServer = {
+  id: string;
+  name: string;
+  slug: string;
+  url: string;
+  enabled: boolean;
+  auth: {
+    kind: McpAuthKind;
+    header_name?: string;
+    has_secret: boolean;
+    oauth?: { connected: boolean; scopes: string[]; expires_at: string | null };
+  };
+  status: McpServerStatus;
+  error: string | null;
+  server_info: { name: string; version: string } | null;
+  tools: McpTool[];
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+/** Secrets are write-only: omit them to keep the stored one. */
+export type McpAuthInput = { kind: McpAuthKind; token?: string; header_name?: string; header_value?: string };
+export type McpToolPatch = Partial<Pick<McpTool, "enabled" | "policy" | "verified_only">>;
+export type McpServerPatch = { name?: string; url?: string; enabled?: boolean; auth?: McpAuthInput; tools?: Record<string, McpToolPatch> };
+export type McpToolResult = { content: string; is_error: boolean; ms: number };
+
+export type KnowledgeKind = "website" | "file" | "snippet";
+export type KnowledgeStatus = "pending" | "syncing" | "ready" | "error";
+export type KnowledgeWebsite = { url: string; max_pages: number; include: string[]; exclude: string[]; recrawl: "off" | "weekly" };
+export type KnowledgeSource = {
+  id: string;
+  kind: KnowledgeKind;
+  name: string;
+  status: KnowledgeStatus;
+  error: string | null;
+  enabled: boolean;
+  website?: KnowledgeWebsite;
+  file?: { filename: string; content_type: string; size_bytes: number };
+  snippet?: { question: string; answer: string };
+  doc_count: number;
+  char_count: number;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type KnowledgeDoc = { id: string; title: string; url: string | null; chars: number; updated_at: string };
+export type KnowledgeCreate =
+  | { kind: "website"; name?: string; website: Partial<KnowledgeWebsite> & { url: string } }
+  | { kind: "snippet"; name?: string; snippet: { question: string; answer: string } };
+export type KnowledgePatch = { name?: string; enabled?: boolean; website?: Partial<KnowledgeWebsite>; snippet?: { question: string; answer: string } };
+
+/** "live" pushes on the ticket channel while the widget agent writes (contracts/realtime.md). */
+export type LiveEvent =
+  | { type: "ai.reply.started"; data: { reply_id: string; ticket_id: string; bot: { name: string } } }
+  | { type: "ai.reply.delta"; data: { reply_id: string; ticket_id: string; text: string } }
+  | { type: "ai.reply.tool"; data: { reply_id: string; ticket_id: string; tool: string; status: "running" | "done" | "error" } }
+  | { type: "ai.reply.ended"; data: { reply_id: string; ticket_id: string; message_id: string | null; handoff: boolean; action_id: string | null } };

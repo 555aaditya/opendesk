@@ -27,7 +27,7 @@ const (
 )
 
 // WorkspaceSlots are the workspace images besides the logo (workspaces.brand_images).
-var WorkspaceSlots = []string{"help_center_logo", "help_center_favicon", "widget_avatar", "widget_launcher"}
+var WorkspaceSlots = []string{"help_center_logo", "help_center_favicon", "widget_avatar", "widget_launcher", "widget_bot"}
 
 // Owner identifies what a picture belongs to.
 type Owner struct {

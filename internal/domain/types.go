@@ -135,13 +135,15 @@ type Ticket struct {
 	SnoozedUntil          *time.Time     `json:"snoozed_until"`
 	LastMessageAt         time.Time      `json:"last_message_at"`
 	LastCustomerMessageAt *time.Time     `json:"last_customer_message_at"`
-	LastMessagePreview    string         `json:"last_message_preview"`
-	MessageCount          int            `json:"message_count"`
-	Spam                  bool           `json:"spam"`
-	CSAT                  *CSAT          `json:"csat"`
-	Custom                map[string]any `json:"custom"`
-	CreatedAt             time.Time      `json:"created_at"`
-	UpdatedAt             time.Time      `json:"updated_at"`
+	// WaitingSince is when the customer's unanswered messages began; nil once replied to.
+	WaitingSince       *time.Time     `json:"waiting_since"`
+	LastMessagePreview string         `json:"last_message_preview"`
+	MessageCount       int            `json:"message_count"`
+	Spam               bool           `json:"spam"`
+	CSAT               *CSAT          `json:"csat"`
+	Custom             map[string]any `json:"custom"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 }
 
 type Attachment struct {
@@ -177,9 +179,22 @@ type Message struct {
 	Attachments    []Attachment  `json:"attachments"`
 	DeliveryStatus string        `json:"delivery_status" enum:"none,pending,sent,failed,bounced"`
 	DeliveryError  string        `json:"delivery_error"`
-	// AI marks a reply written by the widget answer bot.
-	AI        bool      `json:"ai"`
+	// AI marks a reply written by the widget AI agent.
+	AI bool `json:"ai"`
+	// AIAction is an action the agent asks the visitor to confirm (contracts/agent.md).
+	AIAction *AIAction `json:"ai_action"`
+	// AIRating is the visitor's rating of an agent reply.
+	AIRating  *string   `json:"ai_rating" enum:"up,down"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// AIAction is the card on an agent message that asks the visitor to confirm a tool call.
+type AIAction struct {
+	ID      uuid.UUID `json:"id"`
+	Title   string    `json:"title"`
+	Summary string    `json:"summary"`
+	Status  string    `json:"status" enum:"pending,confirmed,declined,expired,failed"`
+	Tool    string    `json:"tool"`
 }
 
 type ActivityActor struct {

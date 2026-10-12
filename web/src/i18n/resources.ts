@@ -1,7 +1,10 @@
 // The English catalogs, bundled. Add a namespace here, in NAMESPACES, and as
 // locales/en/<ns>.json; i18next.d.ts derives the typed keys from this object.
 
+import agent from "./locales/en/agent.json";
+import agentQuality from "./locales/en/agentQuality.json";
 import ai from "./locales/en/ai.json";
+import aiSetup from "./locales/en/aiSetup.json";
 import aiTicket from "./locales/en/aiTicket.json";
 import assistant from "./locales/en/assistant.json";
 import billing from "./locales/en/billing.json";
@@ -18,6 +21,6 @@ import settingsInbox from "./locales/en/settingsInbox.json";
 import setup from "./locales/en/setup.json";
 import shell from "./locales/en/shell.json";
 
-export const en = { common, billing, ai, aiTicket, assistant, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, contacts, kb, reports, inbox, setup } as const;
-export const NAMESPACES = ["common", "billing", "ai", "aiTicket", "assistant", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "contacts", "kb", "reports", "inbox", "setup"] as const;
+export const en = { common, billing, ai, agent, agentQuality, aiSetup, aiTicket, assistant, public: pub, shell, settings, settingsInbox, settingsDev, settingsChannels, contacts, kb, reports, inbox, setup } as const;
+export const NAMESPACES = ["common", "billing", "ai", "agent", "agentQuality", "aiSetup", "aiTicket", "assistant", "public", "shell", "settings", "settingsInbox", "settingsDev", "settingsChannels", "contacts", "kb", "reports", "inbox", "setup"] as const;
 export type Namespace = (typeof NAMESPACES)[number];

@@ -162,3 +162,13 @@ export function currency(minorUnits: number, code: string, opts: { exact?: boole
 export function percent(ratio: number, digits = 0): string {
   return nf({ style: "percent", maximumFractionDigits: digits }).format(ratio);
 }
+
+/**
+ * Credits with sensible decimals (they are metered to 0.001): 1,234.5, 12.35,
+ * 0.42, 0.005. Large figures keep at most one decimal, small ones up to three.
+ */
+export function credits(n: number): string {
+  const a = Math.abs(n);
+  const max = a >= 10 ? 1 : a >= 0.01 ? 2 : 3;
+  return nf({ maximumFractionDigits: max }).format(n);
+}

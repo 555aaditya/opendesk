@@ -7,16 +7,23 @@ import { setSocketFactory } from "@/lib/realtime/transport";
 import { db } from "./db";
 import { paused, publish, socketFactory, sockets } from "./gateway";
 import { registerAi } from "./handlers/ai";
+import { registerAiClients } from "./handlers/aiClients";
 import { registerAiTicket } from "./handlers/aiTicket";
 import { registerAssistant } from "./handlers/assistant";
+import { registerAgent } from "./handlers/agent";
+import { registerAgentQuality } from "./handlers/agentQuality";
+import { registerEmailAnswers } from "./handlers/emailAnswers";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
+import { registerKnowledge } from "./handlers/knowledge";
 import { registerIntegrations } from "./handlers/integrations";
 import { registerLabels } from "./handlers/labels";
+import { registerMcp } from "./handlers/mcp";
 import { registerResources } from "./handlers/resources";
 import { registerTickets } from "./handlers/tickets";
 import { registerWorkspace } from "./handlers/workspace";
 import { pauseLive, resumeLive, startLive } from "./live";
+import { chatTicket, ollieReply } from "./ollie";
 import { dispatch } from "./router";
 import { seed } from "./seed";
 
@@ -29,6 +36,8 @@ declare global {
       resume: () => void;
       dropEvents: (on: boolean) => void;
       reconnect: () => void;
+      /** Ollie answers a visitor now on the given ticket (id or number), else the chat ticket you're viewing. */
+      ollie: (ticketId?: string) => Promise<string | null>;
     };
   }
 }
@@ -52,7 +61,13 @@ export function installMock(): void {
   registerAi();
   registerAiTicket();
   registerAssistant();
+  registerAgent();
+  registerAgentQuality();
+  registerEmailAnswers();
+  registerMcp();
+  registerKnowledge();
   registerIntegrations();
+  registerAiClients();
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);
@@ -70,6 +85,15 @@ export function installMock(): void {
       paused.drop = on;
     },
     reconnect: () => sockets.forEach((s) => s.bounce()),
+    ollie: async (ticketId) => {
+      const ws = db.workspaces[0];
+      const t = chatTicket(ws, ticketId);
+      if (!t) {
+        console.warn("[opendesk] mock: no open chat ticket to answer on");
+        return null;
+      }
+      return ollieReply(ws, t);
+    },
   };
   console.info("[opendesk] mock mode: in-memory API and gateway. window.__odMock has helpers.");
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/audit"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/billing"
+	"github.com/useopendesk/opendesk/internal/core/oauthgrant"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/domain"
 	"github.com/useopendesk/opendesk/internal/events"
@@ -214,6 +215,10 @@ func (s *svc) removeMember(ctx context.Context, tx pgx.Tx, p *auth.Principal, wi
 		return err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM members WHERE workspace_id = $1 AND user_id = $2`, wid, uid); err != nil {
+		return err
+	}
+	// AI clients the member connected over OAuth lose access with the membership.
+	if _, err := oauthgrant.Revoke(ctx, tx, p, uid, wid, uuid.Nil, oauthgrant.ReasonMemberRemoved); err != nil {
 		return err
 	}
 	if _, err := events.Publish(ctx, tx, events.Event{WorkspaceID: wid, Type: "member.removed",

@@ -68,6 +68,15 @@ Triage asks every question in one call, so it costs 1 credit however many fields
 
 Self-hosted instances have no credit limits: they use their own provider key. See [Cloud plans and billing](/guides/billing/).
 
+## Your own provider key
+
+Owners and admins can run a workspace's AI on its own key instead, in **Settings > AI > Provider**: an OpenRouter key, an Anthropic key, or any OpenAI-compatible endpoint (base URL and key). The key is checked with a small test call before it's saved, stored encrypted, and never shown again except its last 4 characters. An endpoint's base URL must use HTTPS on a public address.
+
+- Every AI request of the workspace then goes to your provider: drafts, summaries, rewrites, translation, triage, chat answers, email answers and Ollie. Model choices list your provider's models.
+- Requests on your key use no credits. They still appear in the usage report, marked as on your key.
+- Search embeddings and Jev decisions stay on opendesk; Jev decisions keep their small credit cost.
+- If your provider rejects the key or the account runs out of funds, AI features stop working (they never fall back to credits), admins get a notification, and the Provider section shows what happened and when. Replace the key to fix it, or remove it to go back to credits.
+
 ## Self-hosting
 
 Set `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY` with `OPENAI_BASE_URL` for any OpenAI-compatible endpoint, including local models through Ollama, vLLM or LM Studio. Add `TYPESAFE_API_KEY` to make decisions with Jev. See [Self-hosting AI](/self-hosting/ai/) and the [configuration reference](/self-hosting/configuration/#ai).

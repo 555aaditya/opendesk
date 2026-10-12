@@ -272,6 +272,11 @@
   --animate-slide-in-right: slide-in-right 220ms var(--ease-out-soft);
   --animate-shimmer: shimmer 1.6s ease-in-out infinite;
   --animate-pulse-soft: pulse-soft 2s ease-in-out infinite;
+  /* A customer waiting in live chat with nobody on it: a slow red wash (under one cycle a
+     second, far from flashing), a glowing edge and a ping on the timer dot. */
+  --animate-urgent-wash: urgent-wash 1.6s ease-in-out infinite;
+  --animate-urgent-edge: urgent-edge 1.6s ease-in-out infinite;
+  --animate-urgent-ping: urgent-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
   --animate-module-snap: module-snap 220ms var(--ease-out-expo) both;
   --animate-pop-out: pop-out 120ms ease-in forwards;
   --animate-dialog-out: dialog-out 140ms ease-in forwards;
@@ -452,6 +457,18 @@
 @keyframes pending-bar {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
+}
+@keyframes urgent-wash {
+  0%, 100% { background-color: color-mix(in oklab, var(--tone-red-solid) 5%, transparent); }
+  50% { background-color: color-mix(in oklab, var(--tone-red-solid) 17%, transparent); }
+}
+@keyframes urgent-edge {
+  0%, 100% { opacity: 0.55; box-shadow: 0 0 0 0 transparent; }
+  50% { opacity: 1; box-shadow: 0 0 10px 1px color-mix(in oklab, var(--tone-red-solid) 55%, transparent); }
+}
+@keyframes urgent-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  75%, 100% { transform: scale(2.6); opacity: 0; }
 }
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }

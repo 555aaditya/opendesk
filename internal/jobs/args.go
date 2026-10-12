@@ -118,15 +118,56 @@ type CancelSubscriptionArgs struct {
 
 func (CancelSubscriptionArgs) Kind() string { return "billing.cancel_subscription" }
 
-// AIWidgetAnswerArgs lets the widget answer bot reply to one visitor chat message from
-// the knowledge base. Owner: ai.
+// AutoRechargeArgs buys AI credit packs off-session for a workspace whose balance fell
+// below its auto-recharge threshold. Unique per workspace, so one runs at a time.
+// Owner: billing.
+type AutoRechargeArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+}
+
+func (AutoRechargeArgs) Kind() string { return "billing.auto_recharge" }
+
+// AIWidgetAnswerArgs lets the widget AI agent reply to one visitor chat message.
+// Owner: ai.
 type AIWidgetAnswerArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+	MessageID   uuid.UUID `json:"message_id"`
+	// PageURL is the host page the visitor wrote from, when the widget reported it.
+	PageURL string `json:"page_url,omitempty"`
+}
+
+// AIWidgetActionArgs runs an action the visitor confirmed (or records a decline) and
+// lets the widget agent continue. Owner: ai.
+type AIWidgetActionArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+	ActionID    uuid.UUID `json:"action_id"`
+	Confirmed   bool      `json:"confirmed"`
+}
+
+func (AIWidgetActionArgs) Kind() string { return "ai.widget_action" }
+
+func (AIWidgetAnswerArgs) Kind() string { return "ai.widget_answer" }
+
+// AIEmailAnswerArgs lets the AI agent answer (or suggest a reply to) one inbound
+// customer email in a mailbox with ai_answers on. Owner: ai.
+type AIEmailAnswerArgs struct {
 	WorkspaceID uuid.UUID `json:"workspace_id"`
 	TicketID    uuid.UUID `json:"ticket_id"`
 	MessageID   uuid.UUID `json:"message_id"`
 }
 
-func (AIWidgetAnswerArgs) Kind() string { return "ai.widget_answer" }
+func (AIEmailAnswerArgs) Kind() string { return "ai.email_answer" }
+
+// AIAgentTestRunArgs runs the widget agent's saved tests of one test run and grades
+// the answers. Owner: ai.
+type AIAgentTestRunArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	RunID       uuid.UUID `json:"run_id"`
+}
+
+func (AIAgentTestRunArgs) Kind() string { return "ai.agent_test_run" }
 
 // AIEmbedArgs (re)indexes one knowledge base article or ticket for semantic search, or
 // removes its embeddings when it is gone or no longer eligible. Owner: ai.

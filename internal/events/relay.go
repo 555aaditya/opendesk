@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"github.com/google/uuid"
 	"log/slog"
 	"time"
 
@@ -125,4 +126,31 @@ func (r *Relay) flush(ctx context.Context) (int, error) {
 func Disconnect(nc *nats.Conn, userID string, sessionID string) {
 	payload, _ := json.Marshal(map[string]string{"user_id": userID, "session_id": sessionID})
 	_ = nc.Publish(DisconnectSubject, payload)
+}
+
+// LiveSubjectPrefix + workspace id is the NATS subject for live previews: short-lived
+// events that are never stored or replayed (contracts/realtime.md "Live events").
+const LiveSubjectPrefix = "od.live."
+
+// LiveEvent is a live preview about one chat ticket, pushed by the gateway to the
+// visitor's contact topic and to agents watching the ticket.
+type LiveEvent struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+	ContactID   uuid.UUID `json:"contact_id"`
+	Type        string    `json:"type"`
+	Data        any       `json:"data"`
+}
+
+// PublishLive sends a live preview. It is best effort: a missed preview is replaced by
+// the stored event that follows it.
+func PublishLive(nc *nats.Conn, ev LiveEvent) {
+	if nc == nil {
+		return
+	}
+	payload, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	_ = nc.Publish(LiveSubjectPrefix+ev.WorkspaceID.String(), payload)
 }

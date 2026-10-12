@@ -101,7 +101,7 @@ func loadTriage(ctx context.Context, d *deps.Deps, q db.Querier, wid uuid.UUID) 
 	tc := st.Triage()
 	return TriageSettings{AutoTriage: tc.AutoTriage, Fields: tc.Fields, AssignAfterTriage: tc.AssignAfterTriage,
 		Threshold: tc.Threshold, Engine: hd.Engine(d.Cfg),
-		Available: (d.Cfg.AIEnabled() || d.Cfg.DecisionsProvider == "typesafe") && st.AI().Enabled}, nil
+		Available: (d.Cfg.AIEnabled() || hd.Engine(d.Cfg).Provider == "typesafe") && st.AI().Enabled}, nil
 }
 
 func loadHours(ctx context.Context, q db.Querier, wid uuid.UUID) (BusinessHoursBody, error) {

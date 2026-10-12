@@ -67,7 +67,7 @@ func newEnv(t *testing.T, o opts) *env {
 	cfg.AIModel, cfg.AIFastModel = "claude-sonnet-5-5", "claude-haiku-4-5-20251001"
 	cfg.EmbeddingsDriver = "openai"
 	d.Cfg = &cfg
-	d.Plan = plan.New(o.billing)
+	d.Plan = plan.New(o.billing, 1.5)
 	f := newFake(t)
 	s := New(context.Background(), &d)
 	var p Provider = NewAnthropic("test-key", f.srv.URL)

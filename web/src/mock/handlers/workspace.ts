@@ -1,5 +1,5 @@
 // Workspaces, members, invitations, teams, API keys, webhooks, audit log,
-// events, realtime tokens, notifications and widget settings.
+// events, realtime tokens and notifications. Widget settings: handlers/widget.ts.
 
 import type { ApiKey, Member, Role, Team, Webhook, WebhookDelivery, WorkspaceSettings } from "@/lib/api/types";
 import { db, me, userRef, type WsData } from "../db";
@@ -11,6 +11,7 @@ import { isRecord, nowIso, randomToken, slugify, uuid, DAY } from "../util";
 import { checkLimit } from "./billing";
 import { crud, assign } from "./crud";
 import { registerPictures } from "./pictures";
+import { registerWidget } from "./widget";
 
 const ROLES: Role[] = ["owner", "admin", "agent", "viewer"];
 
@@ -72,6 +73,7 @@ export function seedNewWorkspace(name: string): WsData {
 
 export function registerWorkspace() {
   registerPictures();
+  registerWidget();
   post("/v1/workspaces", (ctx) => {
     const name = required(ctx, "name").slice(0, 60);
     const ws = seedNewWorkspace(name);
@@ -322,21 +324,6 @@ export function registerWorkspace() {
     const now = nowIso();
     for (const n of ctx.ws.notifications) if (!n.read_at && (all || ids?.includes(n.id))) n.read_at = now;
     return respond(204);
-  });
-
-  get("/v1/widget/settings", (ctx) => ctx.ws.widget);
-  patch("/v1/widget/settings", (ctx) => {
-    requireAdmin(ctx.ws);
-    const w = ctx.ws.widget;
-    if (typeof ctx.body.greeting === "string") w.greeting = ctx.body.greeting.slice(0, 200);
-    if (typeof ctx.body.require_email === "boolean") w.require_email = ctx.body.require_email;
-    if (typeof ctx.body.enabled === "boolean") w.enabled = ctx.body.enabled;
-    const origins = strArr(ctx.body.allowed_origins);
-    if (origins) {
-      for (const o of origins) if (!/^https?:\/\/[^/\s]+$/.test(o)) throw invalid(`${o} is not a valid origin (like https://example.com)`);
-      w.allowed_origins = origins;
-    }
-    return w;
   });
 }
 

@@ -46,6 +46,9 @@ The common codes:
 | `no_credits` | 402 | The workspace has no AI credits left. Cloud only. |
 | `not_found` | 404 | The resource does not exist in this workspace. |
 | `ai_disabled` | 404 | No AI provider is configured on this instance. |
+| `ai_key_rejected` | 502 | The workspace's own AI provider key was refused by its provider. An admin can replace it in Settings > AI. |
+| `ai_key_no_funds` | 502 | The provider account behind the workspace's own AI key is out of funds. |
+| `provider_test_failed` | 422 | A provider key failed its test call and was not saved; `detail` says why. |
 | `billing_disabled` | 404 | Billing is not enabled on this instance. |
 | `conflict` | 409 | The request conflicts with the current state, such as a duplicate. |
 | `idempotency_in_progress` | 409 | A request with the same [idempotency key](/api/idempotency/) is still running. Retry shortly. |

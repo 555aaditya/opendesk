@@ -169,7 +169,8 @@ func (s *Service) triage(ctx context.Context, q db.Querier, wid uuid.UUID, userI
 	}
 	if s.jev() {
 		t, c, err := s.triageJev(ctx, wid, userID, tid, tc, o)
-		if err == nil || s.provider == nil || isNoCredits(err) || !skippable(err) {
+		// Out of credits for Jev, a workspace on its own key still triages on its LLM.
+		if err == nil || s.provider == nil || !skippable(err) || (isNoCredits(err) && !s.usesOwnKey(ctx, wid)) {
 			return t, c, err
 		}
 		s.d.Log.Warn("jev triage failed, using the AI model", "ticket_id", tid, "reason", errReason(err))

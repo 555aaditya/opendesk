@@ -13,6 +13,10 @@ regexes = [
   '''dGhlIHNhbXBsZSBub25jZQ==''',
   '''6f1c9a2e-8a8e-4c4e-9f0b-2b6a1d7e4c10''',
   '''6f1c2b7e-0d4a-4f8e-9b1a-2c3d4e5f6a7b''',
+  # Fake provider keys in the workspace AI key tests (internal/ai/byok_test.go, web mock tests).
+  '''sk-or-v1-0123456789abcdefWXYZ''',
+  '''sk-or-bad-12345678''',
+  '''sk-test-(abcd1234|12345678)''',
 ]
 paths = [
   '''internal/auth/passwords/breached\.txt''',

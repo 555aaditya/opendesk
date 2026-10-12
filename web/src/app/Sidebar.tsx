@@ -33,6 +33,8 @@ import { motion, useReducedMotion } from "motion/react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChecklistMini } from "@/components/onboarding/Checklist";
+import { useUrgentChats } from "@/components/tickets/useUrgentChats";
+import { formatWait, urgentWash } from "@/components/tickets/waiting";
 import { AvailabilityMenuItems } from "@/components/presence/availability";
 import { Avatar } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/toast";
@@ -117,6 +119,77 @@ function Count({ n, rail }: { n: number | null | undefined; rail: boolean }) {
   );
 }
 
+/** The pulsing red dot of a waiting visitor. */
+function WaitDot({ size = "size-1.5" }: { size?: string }) {
+  return (
+    <span className={cn("relative flex shrink-0", size)}>
+      <span className="absolute inset-0 rounded-full bg-tone-red-solid animate-urgent-ping motion-reduce:hidden" />
+      <span className={cn("relative rounded-full bg-tone-red-solid", size)} />
+    </span>
+  );
+}
+
+/**
+ * Visitors waiting in live chat with nobody on it: a red row on top of the inbox, on
+ * every page, that opens the longest wait. Gone when nobody waits.
+ */
+function WaitingChats({ rail }: { rail: boolean }) {
+  const { t } = useTranslation("shell");
+  const navigate = useNavigate();
+  const { urgent, now } = useUrgentChats();
+  if (!urgent.length) return null;
+  const longest = urgent[0];
+  const time = formatWait(now - longest.wait.since);
+  const label = t("nav.waiting", { count: urgent.length, time });
+  return (
+    <NavTip rail={rail} label={label}>
+      <button
+        type="button"
+        onClick={() => void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "unassigned", ticketId: longest.ticket.id } })}
+        aria-label={label}
+        className={cn(
+          rowBase,
+          rowShape(rail),
+          urgentWash,
+          "mb-1 overflow-hidden font-medium text-tone-red shadow-[inset_0_0_0_1px_var(--tone-red-line)] hover:brightness-[0.98] active:scale-[0.99]",
+        )}
+      >
+        {rail ? (
+          <span className="mono text-[11px] font-semibold tabular-nums">{urgent.length > 9 ? "9+" : urgent.length}</span>
+        ) : (
+          <>
+            <span className="flex size-[15px] shrink-0 items-center justify-center">
+              <WaitDot size="size-2" />
+            </span>
+            <span className="min-w-0 flex-1 truncate">{t("nav.waitingShort", { count: urgent.length })}</span>
+            <span className="mono ml-auto shrink-0 text-[11px] font-semibold tabular-nums">{time}</span>
+          </>
+        )}
+      </button>
+    </NavTip>
+  );
+}
+
+/** On the Unassigned row: how many of those are visitors waiting in chat right now. */
+function WaitingCount({ rail }: { rail: boolean }) {
+  const { t } = useTranslation("shell");
+  const { urgent } = useUrgentChats();
+  if (!urgent.length) return null;
+  if (rail) return <span className="absolute left-1 top-1"><WaitDot /></span>;
+  return (
+    <span
+      title={t("nav.waitingCount", { count: urgent.length })}
+      className="ml-auto inline-flex h-4 shrink-0 items-center gap-1 rounded-full bg-tone-red-solid pl-1.5 pr-1.5 text-[10.5px] font-semibold tabular-nums text-white"
+    >
+      <span className="relative flex size-1 shrink-0">
+        <span className="absolute inset-0 rounded-full bg-white animate-urgent-ping motion-reduce:hidden" />
+        <span className="relative size-1 rounded-full bg-white" />
+      </span>
+      {urgent.length}
+    </span>
+  );
+}
+
 function Label({ children, rail }: { children: ReactNode; rail: boolean }) {
   return <span className={cn("min-w-0 flex-1 truncate", rail ? "sr-only" : "animate-label-in motion-reduce:animate-none")}>{children}</span>;
 }
@@ -192,6 +265,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
     <nav aria-label={t("nav.main")} className="flex h-full w-full flex-col">
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-3 pt-1">
         <Section id="inbox" label={t("nav.inbox")} rail={rail} first>
+          <WaitingChats rail={rail} />
           {folders.map((f) => (
             <NavTip key={f.id} rail={rail} label={f.label}>
               <Link
@@ -203,6 +277,7 @@ export function Sidebar({ drawer }: { drawer?: boolean }) {
               >{withPill(<>
                 {folderIcons[f.id]}
                 <Label rail={rail}>{f.label}</Label>
+                {f.id === "unassigned" && <WaitingCount rail={rail} />}
                 {counts && f.id !== "solved" && f.id !== "spam" && <Count n={f.count(counts)} rail={rail} />}
                 {rail && counts && f.id === "unassigned" && (f.count(counts) ?? 0) > 0 && (
                   <span className="absolute right-1 top-1 size-1.5 rounded-full bg-fg ring-2 ring-chrome" />
@@ -431,7 +506,7 @@ function SetupChecklist({ rail }: { rail: boolean }) {
         collapsed={rail}
         data={data}
         isAdmin={atLeast(role, "admin")}
-        unavailable={ai.enabled ? undefined : { try_ollie: t("checklist.needs_ai") }}
+        unavailable={ai.enabled ? undefined : { try_ollie: t("checklist.needs_ai"), setup_ai_agent: t("checklist.needs_ai") }}
         onDismiss={() => dismiss.mutateAsync()}
         triggerClassName={cn("h-7 hover:bg-chrome-hover data-[state=open]:bg-chrome-hover", rail && "h-8")}
       />

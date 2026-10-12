@@ -3,11 +3,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
 
-/** Asks before leaving a page with unsaved edits (in-app links and tab close). */
-export function UnsavedGuard({ when }: { when: boolean }) {
+/**
+ * Asks before leaving a page with unsaved edits (in-app links and tab close).
+ * `allow` lets some destinations through, for pages that keep the draft.
+ */
+export function UnsavedGuard({ when, allow }: { when: boolean; allow?: (pathname: string) => boolean }) {
   const { t } = useTranslation("settingsInbox");
   const b = useBlocker({
-    shouldBlockFn: () => when,
+    shouldBlockFn: ({ next }) => when && !allow?.(next.pathname),
     enableBeforeUnload: () => when,
     withResolver: true,
   });

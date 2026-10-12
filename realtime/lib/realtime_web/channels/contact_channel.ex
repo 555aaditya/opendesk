@@ -1,8 +1,8 @@
 defmodule RealtimeWeb.ContactChannel do
   @moduledoc """
   `contact:<wid>:<contact_id>`: the chat widget's channel. Joined only by a
-  `widget_ws` token for that contact in that workspace. Receives public events
-  and agents' `"typing"`.
+  `widget_ws` token for that contact in that workspace. Receives public events,
+  agents' `"typing"` and the widget agent's live reply previews (`"live"`).
 
   Client push `"typing"` `{ticket_id}` sends `"customer_typing"`
   `{ticket_id, contact_id}` to `ticket:<wid>:<ticket_id>`.

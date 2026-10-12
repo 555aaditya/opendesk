@@ -232,15 +232,15 @@ func TestCreditPackGrantIsIdempotent(t *testing.T) {
 	}
 	// Not paid yet (async method): nothing granted.
 	expect(t, e.event("evt_cr_unpaid", "checkout.session.completed", session("unpaid")), 200, "")
-	if n := e.scalar(`SELECT purchased_balance FROM ai_credits WHERE workspace_id = $1`, wid).(int32); n != 0 {
+	if n := e.scalar(`SELECT purchased_milli FROM ai_credits WHERE workspace_id = $1`, wid).(int64); n != 0 {
 		t.Fatalf("granted before payment: %d", n)
 	}
 	expect(t, e.event("evt_cr_paid", "checkout.session.async_payment_succeeded", session("paid")), 200, "")
 	// Replays of the event, and another event for the same session, grant nothing more.
 	expect(t, e.event("evt_cr_paid", "checkout.session.async_payment_succeeded", session("paid")), 200, "")
 	expect(t, e.event("evt_cr_paid_2", "checkout.session.completed", session("paid")), 200, "")
-	if n := e.scalar(`SELECT purchased_balance FROM ai_credits WHERE workspace_id = $1`, wid).(int32); n != 3*plan.CreditPackSize {
-		t.Fatalf("purchased balance %d, want %d", n, 3*plan.CreditPackSize)
+	if n := e.scalar(`SELECT purchased_milli FROM ai_credits WHERE workspace_id = $1`, wid).(int64); n != 3*plan.CreditPackSize*1000 {
+		t.Fatalf("purchased balance %d, want %d", n, 3*plan.CreditPackSize*1000)
 	}
 	if n := e.count(`SELECT count(*) FROM audit_logs WHERE workspace_id = $1 AND action = 'billing.credits_purchased'`, wid); n != 1 {
 		t.Fatalf("credits audit rows: %d", n)
@@ -276,59 +276,60 @@ func TestSpendConcurrency(t *testing.T) {
 	owner := e.signup("owner")
 	wid := owner.newWorkspace("Acme")
 	ctx := context.Background()
-	svc := plan.New(true)
-	// Free allowance 50; leave 10 credits. draft_reply costs 3, so exactly 3 of 20 succeed.
-	if _, err := e.d.DB.Pool.Exec(ctx, `UPDATE ai_credits SET included_used = 40 WHERE workspace_id = $1`, wid); err != nil {
+	svc := plan.New(true, 1.5)
+	// Free allowance 50; leave 10 credits. Calls without a reported cost charge the
+	// feature's typical credits (draft_reply: 3); concurrent spends never charge more
+	// than what is left, and the balance never goes below zero.
+	if _, err := e.d.DB.Pool.Exec(ctx, `UPDATE ai_credits SET included_used_milli = 40000 WHERE workspace_id = $1`, wid); err != nil {
 		t.Fatal(err)
 	}
-	spend := func() (ok, refused int) {
+	spend := func(u plan.Usage) (charged plan.Milli) {
 		var mu sync.Mutex
 		var wg sync.WaitGroup
 		for range 20 {
 			wg.Go(func() {
-				err := svc.Spend(ctx, e.d.DB.Pool, wid, plan.Usage{Feature: "draft_reply", Model: "test"})
+				m, err := svc.Spend(ctx, e.d.DB.Pool, wid, u)
 				mu.Lock()
 				defer mu.Unlock()
-				switch {
-				case err == nil:
-					ok++
-				case errors.Is(err, plan.ErrNoCredits):
-					refused++
-				default:
+				if err != nil {
 					t.Errorf("spend: %v", err)
 				}
+				charged += m
 			})
 		}
 		wg.Wait()
 		return
 	}
-	if ok, refused := spend(); ok != 3 || refused != 17 {
-		t.Fatalf("spends ok=%d refused=%d, want 3/17", ok, refused)
+	if charged := spend(plan.Usage{Feature: "draft_reply", Model: "test"}); charged != 10000 {
+		t.Fatalf("charged %d, want 10000", charged)
 	}
 	c, err := svc.Balance(ctx, e.d.DB.Pool, wid)
-	if err != nil || c.IncludedUsed != 49 || c.Remaining != 1 {
+	if err != nil || c.IncludedUsed != 50000 || c.Remaining != 0 {
 		t.Fatalf("balance %+v %v", c, err)
-	}
-	// Purchased credits are spent after the allowance, and never below zero.
-	if _, err := e.d.DB.Pool.Exec(ctx, `UPDATE ai_credits SET included_used = 50, purchased_balance = 10 WHERE workspace_id = $1`, wid); err != nil {
-		t.Fatal(err)
-	}
-	if ok, _ := spend(); ok != 3 {
-		t.Fatalf("purchased spends ok=%d, want 3", ok)
-	}
-	if n := e.scalar(`SELECT purchased_balance FROM ai_credits WHERE workspace_id = $1`, wid).(int32); n != 1 {
-		t.Fatalf("purchased balance %d, want 1", n)
-	}
-	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1`, wid); n != 6 {
-		t.Fatalf("usage rows %d, want 6", n)
 	}
 	if err := svc.Reserve(ctx, e.d.DB.Pool, wid, "draft_reply"); !errors.Is(err, plan.ErrNoCredits) {
 		t.Fatalf("reserve: %v", err)
 	}
-	// Usage report.
+	// Metered: $0.002 at 1.5x is 0.3 credits, taken from purchased credits after the allowance.
+	if _, err := e.d.DB.Pool.Exec(ctx, `UPDATE ai_credits SET purchased_milli = 10000 WHERE workspace_id = $1`, wid); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Reserve(ctx, e.d.DB.Pool, wid, "draft_reply"); err != nil {
+		t.Fatalf("reserve with purchased credits: %v", err)
+	}
+	if charged := spend(plan.Usage{Feature: "draft_reply", Model: "test", CostUSD: 0.002}); charged != 6000 {
+		t.Fatalf("metered charged %d, want 6000", charged)
+	}
+	if n := e.scalar(`SELECT purchased_milli FROM ai_credits WHERE workspace_id = $1`, wid).(int64); n != 4000 {
+		t.Fatalf("purchased balance %d, want 4000", n)
+	}
+	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1`, wid); n != 40 {
+		t.Fatalf("usage rows %d, want 40", n)
+	}
+	// Usage report: 10 + 6 credits over 40 calls.
 	r := owner.do("GET", "/v1/billing/usage", nil)
 	expect(t, r, 200, "")
-	if r.num("total_credits") != 18 || r.num("total_calls") != 6 {
+	if r.num("total_credits") != 16 || r.num("total_calls") != 40 {
 		t.Fatalf("usage: %s", r.Raw)
 	}
 	// A YYYY-MM-DD "to" includes that day; each day carries its per-feature split.
@@ -336,16 +337,33 @@ func TestSpendConcurrency(t *testing.T) {
 	r = owner.do("GET", "/v1/billing/usage?from="+today+"&to="+today, nil)
 	expect(t, r, 200, "")
 	var rep struct {
-		TotalCredits int `json:"total_credits"`
+		TotalCredits float64 `json:"total_credits"`
 		ByDay        []struct {
-			Date      string         `json:"date"`
-			Credits   int            `json:"credits"`
-			ByFeature map[string]int `json:"by_feature"`
+			Date      string             `json:"date"`
+			Credits   float64            `json:"credits"`
+			ByFeature map[string]float64 `json:"by_feature"`
 		} `json:"by_day"`
+		ByModel []struct {
+			Model   string  `json:"model"`
+			Credits float64 `json:"credits"`
+			Calls   int     `json:"calls"`
+		} `json:"by_model"`
 	}
-	if err := json.Unmarshal(r.Raw, &rep); err != nil || rep.TotalCredits != 18 || len(rep.ByDay) != 1 ||
-		rep.ByDay[0].Date != today || rep.ByDay[0].Credits != 18 || rep.ByDay[0].ByFeature["draft_reply"] != 18 {
+	if err := json.Unmarshal(r.Raw, &rep); err != nil || rep.TotalCredits != 16 || len(rep.ByDay) != 1 ||
+		rep.ByDay[0].Date != today || rep.ByDay[0].Credits != 16 || rep.ByDay[0].ByFeature["draft_reply"] != 16 ||
+		len(rep.ByModel) != 1 || rep.ByModel[0].Model != "test" || rep.ByModel[0].Calls != 40 {
 		t.Fatalf("usage today: %s", r.Raw)
+	}
+}
+
+func TestFromCost(t *testing.T) {
+	for _, c := range []struct {
+		usd, markup float64
+		want        plan.Milli
+	}{{0, 1.5, 0}, {0.01, 1, 1000}, {0.002, 1.5, 300}, {0.0000001, 1.5, 1}, {0.0123456, 2, 2470}} {
+		if got := plan.FromCost(c.usd, c.markup); got != c.want {
+			t.Errorf("FromCost(%v, %v) = %d, want %d", c.usd, c.markup, got, c.want)
+		}
 	}
 }
 

@@ -1,11 +1,13 @@
 // Fake activity so the app feels alive in mock mode: customer replies, new
-// tickets, notifications, teammates moving between tickets and typing.
+// tickets, notifications, teammates moving between tickets and typing, and
+// Ollie answering chat visitors on a ticket you're viewing (ollie.ts).
 
 import { contactRef, db, type WsData } from "./db";
 import { activeTicketIds, emitOnTicket, publish, setTeammatePresence, teammatePresence } from "./gateway";
 import { customerReply } from "./handlers/tickets";
 import { FOLLOW_UPS, GENERATED, TEAM } from "./content";
 import { addMessage, newTicket, notify, OPENISH } from "./tickets";
+import { ollieOnActive } from "./ollie";
 import { textToHtml } from "./util";
 
 const timers: ReturnType<typeof setTimeout>[] = [];
@@ -107,6 +109,7 @@ export function startLive() {
   schedule(randomNotification, 60_000, 120_000);
   schedule(teammateWander, 30_000, 60_000);
   schedule(typingOnActive, 12_000, 25_000);
+  schedule(ollieOnActive, 35_000, 60_000);
 }
 
 export function pauseLive() {

@@ -23,6 +23,7 @@ import { HttpError, del, get, invalid, notFound, paginate, patch, post, required
 import { applyLabels, canCreateLabels, fieldFiltersFromQuery, fieldsText, matchFields, mergeFields } from "../labels";
 import { addActivity, publishTicketUpdated, sortTickets } from "../tickets";
 import { isRecord, nowIso, randomToken, slugify, uuid } from "../util";
+import { aiOff } from "./ai";
 import { checkLimit } from "./billing";
 import { assign, crud } from "./crud";
 
@@ -341,6 +342,7 @@ export function registerResources() {
     const m = findMailbox(ctx);
     assign(m, ctx.body, ["name", "display_name", "signature_html", "auto_reply_enabled", "auto_reply_subject", "auto_reply_html", "status", "team_id"]);
     if (isRecord(ctx.body.config)) m.config = { ...m.config, ...(ctx.body.config as MailboxConfig) };
+    patchMailboxAI(ctx, m);
     if (ctx.body.password || ctx.body.smtp_password) {
       m.status = "active";
       m.last_error = "";
@@ -473,6 +475,18 @@ function recountCollections(ws: WsData) {
   for (const c of ws.collections) c.article_count = ws.articles.filter((a) => a.collection_id === c.id).length;
 }
 
+/** Ollie's email answers on a mailbox (contracts/agent.md "Email"): only while AI is on. */
+function patchMailboxAI(ctx: Ctx, m: Mailbox) {
+  const b = ctx.body;
+  if (b.ai_answers_mode !== undefined && b.ai_answers_mode !== "draft" && b.ai_answers_mode !== "send") throw invalid("ai_answers_mode must be draft or send");
+  if (b.ai_answers === true && !m.ai_answers && (aiOff() || !ctx.ws.ai.enabled)) {
+    throw new HttpError(422, "ai_off", "Turn on AI in Settings > AI before Ollie answers emails.");
+  }
+  if (typeof b.ai_answers === "boolean") m.ai_answers = b.ai_answers;
+  if (b.ai_answers_mode !== undefined) m.ai_answers_mode = b.ai_answers_mode;
+  if (typeof b.ai_answers_outside_hours === "boolean") m.ai_answers_outside_hours = b.ai_answers_outside_hours;
+}
+
 function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_name" | "inbound_kind" | "outbound_kind" | "config" | "team_id">): Mailbox {
   const m: Mailbox = {
     ...init,
@@ -483,6 +497,9 @@ function mailbox(ws: WsData, init: Pick<Mailbox, "name" | "email" | "display_nam
     auto_reply_enabled: false,
     auto_reply_subject: "",
     auto_reply_html: "",
+    ai_answers: false,
+    ai_answers_mode: "draft",
+    ai_answers_outside_hours: false,
     status: "active",
     last_error: "",
     last_synced_at: init.inbound_kind === "forwarding" ? null : nowIso(),

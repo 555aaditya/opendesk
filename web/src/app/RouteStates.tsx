@@ -1,4 +1,5 @@
 import { Link, useRouter, type ErrorComponentProps } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
@@ -16,26 +17,53 @@ export function RoutePending() {
   );
 }
 
+// A page's code chunk failed to download: after a release the old chunks are gone, and
+// the browser keeps a failed import, so only a full reload recovers. Reload once on its
+// own; if that fails too, say so and offer the reload.
+const CHUNK_ERROR = /dynamically imported module|Importing a module script failed|error loading dynamically|Unable to preload CSS/i;
+const RELOADED_KEY = "od-chunk-reload";
+
+function isChunkError(error: unknown): boolean {
+  return error instanceof Error && CHUNK_ERROR.test(error.message);
+}
+
+function reloadOnce(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(RELOADED_KEY) ?? 0);
+    if (Date.now() - last < 15_000) return false;
+    sessionStorage.setItem(RELOADED_KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
 export function RouteError({ error, reset }: ErrorComponentProps) {
   const { t } = useTranslation("shell");
   const router = useRouter();
   const notFound = isApiError(error, "not_found");
+  const chunk = isChunkError(error);
+  useEffect(() => {
+    if (chunk) reloadOnce();
+  }, [chunk]);
   return (
     <div className="flex h-full items-center justify-center p-8">
       <EmptyState
         lit={3}
         title={notFound ? t("route.notFoundTitle") : t("route.errorTitle")}
-        description={notFound ? t("route.notFoundBody") : errorMessage(error)}
+        description={notFound ? t("route.notFoundBody") : chunk ? t("route.chunkBody") : errorMessage(error)}
         action={
           <>
             <Button
               variant="secondary"
               onClick={() => {
+                if (chunk) return window.location.reload();
                 reset();
                 void router.invalidate();
               }}
             >
-              {t("route.retry")}
+              {chunk ? t("route.reload") : t("route.retry")}
             </Button>
             <Button variant="ghost" asChild>
               <Link to="/">{t("route.toInbox")}</Link>

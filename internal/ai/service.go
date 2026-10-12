@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,21 +32,38 @@ type Service struct {
 	vectors bool
 	// decider answers typed decisions (Jev, or the LLM adapter); nil without one.
 	decider decide.Decider
+	// knowledge retrieves from knowledge sources (internal/ai/knowledge); nil until installed.
+	knowledgeMu sync.RWMutex
+	knowledge   KnowledgeRetriever
+	// toolbox lists and runs workspace tools (internal/ai/mcp); nil until installed.
+	toolbox AgentToolbox
+	// catalog caches the provider's model names and prices.
+	catalog catalog
+	// own caches the providers built from workspaces' own keys (byok.go).
+	own ownKeys
+	// anthropicBase is the Anthropic API root (ANTHROPIC_BASE_URL, "" = the public API).
+	anthropicBase string
+	// guardDev relaxes the SSRF guard for user-chosen endpoints on a development instance.
+	guardDev bool
 }
 
 // New builds the service from configuration. It never fails: a missing provider turns
 // AI off, a missing vector table turns semantic search into FTS.
 func New(ctx context.Context, d *deps.Deps) *Service {
 	cfg := d.Cfg
-	s := &Service{d: d}
+	s := &Service{d: d, anthropicBase: os.Getenv("ANTHROPIC_BASE_URL"), guardDev: !cfg.IsProduction()}
 	s.models.Default, s.models.Fast = cfg.AIModel, cfg.AIFastModel
 	if s.models.Fast == "" {
 		s.models.Fast = s.models.Default
 	}
 	switch cfg.AIProvider {
+	case "openrouter":
+		if cfg.OpenRouterAPIKey != "" {
+			s.provider = NewOpenRouter(cfg.OpenRouterBaseURL, cfg.OpenRouterAPIKey, cfg.AppURL)
+		}
 	case "anthropic":
 		if cfg.AnthropicAPIKey != "" {
-			s.provider = NewAnthropic(cfg.AnthropicAPIKey, os.Getenv("ANTHROPIC_BASE_URL"))
+			s.provider = NewAnthropic(cfg.AnthropicAPIKey, s.anthropicBase)
 		}
 	case "openai":
 		if s.models.Default != "" {
@@ -62,6 +80,14 @@ func New(ctx context.Context, d *deps.Deps) *Service {
 			}
 		case "openai":
 			s.embedder = NewOpenAIEmbedder(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.EmbeddingsModel)
+		case "openrouter":
+			if cfg.OpenRouterAPIKey != "" {
+				model := cfg.EmbeddingsModel
+				if model == "" {
+					model = "openai/text-embedding-3-small"
+				}
+				s.embedder = NewOpenAIEmbedder(cfg.OpenRouterBaseURL+"/v1", cfg.OpenRouterAPIKey, model)
+			}
 		}
 	}
 	s.vectors = vectorTable(ctx, d.DB.Pool)
@@ -69,6 +95,10 @@ func New(ctx context.Context, d *deps.Deps) *Service {
 	case "typesafe":
 		if cfg.TypesafeAPIKey != "" {
 			s.decider = decide.NewTypeSafe(cfg.TypesafeAPIURL, cfg.TypesafeAPIKey, cfg.TypesafeModel)
+		}
+	case "openrouter":
+		if cfg.OpenRouterAPIKey != "" {
+			s.decider = decide.NewOpenRouter(cfg.OpenRouterBaseURL, cfg.OpenRouterAPIKey, cfg.TypesafeModel, cfg.AppURL)
 		}
 	case "llm":
 		if s.provider != nil {
@@ -145,7 +175,8 @@ func (s *Service) workspaceOn(ctx context.Context, wid uuid.UUID) (hd.AISettings
 }
 
 // call is one model call billed to a feature. Credits are checked before the call and
-// charged by charge after the feature succeeded, so a failed call costs nothing.
+// charged by charge after the feature succeeded, so a failed call costs nothing. A call
+// on the workspace's own key is recorded and charges nothing.
 type call struct {
 	s        *Service
 	wid      uuid.UUID
@@ -153,17 +184,78 @@ type call struct {
 	ticketID *uuid.UUID
 	feature  string
 	resp     Response
+	// model, when set, is used instead of the workspace's model for the feature's tier.
+	model string
+	// charged is what the last charge cost.
+	charged plan.Milli
+	// rt is where the call goes (the instance's provider or the workspace's key).
+	rt *route
+	// onKey marks a call that ran on the workspace's own key: no credits.
+	onKey bool
 }
 
 func (s *Service) newCall(wid uuid.UUID, userID, ticketID *uuid.UUID, feature string) *call {
 	return &call{s: s, wid: wid, userID: userID, ticketID: ticketID, feature: feature}
 }
 
+// route loads where the workspace's LLM calls go, once per call.
+func (c *call) route(ctx context.Context) (*route, error) {
+	if c.rt != nil {
+		return c.rt, nil
+	}
+	rt, err := c.s.routeFor(ctx, c.wid)
+	if err != nil {
+		return nil, err
+	}
+	c.rt = rt
+	return rt, nil
+}
+
+// reserve checks credits before an LLM call. A workspace on its own key needs none.
 func (c *call) reserve(ctx context.Context) error {
+	rt, err := c.route(ctx)
+	if err != nil {
+		return err
+	}
+	if rt.own {
+		return nil
+	}
+	return c.reserveCredits(ctx)
+}
+
+// reserveCredits checks the balance covers the feature (instance calls, Jev decisions).
+func (c *call) reserveCredits(ctx context.Context) error {
 	if c.s.d.Plan == nil {
 		return nil // no plan service: unlimited
 	}
 	return c.s.d.Plan.Reserve(ctx, c.s.d.DB.Pool, c.wid, c.feature)
+}
+
+// resolveModel picks the model of a call: an explicit override, else the workspace's
+// choice for the feature's tier when the request asks for an instance default. On the
+// workspace's own key, only that provider's models are used.
+func (c *call) resolveModel(ctx context.Context, requested string) string {
+	rt, err := c.route(ctx)
+	if err != nil {
+		rt = c.s.instanceRoute()
+	}
+	if c.model != "" && (!rt.own || c.s.ownModelOK(ctx, rt, c.model)) {
+		return c.model
+	}
+	if !rt.own && requested != "" && requested != c.s.models.Default && requested != c.s.models.Fast {
+		return requested
+	}
+	st, err := hd.LoadSettings(ctx, c.s.d.DB.Pool, c.wid)
+	if err != nil {
+		if requested != "" && !rt.own {
+			return requested
+		}
+		if featureTier(c.feature) == tierFast {
+			return rt.models.Fast
+		}
+		return rt.models.Default
+	}
+	return c.s.tierModelOn(ctx, rt, st.AI(), featureTier(c.feature))
 }
 
 // run reserves and calls the model; onDelta non-nil streams.
@@ -171,13 +263,17 @@ func (c *call) run(ctx context.Context, req Request, onDelta func(string)) (Resp
 	if err := c.reserve(ctx); err != nil {
 		return Response{}, err
 	}
+	rt := c.rt
+	req.Model = c.resolveModel(ctx, req.Model)
 	var err error
 	start := time.Now()
 	if onDelta != nil {
-		c.resp, err = c.s.provider.Stream(ctx, req, onDelta)
+		c.resp, err = rt.p.Stream(ctx, req, onDelta)
 	} else {
-		c.resp, err = c.s.provider.Complete(ctx, req)
+		c.resp, err = rt.p.Complete(ctx, req)
 	}
+	c.onKey = rt.own
+	err = c.s.keyResult(ctx, c.wid, rt, err)
 	if c.resp.Model == "" {
 		c.resp.Model = req.Model
 	}
@@ -188,14 +284,30 @@ func (c *call) run(ctx context.Context, req Request, onDelta func(string)) (Resp
 }
 
 // decide reserves credits and asks the decision engine. Usage is recorded by charge
-// with the engine's name as the model ("jev", counts only).
+// with the engine's name as the model ("jev", counts only). Jev stays on the instance and
+// is charged even for a workspace on its own key; the LLM adapter follows the workspace's
+// provider like any LLM call.
 func (c *call) decide(ctx context.Context, dc decide.Decider, req decide.Request) (decide.Result, error) {
-	if err := c.reserve(ctx); err != nil {
-		return decide.Result{}, err
+	var rt *route
+	if _, ok := dc.(*llmDecider); ok {
+		r, err := c.route(ctx)
+		if err != nil {
+			return decide.Result{}, err
+		}
+		if r.own {
+			rt, c.onKey = r, true
+			dc = &llmDecider{s: c.s, rt: r}
+		}
+	}
+	if !c.onKey {
+		if err := c.reserveCredits(ctx); err != nil {
+			return decide.Result{}, err
+		}
 	}
 	start := time.Now()
 	res, err := dc.Decide(ctx, req)
-	c.resp = Response{Model: dc.Name(), InputTokens: res.InputTokens, OutputTokens: res.OutputTokens}
+	err = c.s.keyResult(ctx, c.wid, rt, err)
+	c.resp = Response{Model: dc.Name(), InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUSD: res.CostUSD}
 	if dc.Name() != "jev" {
 		c.resp.Model = res.Model
 	}
@@ -226,8 +338,8 @@ func (c *call) charge(ctx context.Context) {
 	ctx = context.WithoutCancel(ctx)
 	var err error
 	if c.s.d.Plan != nil {
-		err = c.s.d.Plan.Spend(ctx, c.s.d.DB.Pool, c.wid, plan.Usage{UserID: c.userID, TicketID: c.ticketID, Feature: c.feature,
-			Model: c.resp.Model, InputTokens: c.resp.InputTokens, OutputTokens: c.resp.OutputTokens})
+		c.charged, err = c.s.d.Plan.Spend(ctx, c.s.d.DB.Pool, c.wid, plan.Usage{UserID: c.userID, TicketID: c.ticketID, Feature: c.feature,
+			Model: c.resp.Model, InputTokens: c.resp.InputTokens, OutputTokens: c.resp.OutputTokens, CostUSD: c.s.costOf(ctx, c.resp), OwnKey: c.onKey})
 	}
 	if err != nil {
 		c.s.d.Log.Warn("ai spend failed", "feature", c.feature, "err", err)
@@ -236,7 +348,7 @@ func (c *call) charge(ctx context.Context) {
 	if c.userID != nil {
 		distinct = c.userID.String()
 	}
-	c.s.d.Analytics.Capture(distinct, c.wid.String(), "ai_feature_used", map[string]any{"feature": c.feature, "model": c.resp.Model})
+	c.s.d.Analytics.Capture(distinct, c.wid.String(), "ai_feature_used", map[string]any{"feature": c.feature, "model": c.resp.Model, "own_key": c.onKey})
 }
 
 // apiErr maps AI errors to problem responses.
@@ -244,6 +356,13 @@ func apiErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
+	case errors.As(err, new(*ownKeyError)):
+		var ke *ownKeyError
+		errors.As(err, &ke)
+		if ke.status == keyNoFunds {
+			return httpx.E(http.StatusBadGateway, "ai_key_no_funds", "The AI provider account behind this workspace's key is out of funds. An admin can fix it in AI settings.")
+		}
+		return httpx.E(http.StatusBadGateway, "ai_key_rejected", "The AI provider rejected this workspace's key. An admin can fix it in AI settings.")
 	case errors.Is(err, ErrBusy):
 		return httpx.E(http.StatusServiceUnavailable, "ai_busy", "The AI provider is busy. Try again in a moment.")
 	case errors.Is(err, ErrRefused):

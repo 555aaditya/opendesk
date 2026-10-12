@@ -7,20 +7,26 @@ import type {
   Activity,
   Contact,
   Envelope,
+  KnowledgeSource,
+  McpServer,
   Member,
   Message,
   Notification,
   Page,
+  SuggestedReply,
   Ticket,
   TicketLink,
   Workspace,
 } from "../api/types";
 import { qk, removeFromList, upsertInList } from "../queries";
+import { applyAgentQualityEvent } from "../agentTests";
 import { updateWorkspace, useSession } from "../session";
 import { patchTicketEverywhere, removeTicketEverywhere } from "../ticketCache";
 
 // Events that can tick off a setup checklist step (contracts/api.md "Onboarding").
 const onboardingResources = new Set(["mailbox", "member", "tag", "kb_article", "workspace"]);
+// Events that can tick off an AI agent setup step (contracts/agent.md "Setup").
+const agentSetupResources = new Set(["mailbox", "kb_article", "workspace", "ai_knowledge", "ai_mcp_server"]);
 
 export type ApplyContext = {
   me: string;
@@ -115,6 +121,7 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
   const d = env.data as Record<string, unknown>;
   const [resource, verb] = splitType(env.type);
   if (onboardingResources.has(resource) && verb !== "deleted") void qc.invalidateQueries({ queryKey: qk.onboarding });
+  if (agentSetupResources.has(resource)) void qc.invalidateQueries({ queryKey: qk.agentSetup });
 
   switch (env.type) {
     case "ticket.created":
@@ -138,6 +145,22 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       const tid = (d.ticket_id as string) ?? m?.ticket_id;
       if (!m || !tid) return;
       mergeMessage(qc, tid, m);
+      // A newer message means Ollie's suggestion no longer answers the latest one.
+      if (env.type === "message.created" && m.kind === "reply") {
+        const s = qc.getQueryData<SuggestedReply | null>(qk.suggestedReply(tid));
+        if (s && s.message_id !== m.id) qc.setQueryData(qk.suggestedReply(tid), null);
+      }
+      return;
+    }
+    case "ai_suggested_reply.created":
+    case "ai_suggested_reply.updated": {
+      const s = d.suggested_reply as SuggestedReply | undefined;
+      const tid = (d.ticket_id as string) ?? s?.ticket_id;
+      if (!s || !tid) return;
+      qc.setQueryData<SuggestedReply | null>(qk.suggestedReply(tid), (old) => {
+        if (s.status === "pending") return s;
+        return old && old.id !== s.id ? old : null;
+      });
       return;
     }
     case "activity.created": {
@@ -170,6 +193,38 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       ctx.onNotification?.(n);
       return;
     }
+  }
+
+  if (resource.startsWith("ai_agent_")) return void applyAgentQualityEvent(qc, env.type, d);
+
+  if (resource === "ai_knowledge") {
+    if (verb === "deleted") {
+      const id = (d.source_id ?? d.knowledge_source_id ?? d.id) as string | undefined;
+      if (id) {
+        removeFromList(qc, qk.knowledge, id);
+        qc.removeQueries({ queryKey: qk.knowledgeDocs(id) });
+      }
+    } else {
+      const src = d.source as KnowledgeSource | undefined;
+      if (!src) return void qc.invalidateQueries({ queryKey: qk.knowledge, exact: true });
+      const before = qc.getQueryData<KnowledgeSource[]>(qk.knowledge)?.find((x) => x.id === src.id);
+      upsertInList(qc, qk.knowledge, src, { prepend: true });
+      // A finished sync changes the documents.
+      if (before && before.status !== src.status && src.status === "ready") void qc.invalidateQueries({ queryKey: qk.knowledgeDocs(src.id) });
+    }
+    return;
+  }
+
+  if (resource === "ai_mcp_server") {
+    if (verb === "deleted") {
+      const id = (d.mcp_server_id ?? d.id) as string | undefined;
+      if (id) removeFromList(qc, qk.mcpServers, id);
+    } else {
+      const srv = d.mcp_server as McpServer | undefined;
+      if (srv) upsertInList(qc, qk.mcpServers, srv);
+      else void qc.invalidateQueries({ queryKey: qk.mcpServers });
+    }
+    return;
   }
 
   if (resource === "ticket_link") {

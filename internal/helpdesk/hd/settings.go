@@ -3,6 +3,7 @@ package hd
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,65 @@ type WidgetSettings struct {
 	RequireEmail   bool     `json:"require_email"`
 	Enabled        bool     `json:"enabled"`
 	AllowedOrigins []string `json:"allowed_origins"`
+	// Appearance (contracts/api.md "Widget"). Keys missing from a stored document read
+	// as their defaults.
+	Color         string   `json:"color" doc:"#rrggbb, or empty for the workspace brand colour"`
+	Theme         string   `json:"theme" enum:"auto,light,dark"`
+	Position      string   `json:"position" enum:"right,left"`
+	OffsetX       int      `json:"offset_x" minimum:"0" maximum:"200"`
+	OffsetY       int      `json:"offset_y" minimum:"0" maximum:"200"`
+	Launcher      string   `json:"launcher" enum:"icon,label"`
+	LauncherLabel string   `json:"launcher_label"`
+	Radius        string   `json:"radius" enum:"square,soft,round"`
+	Title         string   `json:"title"`
+	Subtitle      string   `json:"subtitle"`
+	ShowTeam      bool     `json:"show_team"`
+	Suggestions   []string `json:"suggestions"`
+	Sound         bool     `json:"sound"`
+	BotName       string   `json:"bot_name"`
+}
+
+// DefaultWidgetSettings are the settings of a workspace that never changed them.
+func DefaultWidgetSettings() WidgetSettings {
+	return WidgetSettings{Greeting: "Hi! How can we help?", Enabled: true, AllowedOrigins: []string{},
+		Theme: "auto", Position: "right", OffsetX: 20, OffsetY: 20, Launcher: "icon", Radius: "soft",
+		ShowTeam: true, Suggestions: []string{}}
+}
+
+// UnmarshalJSON fills keys missing from a stored document with their defaults.
+func (w *WidgetSettings) UnmarshalJSON(b []byte) error {
+	type plain WidgetSettings
+	v := plain(DefaultWidgetSettings())
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*w = WidgetSettings(v)
+	w.normalize()
+	return nil
+}
+
+// normalize replaces values outside their allowed sets with defaults.
+func (w *WidgetSettings) normalize() {
+	d := DefaultWidgetSettings()
+	if !slices.Contains([]string{"auto", "light", "dark"}, w.Theme) {
+		w.Theme = d.Theme
+	}
+	if w.Position != "left" {
+		w.Position = "right"
+	}
+	if w.Launcher != "label" {
+		w.Launcher = "icon"
+	}
+	if !slices.Contains([]string{"square", "soft", "round"}, w.Radius) {
+		w.Radius = d.Radius
+	}
+	w.OffsetX, w.OffsetY = min(max(w.OffsetX, 0), 200), min(max(w.OffsetY, 0), 200)
+	if w.AllowedOrigins == nil {
+		w.AllowedOrigins = []string{}
+	}
+	if w.Suggestions == nil {
+		w.Suggestions = []string{}
+	}
 }
 
 // Settings is the helpdesk's view of workspaces.settings. Unknown keys are kept by
@@ -57,12 +117,10 @@ func (s Settings) AutoClose() int {
 // WidgetOrDefault returns the widget settings with defaults filled in.
 func (s Settings) WidgetOrDefault() WidgetSettings {
 	if s.Widget == nil {
-		return WidgetSettings{Greeting: "Hi! How can we help?", Enabled: true, AllowedOrigins: []string{}}
+		return DefaultWidgetSettings()
 	}
 	w := *s.Widget
-	if w.AllowedOrigins == nil {
-		w.AllowedOrigins = []string{}
-	}
+	w.normalize()
 	return w
 }
 

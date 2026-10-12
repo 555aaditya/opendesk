@@ -7,6 +7,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 
+	"github.com/useopendesk/opendesk/internal/ai/agentsetup"
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/httpx"
@@ -14,7 +15,7 @@ import (
 
 // OnboardingStep is one item of the setup checklist.
 type OnboardingStep struct {
-	ID          string `json:"id" enum:"connect_mailbox,invite_teammate,upload_photo,install_widget,publish_article,setup_triage,create_label,try_ollie"`
+	ID          string `json:"id" enum:"connect_mailbox,invite_teammate,upload_photo,install_widget,publish_article,setup_triage,create_label,try_ollie,setup_ai_agent"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	Done        bool   `json:"done"`
@@ -33,8 +34,9 @@ type Onboarding struct {
 // seededLabels are the labels every new workspace starts with (createWorkspace).
 var seededLabels = []string{"question", "problem", "bug", "feature request", "billing", "vip", "feedback"}
 
-// loadOnboarding computes every step from the workspace's real state.
-func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID) (Onboarding, error) {
+// loadOnboarding computes every step from the workspace's real state. instanceAI
+// reports an AI provider on the instance (the AI agent step's checklist needs it).
+func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID, instanceAI bool) (Onboarding, error) {
 	var mailbox, teammate, photo, widget, article, triage, label, ollie, dismissed bool
 	err := q.QueryRow(ctx, `SELECT
 		EXISTS (SELECT 1 FROM mailboxes WHERE workspace_id = $1),
@@ -54,6 +56,10 @@ func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID) (Onbo
 	if err != nil {
 		return Onboarding{}, err
 	}
+	agent, err := agentsetup.Load(ctx, q, wid, instanceAI)
+	if err != nil {
+		return Onboarding{}, err
+	}
 	steps := []OnboardingStep{
 		{"connect_mailbox", "Connect a mailbox", "Bring your support email in so messages become tickets.", mailbox, "/settings/mailboxes", "admin"},
 		{"invite_teammate", "Invite a teammate", "Answer tickets together and share the load.", teammate, "/settings/members", "admin"},
@@ -63,6 +69,7 @@ func loadOnboarding(ctx context.Context, q db.Querier, wid, uid uuid.UUID) (Onbo
 		{"setup_triage", "Set up triage and assignment", "Let Ollie sort new tickets and route them to whoever is available.", triage, "/settings/triage", "admin"},
 		{"create_label", "Create a label", "Group tickets by topic, product or customer type.", label, "/settings/tags", "admin"},
 		{"try_ollie", "Try Ollie", "Ask Ollie to draft a reply, summarize a ticket or find an answer.", ollie, "/inbox/all", "agent"},
+		{"setup_ai_agent", "Set up the AI agent", "Teach Ollie your answers, test it, then let it reply to chats.", agent.Complete, "/settings/ai/agent", "admin"},
 	}
 	o := Onboarding{Steps: steps, Total: len(steps), Dismissed: dismissed}
 	for _, s := range steps {
@@ -82,7 +89,7 @@ func (s *svc) registerOnboarding(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			o, err := loadOnboarding(ctx, s.d.DB.Pool, p.WorkspaceID, p.UserID)
+			o, err := loadOnboarding(ctx, s.d.DB.Pool, p.WorkspaceID, p.UserID, s.d.Cfg.AIEnabled())
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}

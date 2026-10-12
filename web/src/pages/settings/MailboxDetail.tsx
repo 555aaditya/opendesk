@@ -17,6 +17,7 @@ import { SaveBar } from "@/components/settings/SaveBar";
 import { MailboxIcon, MailboxStatus, TestResults } from "@/components/mailboxes/kinds";
 import { ForwardingInstructions } from "@/components/mailboxes/AddMailboxWizard";
 import { useMailboxActions } from "@/components/mailboxes/useMailboxActions";
+import { MailboxOllieSection } from "@/components/mailboxes/MailboxOllie";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
 import type { Mailbox, MailboxConfig, MailboxTest, TlsMode } from "@/lib/api/types";
@@ -32,6 +33,9 @@ type Draft = {
   auto_reply_enabled: boolean;
   auto_reply_subject: string;
   auto_reply_html: string;
+  ai_answers: boolean;
+  ai_answers_mode: Mailbox["ai_answers_mode"];
+  ai_answers_outside_hours: boolean;
   config: MailboxConfig;
   password: string;
   smtp_password: string;
@@ -46,6 +50,9 @@ function toDraft(m: Mailbox): Draft {
     auto_reply_enabled: m.auto_reply_enabled,
     auto_reply_subject: m.auto_reply_subject,
     auto_reply_html: m.auto_reply_html,
+    ai_answers: m.ai_answers ?? false,
+    ai_answers_mode: m.ai_answers_mode ?? "draft",
+    ai_answers_outside_hours: m.ai_answers_outside_hours ?? false,
     config: { ...m.config },
     password: "",
     smtp_password: "",
@@ -133,6 +140,10 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
         auto_reply_enabled: draft.auto_reply_enabled,
         auto_reply_subject: draft.auto_reply_subject.trim(),
         auto_reply_html: draft.auto_reply_html,
+        // Only what changed, so saving other fields never needs AI on.
+        ...(draft.ai_answers !== base.ai_answers ? { ai_answers: draft.ai_answers } : {}),
+        ...(draft.ai_answers_mode !== base.ai_answers_mode ? { ai_answers_mode: draft.ai_answers_mode } : {}),
+        ...(draft.ai_answers_outside_hours !== base.ai_answers_outside_hours ? { ai_answers_outside_hours: draft.ai_answers_outside_hours } : {}),
         ...(mailbox.inbound_kind === "imap" ? { config: draft.config } : {}),
         ...(draft.password ? { password: draft.password } : {}),
         ...(draft.smtp_password ? { smtp_password: draft.smtp_password } : {}),
@@ -318,6 +329,8 @@ function MailboxEditor({ mailbox }: { mailbox: Mailbox }) {
           </div>
         )}
       </Section>
+
+      <MailboxOllieSection value={draft} onChange={(p) => setDraft((d) => ({ ...d, ...p }))} />
 
       <Section title={t("detail.danger")} danger>
         <Row

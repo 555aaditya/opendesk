@@ -62,6 +62,23 @@
     "awaiting": "Waiting for a reply",
     "severity": "{{severity}}"
   },
+  "waiting": {
+    "label": "Waiting {{time}}",
+    "short": "{{time}}",
+    "aria": "Customer waiting for {{time}}",
+    "ollie": "Ollie is replying",
+    "ollieHint": "Ollie is answering this visitor. It turns urgent if there is no reply within a minute.",
+    "chat": "Live chat",
+    "chatHint": "From the chat widget on your website. The visitor may still be on the page.",
+    "banner_one": "{{count}} customer waiting in live chat",
+    "banner_other": "{{count}} customers waiting in live chat",
+    "reply": "Reply now",
+    "longestHint": "Longest wait: {{name}}. Open the conversation.",
+    "soundOn": "Mute chat alert sounds",
+    "soundOff": "Play a sound when a visitor is waiting",
+    "title_one": "● {{count}} customer waiting",
+    "title_other": "● {{count}} customers waiting"
+  },
   "presence": {
     "viewing": "{{name}} is viewing",
     "replying": "{{name}} is replying"
@@ -325,6 +342,9 @@
     "triaged": "<b>{{who}}</b> triaged this",
     "triagedAs": "<b>{{who}}</b> triaged this as <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> answered from the knowledge base",
+    "aiAnsweredEmail": "<b>{{who}}</b> answered by email",
+    "aiSuggested": "<b>{{who}}</b> suggested a reply",
+    "aiSuggestedSent": "<b>{{who}}</b> sent {{ollie}}'s suggested reply",
     "handoffCustomer": "The customer asked for a person",
     "handoffAi": "<b>{{who}}</b> handed this to the team",
     "other": "<b>{{who}}</b> updated this ticket <m>{{type}}</m>"
@@ -462,6 +482,46 @@
     "said": "{{name}} replied",
     "sure": "{{pct}}% sure",
     "setThis": "{{name}} set this"
+  },
+  "suggest": {
+    "title": "{{name}} suggests",
+    "hint": "Below your confidence threshold, so {{name}} didn't apply it.",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "acceptAria": "Accept: {{what}}",
+    "dismissAria": "Dismiss: {{what}}",
+    "fields": {
+      "priority": "Priority",
+      "severity": "Severity",
+      "labels": "Labels",
+      "team": "Team",
+      "spam": "Spam"
+    },
+    "spam": "Mark as spam",
+    "accepted": "Applied {{name}}'s suggestion"
+  },
+  "agent": {
+    "action": {
+      "pending": "Waiting for the visitor",
+      "confirmed": "Confirmed",
+      "declined": "Declined",
+      "expired": "Expired",
+      "failed": "Failed"
+    },
+    "actionNote": {
+      "pending": "Runs only if the visitor confirms",
+      "confirmed": "The visitor confirmed and it ran",
+      "declined": "The visitor declined, nothing ran",
+      "expired": "Not confirmed in time, nothing ran",
+      "failed": "The visitor confirmed, but the tool failed"
+    },
+    "ratedUp": "The visitor found this reply helpful",
+    "ratedDown": "The visitor didn't find this reply helpful",
+    "writing": "{{name}} is writing a reply",
+    "writingShort": "is writing",
+    "posting": "is posting",
+    "thinking": "Thinking",
+    "handingOff": "Handing off to your team"
   },
   "links": {
     "title": "Linked",

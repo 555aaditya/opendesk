@@ -2,12 +2,14 @@
 // and KB article drafts. `?mock_ai=off` behaves like an instance with no
 // provider: config says disabled and every other AI route answers 404.
 
-import type { AIConfig, AISettings, DecisionEngine, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
-import { db, type WsData } from "../db";
-import { COSTS, reserve, spend } from "../credits";
+import type { AIConfig, AIModels, AISettings, DecisionEngine, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
+import { db, userRef, type WsData } from "../db";
+import { COSTS, effectiveModels, offeredModels, offersModel, reserve, spend } from "../credits";
+import { aiKeyOf } from "../aiKey";
+import { registerAiProvider } from "./aiProvider";
 import { publish } from "../gateway";
 import { HttpError, forbidden, get, invalid, patch, post, strArr, type Ctx } from "../router";
-import { escapeHtml, isRecord, stripHtml } from "../util";
+import { escapeHtml, hasControl, isRecord, nowIso, oneLine, stripControl, stripHtml, uuid } from "../util";
 import { ASSISTANT_NAME } from "@/components/assistant/name";
 
 export function aiOff(): boolean {
@@ -22,6 +24,19 @@ export function decisionEngine(): DecisionEngine {
   return { provider: "typesafe", model: "jev-latest", connected: true };
 }
 
+export const aiDisabled = () => new HttpError(404, "ai_disabled", "AI isn't set up on this instance.");
+
+/** Throws 404 ai_disabled when the instance has no AI provider. */
+export function assertAiInstance() {
+  if (aiOff()) throw aiDisabled();
+}
+
+/** Admin-only AI settings routes (settings:write). */
+export function requireAiAdmin(ws: WsData, detail = "Only admins can change AI settings") {
+  const r = role(ws);
+  if (r !== "owner" && r !== "admin") throw forbidden(detail);
+}
+
 /** Throws 404 ai_disabled when the instance has no AI, 403 ai_off when the workspace turned it off. */
 export function assertAi(ws: WsData) {
   if (aiOff()) throw new HttpError(404, "ai_disabled", "AI isn't set up on this instance.");
@@ -34,15 +49,19 @@ function role(ws: WsData) {
 
 function config(ws: WsData): AIConfig {
   if (aiOff()) {
-    return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {}, assistant_name: ASSISTANT_NAME, decisions: decisionEngine() };
+    return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {}, metered: false, assistant_name: ASSISTANT_NAME, decisions: decisionEngine() };
   }
+  const m = effectiveModels(ws);
+  const key = aiKeyOf(ws);
   return {
     enabled: true,
-    provider: "anthropic",
-    models: { default: "claude-sonnet-5-5", fast: "claude-haiku-4-5-20251001" },
+    provider: key?.kind ?? "openrouter",
+    own_key: !!key,
+    models: { default: m.model, fast: m.fast },
     embeddings: true,
     features: ws.ai,
     costs: { ...COSTS },
+    metered: true,
     assistant_name: ASSISTANT_NAME,
     decisions: decisionEngine(),
   };
@@ -200,6 +219,7 @@ function settingsPatch(ctx: Ctx): Partial<AISettings> {
   if ("tone" in b) {
     if (typeof b.tone !== "string") throw invalid("tone must be text");
     if (b.tone.length > 200) throw invalid("Keep the tone under 200 characters");
+    if (/[<>]/.test(b.tone) || hasControl(b.tone)) throw invalid("The tone can't contain < or > or control characters");
     out.tone = b.tone.trim() || "friendly";
   }
   if ("reply_language" in b) {
@@ -209,7 +229,43 @@ function settingsPatch(ctx: Ctx): Partial<AISettings> {
   if ("instructions" in b) {
     if (typeof b.instructions !== "string") throw invalid("instructions must be text");
     if (b.instructions.length > 2000) throw invalid("Keep the instructions under 2,000 characters");
-    out.instructions = b.instructions;
+    out.instructions = stripControl(b.instructions);
+  }
+  for (const k of ["model", "fast_model", "widget_model"] as const) {
+    if (!(k in b)) continue;
+    const v = b[k];
+    if (typeof v !== "string" || (v !== "" && !offersModel(ctx.ws, v))) throw invalid(`${k} must be empty or one of the offered models`);
+    out[k] = v;
+  }
+  if ("widget_instructions" in b) {
+    if (typeof b.widget_instructions !== "string") throw invalid("widget_instructions must be text");
+    if (b.widget_instructions.length > 4000) throw invalid("Keep the agent instructions under 4,000 characters");
+    out.widget_instructions = stripControl(b.widget_instructions);
+  }
+  if ("widget_max_replies" in b) {
+    const n = b.widget_max_replies;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > 100) throw invalid("widget_max_replies must be a whole number from 1 to 100");
+    out.widget_max_replies = n;
+  }
+  if ("widget_blocked_topics" in b) {
+    const v = b.widget_blocked_topics;
+    if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw invalid("widget_blocked_topics must be a list of topics");
+    const topics = (v as string[]).map(oneLine).filter(Boolean);
+    if (topics.length > 20) throw invalid("Add at most 20 blocked topics");
+    for (const t of topics) {
+      if (t.length < 2 || t.length > 100) throw invalid("Each blocked topic must be 2 to 100 characters");
+      if (/[<>]/.test(t) || hasControl(t)) throw invalid("Blocked topics must be plain text, without < or >");
+    }
+    out.widget_blocked_topics = [...new Set(topics)];
+  }
+  if ("widget_monthly_cap" in b) {
+    const n = b.widget_monthly_cap;
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1_000_000) throw invalid("widget_monthly_cap must be from 0 to 1,000,000 credits (0 is no cap)");
+    out.widget_monthly_cap = Math.round(n * 1000) / 1000;
+  }
+  if ("widget_collect_email" in b) {
+    if (typeof b.widget_collect_email !== "boolean") throw invalid("widget_collect_email must be true or false");
+    out.widget_collect_email = b.widget_collect_email;
   }
   return out;
 }
@@ -217,19 +273,36 @@ function settingsPatch(ctx: Ctx): Partial<AISettings> {
 export function registerAi() {
   get("/v1/ai/config", (ctx) => config(ctx.ws));
 
+  get("/v1/ai/models", (ctx): AIModels => {
+    assertAiInstance();
+    return structuredClone(offeredModels(ctx.ws));
+  });
+
+  registerAiProvider();
+
   patch("/v1/ai/settings", (ctx) => {
-    if (aiOff()) throw new HttpError(404, "ai_disabled", "AI isn't set up on this instance.");
-    const r = role(ctx.ws);
-    if (r !== "owner" && r !== "admin") throw forbidden("Only admins can change AI settings");
+    assertAiInstance();
+    requireAiAdmin(ctx.ws);
     if (!isRecord(ctx.body)) throw invalid("Body must be an object");
-    ctx.ws.ai = { ...ctx.ws.ai, ...settingsPatch(ctx) };
+    const changes = settingsPatch(ctx);
+    ctx.ws.ai = { ...ctx.ws.ai, ...changes };
+    ctx.ws.audit.unshift({
+      id: uuid(),
+      actor: { type: "user", user: userRef(db.meId), api_key_id: null },
+      action: "ai.settings_updated",
+      entity_type: "workspace",
+      entity_id: ctx.ws.workspace.id,
+      data: { keys: Object.keys(changes) },
+      ip: "84.152.33.17",
+      created_at: nowIso(),
+    });
     ctx.ws.workspace.settings = { ...ctx.ws.workspace.settings, ai: ctx.ws.ai };
     publish(ctx.ws, "workspace.updated", { workspace: ctx.ws.workspace, changes: ["settings"] });
     return ctx.ws.ai;
   });
 
   get("/v1/ai/search", (ctx) => {
-    if (aiOff()) throw new HttpError(404, "ai_disabled", "AI isn't set up on this instance.");
+    assertAiInstance();
     const q = (ctx.query.get("q") ?? "").trim();
     if (!q) return { tickets: [], contacts: [], articles: [] };
     return semanticSearch(ctx.ws, q);

@@ -1,5 +1,21 @@
 {
   "undo": "Undo",
+  "suggested": {
+    "label": "{{name}}'s suggested reply",
+    "title": "{{name}} suggested a reply",
+    "hint": "Nothing is sent until you send it",
+    "send": "Send",
+    "edit": "Edit",
+    "discard": "Discard",
+    "basedOn": "Based on",
+    "sent": "Reply sent",
+    "gone": "This suggestion was already handled",
+    "sendFailed": "Couldn't send the reply",
+    "discardFailed": "Couldn't discard the suggestion",
+    "replaceTitle": "Replace your draft?",
+    "replaceBody": "{{name}}'s reply replaces what you have written.",
+    "replaceConfirm": "Replace draft"
+  },
   "composer": {
     "menuLabel": "Write with AI",
     "menuShort": "AI",

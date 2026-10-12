@@ -100,6 +100,7 @@ type WorkspaceImages struct {
 	HelpCenterFavicon domain.Avatar `json:"help_center_favicon"`
 	WidgetAvatar      domain.Avatar `json:"widget_avatar"`
 	WidgetLauncher    domain.Avatar `json:"widget_launcher"`
+	WidgetBot         domain.Avatar `json:"widget_bot" doc:"The widget AI agent's picture; null = the Ollie mark"`
 }
 
 type CoreMembership struct {
@@ -122,7 +123,8 @@ func scanWorkspace(row pgx.Row, extra ...any) (CoreWorkspace, error) {
 		w.AvatarSource = ptr("upload")
 	}
 	w.Images = WorkspaceImages{HelpCenterLogo: domain.Avatar(brand["help_center_logo"]), HelpCenterFavicon: domain.Avatar(brand["help_center_favicon"]),
-		WidgetAvatar: domain.Avatar(brand["widget_avatar"]), WidgetLauncher: domain.Avatar(brand["widget_launcher"])}
+		WidgetAvatar: domain.Avatar(brand["widget_avatar"]), WidgetLauncher: domain.Avatar(brand["widget_launcher"]),
+		WidgetBot: domain.Avatar(brand["widget_bot"])}
 	return w, nil
 }
 
@@ -348,7 +350,8 @@ func fileKeys(ctx context.Context, q db.Querier, wid uuid.UUID) ([]string, error
 	rows, err := q.Query(ctx, `SELECT storage_key FROM attachments WHERE workspace_id = $1
 		UNION ALL SELECT raw_storage_key FROM inbound_emails WHERE workspace_id = $1
 		UNION ALL SELECT storage_key || '/256.png' FROM images WHERE workspace_id = $1
-		UNION ALL SELECT storage_key || '/64.png' FROM images WHERE workspace_id = $1`, wid)
+		UNION ALL SELECT storage_key || '/64.png' FROM images WHERE workspace_id = $1
+		UNION ALL SELECT storage_key FROM ai_knowledge_sources WHERE workspace_id = $1 AND storage_key IS NOT NULL`, wid)
 	if err != nil {
 		return nil, err
 	}

@@ -167,6 +167,7 @@ export default defineConfig({
               ],
             },
             { label: 'Webhooks', slug: 'api/webhooks' },
+            { label: 'MCP server', slug: 'api/mcp' },
             { label: 'Realtime', slug: 'api/realtime' },
             { label: 'Events catalog', slug: 'api/events' },
             { label: 'OpenAPI reference', slug: 'api/openapi' },

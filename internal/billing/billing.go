@@ -36,6 +36,8 @@ type Billing struct {
 	Usage             UsageCounts  `json:"usage"`
 	Credits           CreditsState `json:"credits"`
 	Prices            Prices       `json:"prices"`
+	// AutoRecharge is null when billing is disabled.
+	AutoRecharge *AutoRecharge `json:"auto_recharge"`
 }
 
 // Limits are the plan limits; zero means unlimited.
@@ -52,10 +54,10 @@ type UsageCounts struct {
 
 type CreditsState struct {
 	Unlimited bool      `json:"unlimited"`
-	Monthly   int       `json:"monthly"`
-	Used      int       `json:"used"`
-	Purchased int       `json:"purchased"`
-	Remaining int       `json:"remaining"`
+	Monthly   float64   `json:"monthly"`
+	Used      float64   `json:"used"`
+	Purchased float64   `json:"purchased"`
+	Remaining float64   `json:"remaining"`
 	PeriodEnd time.Time `json:"period_end"`
 }
 
@@ -215,12 +217,19 @@ func (s *svc) load(ctx context.Context, q db.Querier, wid uuid.UUID, prices Pric
 	if err != nil {
 		return b, err
 	}
-	b.Credits = CreditsState{Unlimited: c.Unlimited, Monthly: c.MonthlyCredits, Used: c.IncludedUsed, Purchased: c.Purchased,
-		Remaining: c.Remaining, PeriodEnd: c.PeriodEnd}
+	b.Credits = CreditsState{Unlimited: c.Unlimited, Monthly: c.Monthly.Credits(), Used: c.IncludedUsed.Credits(),
+		Purchased: c.Purchased.Credits(), Remaining: c.Remaining.Credits(), PeriodEnd: c.PeriodEnd}
 	if c.Unlimited {
 		// Unlimited workspaces do not draw on the allowance; report what was used.
-		if err := q.QueryRow(ctx, `SELECT COALESCE(sum(credits), 0) FROM ai_usage WHERE workspace_id = $1 AND created_at >= $2`,
-			wid, c.PeriodStart).Scan(&b.Credits.Used); err != nil {
+		var used plan.Milli
+		if err := q.QueryRow(ctx, `SELECT COALESCE(sum(millicredits), 0)::bigint FROM ai_usage WHERE workspace_id = $1 AND created_at >= $2`,
+			wid, c.PeriodStart).Scan(&used); err != nil {
+			return b, err
+		}
+		b.Credits.Used = used.Credits()
+	}
+	if e.BillingEnabled {
+		if b.AutoRecharge, err = loadAutoRecharge(ctx, q, wid, e.MonthlyCredits); err != nil {
 			return b, err
 		}
 	}

@@ -180,6 +180,8 @@ type Result struct {
 	Answers      map[string]Answer
 	InputTokens  int
 	OutputTokens int
+	// CostUSD is the reported cost of the call (OpenRouter); 0 when unknown.
+	CostUSD float64
 }
 
 // Decider answers typed questions.

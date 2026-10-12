@@ -36,8 +36,31 @@ function widgetCatalogs(): Plugin {
   };
 }
 
+/**
+ * The widget's CSS is a template string (widget/src/styles.ts); minify it in
+ * the bundle: drop comments, collapse whitespace, and trim it around braces,
+ * semicolons and commas. Colons are left alone (" :hover" can be a selector).
+ */
+function minifyWidgetCss(): Plugin {
+  const squeeze = (css: string) =>
+    css
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*([{};,])\s*/g, "$1")
+      .replace(/;}/g, "}")
+      .trim();
+  return {
+    name: "opendesk-widget-css",
+    apply: "build",
+    transform(code, id) {
+      if (!id.endsWith("widget/src/styles.ts")) return null;
+      return { code: code.replace(/`([^`]*)`/g, (_, css: string) => "`" + squeeze(css) + "`"), map: null };
+    },
+  };
+}
+
 export default defineConfig(({ command }) => ({
-  plugins: [preact(), widgetCatalogs()],
+  plugins: [preact(), widgetCatalogs(), minifyWidgetCss()],
   publicDir: false,
   define: {
     __OD_WIDGET_MOCK__: JSON.stringify(command === "serve" || process.env.WIDGET_MOCK === "1"),

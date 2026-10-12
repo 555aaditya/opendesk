@@ -194,6 +194,13 @@ func (w *cleanupWorker) Work(ctx context.Context, _ *river.Job[cleanupArgs]) err
 		`DELETE FROM webhook_deliveries WHERE created_at < now() - interval '30 days'`,
 		`DELETE FROM idempotency_keys WHERE created_at < now() - interval '24 hours'`,
 		`DELETE FROM passkey_challenges WHERE expires_at < now()`,
+		// MCP OAuth: finished requests and codes, rotated or expired refresh tokens,
+		// grants revoked a while ago or never exchanged, clients nobody uses.
+		`DELETE FROM oauth_authorizations WHERE expires_at < now() - interval '1 day'`,
+		`DELETE FROM oauth_refresh_tokens WHERE expires_at < now() OR used_at < now() - interval '7 days'`,
+		`DELETE FROM oauth_grants WHERE revoked_at < now() - interval '30 days' OR (last_used_at IS NULL AND created_at < now() - interval '1 day')`,
+		`DELETE FROM oauth_clients c WHERE COALESCE(c.last_used_at, c.created_at) < now() - interval '30 days'
+			AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id)`,
 	} {
 		if _, err := pool.Exec(ctx, q); err != nil {
 			return err

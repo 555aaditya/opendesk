@@ -162,6 +162,20 @@ const inviteRoute = createRoute({
   staticData: { title: "Join workspace" },
 });
 
+// The MCP OAuth consent page: an AI client asks to connect; signing in is required.
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => authLayout,
+  path: "/oauth/consent",
+  validateSearch: (s: Record<string, unknown>): { request?: string; error?: string } => ({ request: str(s.request), error: str(s.error) }),
+  beforeLoad: ({ location }) => requireAuth(location.href),
+  loaderDeps: ({ search }) => ({ request: search.request }),
+  loader: ({ context, deps }) => {
+    if (deps.request && /^[0-9a-f-]{36}$/i.test(deps.request)) void context.queryClient.prefetchQuery(q.oauthRequest(deps.request));
+  },
+  component: page(() => import("./pages/auth/OAuthConsent")),
+  staticData: { title: "Connect an app" },
+});
+
 const onboardingRoute = createRoute({
   getParentRoute: () => authLayout,
   path: "/onboarding",
@@ -298,7 +312,8 @@ const kbRoute = createRoute({
 const kbArticleRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/kb/articles/$articleId",
-  validateSearch: (s: Record<string, unknown>): { collection?: string } => ({ collection: str(s.collection) }),
+  // `title` prefills a new article (the agent report's "Write an article").
+  validateSearch: (s: Record<string, unknown>): { collection?: string; title?: string } => ({ collection: str(s.collection), title: str(s.title)?.slice(0, 200) }),
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(q.kbCollections());
     if (params.articleId !== "new") return context.queryClient.ensureQueryData(q.kbArticle(params.articleId));
@@ -418,10 +433,16 @@ const sAutomationEdit = createRoute({
   component: page(() => import("./pages/settings/AutomationEdit")),
   staticData: { title: "Automation" },
 });
-const sWidget = settingsPage("/widget", "Chat widget", () => import("./pages/settings/WidgetSettings"), (qc) =>
-  Promise.all([qc.ensureQueryData(q.widgetSettings()), qc.ensureQueryData(q.workspace())]),
-);
+const sWidget = settingsPage("/widget", "Chat widget", () => import("./pages/settings/WidgetSettings"), (qc) => {
+  void qc.prefetchQuery(q.members());
+  void qc.prefetchQuery(q.aiConfig());
+  return Promise.all([qc.ensureQueryData(q.widgetSettings()), qc.ensureQueryData(q.workspace())]);
+});
 const sApiKeys = settingsPage("/api-keys", "API keys", () => import("./pages/settings/ApiKeys"), (qc) => qc.ensureQueryData(q.apiKeys()));
+// Connecting AI clients to opendesk's MCP server (contracts/agent.md "opendesk MCP server").
+const sAiClients = settingsPage("/ai-clients", "AI clients", () => import("./pages/settings/AiClients"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.aiClientServer()), qc.ensureQueryData(q.aiClientConnections())]),
+);
 const sWebhooks = settingsPage("/webhooks", "Webhooks", () => import("./pages/settings/Webhooks"), (qc) => qc.ensureQueryData(q.webhooks()));
 const sWebhookDetail = createRoute({
   getParentRoute: () => settingsLayout,
@@ -441,12 +462,53 @@ const sAudit = settingsPage("/audit-log", "Audit log", () => import("./pages/set
 const sBilling = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/billing",
-  validateSearch: (s: Record<string, unknown>): { checkout?: string; credits?: string } => ({ checkout: str(s.checkout), credits: str(s.credits) }),
+  validateSearch: (s: Record<string, unknown>): { checkout?: string; credits?: string; payment_method?: string } => ({
+    checkout: str(s.checkout),
+    credits: str(s.credits),
+    payment_method: str(s.payment_method),
+  }),
   loader: ({ context }) => context.queryClient.ensureQueryData(q.billing()),
   component: page(() => import("./pages/settings/Billing")),
   staticData: { title: "Plan and billing" },
 });
-const sAi = settingsPage("/ai", "AI", () => import("./pages/settings/AiSettings"), (qc) => qc.ensureQueryData(q.aiConfig()));
+const sAi = settingsPage("/ai", "AI", () => import("./pages/settings/AiSettings"), (qc) => {
+  void qc.prefetchQuery(q.aiModels());
+  return qc.ensureQueryData(q.aiConfig());
+});
+
+// The widget AI agent (contracts/agent.md).
+const sAgent = settingsPage("/ai/agent", "AI agent", () => import("./pages/settings/agent/AgentOverview"), (qc) => {
+  void qc.prefetchQuery(q.aiConfig());
+  void qc.prefetchQuery(q.agentSetup());
+  void qc.prefetchQuery(q.agentReview());
+  return qc.ensureQueryData(q.agentReport(defaultRange()));
+});
+const sAgentBehaviour = settingsPage("/ai/behaviour", "Agent behaviour", () => import("./pages/settings/agent/AgentBehaviour"), (qc) => {
+  void qc.prefetchQuery(q.aiModels());
+  void qc.prefetchQuery(q.widgetSettings());
+  return Promise.all([qc.ensureQueryData(q.aiConfig()), qc.ensureQueryData(q.workspace())]);
+});
+const sAgentKnowledge = settingsPage("/ai/knowledge", "Knowledge", () => import("./pages/settings/agent/AgentKnowledge"), (qc) =>
+  qc.ensureQueryData(q.knowledge()),
+);
+const sAgentTools = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/ai/tools",
+  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string } => ({ connected: str(s.connected), error: str(s.error) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.mcpServers()),
+  component: page(() => import("./pages/settings/agent/AgentTools")),
+  staticData: { title: "Agent tools" },
+});
+const sAgentPlayground = settingsPage("/ai/playground", "Agent playground", () => import("./pages/settings/agent/AgentPlayground"), (qc) => {
+  void qc.prefetchQuery(q.aiModels());
+  void qc.prefetchQuery(q.widgetSettings());
+  return Promise.all([qc.ensureQueryData(q.aiConfig()), qc.ensureQueryData(q.workspace())]);
+});
+const sAgentTests = settingsPage("/ai/tests", "Agent tests", () => import("./pages/settings/agent/AgentTests"), (qc) => {
+  void qc.prefetchQuery(q.agentTestRuns());
+  void qc.prefetchQuery(q.mcpServers());
+  return Promise.all([qc.ensureQueryData(q.agentTests()), qc.ensureQueryData(q.aiConfig())]);
+});
 const sIntegrations = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/integrations",
@@ -470,6 +532,7 @@ const routeTree = rootRoute.addChildren([
     verifyRoute,
     callbackRoute,
     inviteRoute,
+    oauthConsentRoute,
     onboardingRoute,
     onboardingMailboxRoute,
   ]),
@@ -504,11 +567,18 @@ const routeTree = rootRoute.addChildren([
       sAutomationEdit,
       sWidget,
       sApiKeys,
+      sAiClients,
       sWebhooks,
       sWebhookDetail,
       sAudit,
       sBilling,
       sAi,
+      sAgent,
+      sAgentBehaviour,
+      sAgentKnowledge,
+      sAgentTools,
+      sAgentPlayground,
+      sAgentTests,
       sIntegrations,
     ]),
   ]),

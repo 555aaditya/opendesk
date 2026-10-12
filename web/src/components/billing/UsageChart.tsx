@@ -69,7 +69,7 @@ export function UsageChart({ days, series }: { days: StackedDay[]; series: Key[]
             <g key={v}>
               <line x1={ML} x2={ML + plotW} y1={y(v)} y2={y(v)} stroke={v === 0 ? "var(--line)" : "var(--line-soft)"} shapeRendering="crispEdges" />
               <text x={ML - 8} y={y(v)} dy="0.32em" textAnchor="end" className="mono" fontSize={10.5} fill="var(--fg-4)">
-                {fmt.num(v)}
+                {fmt.credits(v)}
               </text>
             </g>
           ))}
@@ -143,13 +143,13 @@ export function UsageChart({ days, series }: { days: StackedDay[]; series: Key[]
         >
           <div className="mb-1.5 flex items-baseline justify-between gap-4">
             <span className="mono text-[10.5px] text-fg-3">{fmt.day(h.date, true)}</span>
-            <span className="mono text-[12.5px] font-semibold">{fmt.num(h.total)}</span>
+            <span className="mono text-[12.5px] font-semibold">{fmt.credits(h.total)}</span>
           </div>
           {[...h.stacks].reverse().map((s) => (
             <div key={s.key} className="flex items-center gap-2 py-px">
               <span className="size-2 rounded-xs" style={{ background: shadeOf(series, s.key) }} />
               <span className="flex-1 text-xs text-fg-2">{t(`features.${s.key}`)}</span>
-              <span className="mono text-xs tabular-nums text-fg">{fmt.num(s.credits)}</span>
+              <span className="mono text-xs tabular-nums text-fg">{fmt.credits(s.credits)}</span>
             </div>
           ))}
         </div>
@@ -182,10 +182,10 @@ export function UsageDayTable({ days, series }: { days: StackedDay[]; series: Ke
               <td className="py-1.5 text-fg-2">{fmt.day(d.date, true)}</td>
               {d.stacks.map((s) => (
                 <td key={s.key} className="mono py-1.5 text-right tabular-nums text-fg-2">
-                  {fmt.num(s.credits)}
+                  {fmt.credits(s.credits)}
                 </td>
               ))}
-              <td className="mono py-1.5 text-right tabular-nums">{fmt.num(d.total)}</td>
+              <td className="mono py-1.5 text-right tabular-nums">{fmt.credits(d.total)}</td>
             </tr>
           ))}
         </tbody>

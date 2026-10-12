@@ -65,6 +65,7 @@ type ChatResponse struct {
 	Model        string
 	InputTokens  int
 	OutputTokens int
+	CostUSD      float64
 	StopReason   string
 }
 
@@ -94,34 +95,66 @@ type AISettingsView struct {
 
 // AssistantTurn runs one billed model turn with tools: it reserves the assistant
 // feature's credits, streams text through onDelta, and spends only when the turn
-// succeeded. Usage rows hold counts only.
+// succeeded. Usage rows hold counts only. On the workspace's own key nothing is charged.
 func (s *Service) AssistantTurn(ctx context.Context, wid uuid.UUID, userID *uuid.UUID, req ChatRequest, onDelta func(string)) (ChatResponse, error) {
 	if !s.Enabled() {
 		return ChatResponse{}, errDisabled
-	}
-	tp, ok := s.provider.(ToolProvider)
-	if !ok {
-		return ChatResponse{}, ErrNoTools
-	}
-	if req.Model == "" {
-		req.Model = s.models.Default
 	}
 	c := s.newCall(wid, userID, nil, "assistant")
 	if err := c.reserve(ctx); err != nil {
 		return ChatResponse{}, err
 	}
+	req.Model = c.resolveModel(ctx, req.Model)
+	resp, err := c.chat(ctx, req, onDelta)
+	if err != nil {
+		return ChatResponse{}, err
+	}
+	c.charge(ctx)
+	return resp, nil
+}
+
+// Reserve checks before a run that the workspace can pay for a feature: its credits, or
+// nothing when it uses its own key.
+func (s *Service) Reserve(ctx context.Context, wid uuid.UUID, feature string) error {
+	return s.newCall(wid, nil, nil, feature).reserve(ctx)
+}
+
+// toolsFor reports whether the workspace's provider can call tools (ErrNoTools if not).
+func (s *Service) toolsFor(ctx context.Context, wid uuid.UUID) error {
+	rt, err := s.routeFor(ctx, wid)
+	if err != nil {
+		return err
+	}
+	if _, ok := rt.p.(ToolProvider); !ok {
+		return ErrNoTools
+	}
+	return nil
+}
+
+// chat runs one tool-using model turn on the call's route (reserve and resolveModel
+// first). It records a failed own key and sets c.resp for charge.
+func (c *call) chat(ctx context.Context, req ChatRequest, onDelta func(string)) (ChatResponse, error) {
+	rt, err := c.route(ctx)
+	if err != nil {
+		return ChatResponse{}, err
+	}
+	tp, ok := rt.p.(ToolProvider)
+	if !ok {
+		return ChatResponse{}, ErrNoTools
+	}
 	start := time.Now()
 	resp, err := tp.Chat(ctx, req, onDelta)
+	c.onKey = rt.own
+	err = c.s.keyResult(ctx, c.wid, rt, err)
 	if resp.Model == "" {
 		resp.Model = req.Model
 	}
-	s.d.Log.Debug("ai call", "feature", "assistant", "model", resp.Model, "input_tokens", resp.InputTokens,
+	c.s.d.Log.Debug("ai call", "feature", c.feature, "model", resp.Model, "input_tokens", resp.InputTokens,
 		"output_tokens", resp.OutputTokens, "tool_calls", len(resp.Calls), "ms", time.Since(start).Milliseconds(), "ok", err == nil)
 	if err != nil {
 		return ChatResponse{}, err
 	}
-	c.resp = Response{Model: resp.Model, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens}
-	c.charge(ctx)
+	c.resp = Response{Model: resp.Model, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUSD: resp.CostUSD}
 	return resp, nil
 }
 

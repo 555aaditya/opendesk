@@ -134,7 +134,7 @@ type oaToolCall struct {
 
 type oaChatMessage struct {
 	Role       string       `json:"role"`
-	Content    *string      `json:"content"`
+	Content    any          `json:"content"`
 	ToolCalls  []oaToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string       `json:"tool_call_id,omitempty"`
 }
@@ -144,11 +144,7 @@ func strPtr(s string) *string { return &s }
 func (o *OpenAI) chatBody(req ChatRequest) map[string]any {
 	var msgs []oaChatMessage
 	if len(req.System) > 0 {
-		var parts []string
-		for _, b := range req.System {
-			parts = append(parts, b.Text)
-		}
-		msgs = append(msgs, oaChatMessage{Role: "system", Content: strPtr(strings.Join(parts, "\n\n"))})
+		msgs = append(msgs, oaChatMessage{Role: "system", Content: o.systemContent(req.System)})
 	}
 	for _, t := range req.Turns {
 		if t.Role == "assistant" {
@@ -189,7 +185,7 @@ func (o *OpenAI) chatBody(req ChatRequest) map[string]any {
 		}
 		body["tools"] = tools
 	}
-	return body
+	return o.withExtra(body)
 }
 
 type oaChatChunk struct {
@@ -201,10 +197,7 @@ type oaChatChunk struct {
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-	} `json:"usage"`
+	Usage *oaUsage `json:"usage"`
 }
 
 func (o *OpenAI) Chat(ctx context.Context, req ChatRequest, onDelta func(string)) (ChatResponse, error) {
@@ -242,7 +235,7 @@ func (o *OpenAI) Chat(ctx context.Context, req ChatRequest, onDelta func(string)
 			out.Model = chunk.Model
 		}
 		if chunk.Usage != nil {
-			out.InputTokens, out.OutputTokens = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens
+			out.InputTokens, out.OutputTokens, out.CostUSD = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.Cost
 		}
 		for _, c := range chunk.Choices {
 			if c.Delta.Content != "" {

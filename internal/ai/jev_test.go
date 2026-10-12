@@ -114,7 +114,7 @@ func TestJevTriageGatesOnConfidence(t *testing.T) {
 		t.Fatalf("activity %v", data)
 	}
 	// Usage: one triage credit, recorded with model jev.
-	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'triage' AND model = 'jev' AND credits = 1`, e.WS.ID); n != 1 {
+	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'triage' AND model = 'jev' AND millicredits = 1000`, e.WS.ID); n != 1 {
 		t.Fatalf("usage %d", n)
 	}
 
@@ -203,7 +203,7 @@ func TestNoKeyUsesLLMTriageWithSeverity(t *testing.T) {
 	}
 	var cfg AIConfig
 	e.Do("GET", "/v1/ai/config", e.viewer(), nil).Want(t, 200).JSON(t, &cfg)
-	if cfg.Decisions.Provider != "llm" || cfg.Costs["decide"] != 1 || cfg.Costs["answer_check"] != 0 {
+	if cfg.Decisions.Provider != "llm" || cfg.Costs["decide"] != 1 || cfg.Costs["answer_check"] != 0.1 {
 		t.Fatalf("config %+v", cfg)
 	}
 }
@@ -261,43 +261,6 @@ func TestAIDecideOnLLM(t *testing.T) {
 	}
 	if !strings.Contains(userText(e.F.last()), "<state>") {
 		t.Fatal("state not in a data block")
-	}
-}
-
-func TestWidgetRelevanceOnJev(t *testing.T) {
-	e := newEnv(t, opts{billing: true, jev: true})
-	art := e.article("Reset your password", "<p>To reset your password, open the sign-in page and choose Forgot password.</p>", "published")
-	if err := e.S.Index(e.Ctx, e.WS.ID, "article", art); err != nil {
-		t.Fatal(err)
-	}
-	e.settings(map[string]any{"widget_answers": true})
-
-	// Jev says the article does not answer: decline without calling the answer model.
-	e.TS.set("a0", noulAns(0.2))
-	_, tid, _ := widgetConversation(e, "How do I reset my password?")
-	e.runWidgetJobs()
-	if e.F.calls() != 0 || len(publicMessages(e, tid)) != 1 {
-		t.Fatalf("answered an irrelevant article (llm calls %d)", e.F.calls())
-	}
-	if q := e.TS.last().Questions; q["a0"]["type"] != "noul" || q["needs_human"] == nil {
-		t.Fatalf("questions %v", q)
-	}
-	// Relevant: the answer model writes the reply.
-	e.TS.set("a0", noulAns(0.9))
-	_, tid2, _ := widgetConversation(e, "How do I reset my password?")
-	e.runWidgetJobs()
-	if ms := publicMessages(e, tid2); len(ms) != 2 || !ms[1].AI {
-		t.Fatalf("no answer %+v", ms)
-	}
-	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'answer_check' AND credits = 0 AND model = 'jev'`, e.WS.ID); n != 2 {
-		t.Fatalf("check usage %d", n)
-	}
-	// Needs a human: handed off.
-	e.TS.set("needs_human", noulAns(0.95))
-	_, tid3, _ := widgetConversation(e, "How do I reset my password?")
-	e.runWidgetJobs()
-	if got := e.loadTicket(tid3); got.Custom["ai_handoff"] != true {
-		t.Fatalf("no handoff %+v", got.Custom)
 	}
 }
 

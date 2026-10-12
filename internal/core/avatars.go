@@ -234,12 +234,12 @@ func (s *svc) registerAvatars(api huma.API) {
 			return &struct{ Body CoreMember }{m}, nil
 		})
 
-	slotDoc := "logo (the workspace avatar_url), help_center_logo, help_center_favicon, widget_avatar or widget_launcher"
+	slotDoc := "logo (the workspace avatar_url), help_center_logo, help_center_favicon, widget_avatar, widget_launcher or widget_bot (the widget AI agent's picture)"
 	register(s, api, images.UploadOperation(api, huma.Operation{OperationID: "upload-workspace-image", Method: http.MethodPut,
 		Path: "/v1/workspace/images/{slot}", Summary: "Upload a workspace logo or brand image", Tags: []string{"Workspace"},
 		Description: "slot: " + slotDoc + ". PNG, JPEG, GIF or WebP, at most 5 MB."}),
 		func(ctx context.Context, in *struct {
-			Slot string `path:"slot" enum:"logo,help_center_logo,help_center_favicon,widget_avatar,widget_launcher"`
+			Slot string `path:"slot" enum:"logo,help_center_logo,help_center_favicon,widget_avatar,widget_launcher,widget_bot"`
 			images.UploadInput
 		}) (*struct{ Body CoreWorkspace }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsWrite)
@@ -269,7 +269,7 @@ func (s *svc) registerAvatars(api huma.API) {
 	register(s, api, huma.Operation{OperationID: "delete-workspace-image", Method: http.MethodDelete,
 		Path: "/v1/workspace/images/{slot}", Summary: "Remove a workspace logo or brand image", Tags: []string{"Workspace"}},
 		func(ctx context.Context, in *struct {
-			Slot string `path:"slot" enum:"logo,help_center_logo,help_center_favicon,widget_avatar,widget_launcher"`
+			Slot string `path:"slot" enum:"logo,help_center_logo,help_center_favicon,widget_avatar,widget_launcher,widget_bot"`
 		}) (*struct{ Body CoreWorkspace }, error) {
 			p, err := auth.RequireWorkspace(ctx, auth.RoleAdmin, auth.ScopeSettingsWrite)
 			if err != nil {

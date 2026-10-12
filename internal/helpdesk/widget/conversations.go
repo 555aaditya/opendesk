@@ -3,6 +3,7 @@ package widget
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -10,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/auth"
 	"github.com/useopendesk/opendesk/internal/db"
@@ -28,12 +30,27 @@ type WidgetConversation struct {
 	Status             string    `json:"status" enum:"open,pending,on_hold,solved,closed"`
 	LastMessagePreview string    `json:"last_message_preview"`
 	LastMessageAt      time.Time `json:"last_message_at"`
-	AIHandoff          bool      `json:"ai_handoff" doc:"The visitor asked for a person after an AI answer"`
+	AIHandoff          bool      `json:"ai_handoff" doc:"The conversation was handed from the AI agent to the team"`
 }
 
 type widgetMessageBody struct {
 	Body          string   `json:"body" maxLength:"40000" doc:"Plain text, 1 to 10000 characters"`
 	AttachmentIDs []string `json:"attachment_ids,omitempty" maxItems:"20"`
+	PageURL       string   `json:"page_url,omitempty" maxLength:"2000" doc:"The host page (https), given to the AI agent"`
+}
+
+// cleanPageURL keeps an https page URL of at most 500 characters, without its fragment;
+// anything else is dropped (it is context for the AI agent, never required).
+func cleanPageURL(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+		return ""
+	}
+	u.Fragment = ""
+	if s := u.String(); utf8.RuneCountInString(s) <= 500 {
+		return s
+	}
+	return ""
 }
 
 type widgetPostInput struct {
@@ -146,7 +163,7 @@ func (h *handler) registerConversations(api huma.API) {
 				if err != nil {
 					return err
 				}
-				if err := hd.EnqueueAIWidgetAnswer(ctx, tx, h.d.Jobs, h.d.Cfg, p.WorkspaceID, t.ID, m.ID); err != nil {
+				if err := hd.EnqueueAIWidgetAnswer(ctx, tx, h.d.Jobs, h.d.Cfg, p.WorkspaceID, t.ID, m.ID, cleanPageURL(in.Body.PageURL)); err != nil {
 					return err
 				}
 				out.Body.Message = publicMessage(m)
@@ -220,12 +237,15 @@ func (h *handler) registerConversations(api huma.API) {
 				if err := hd.CheckAttachments(ctx, tx, p.WorkspaceID, attIDs, &p.ContactID); err != nil {
 					return err
 				}
+				if err := hd.ExpireAIActions(ctx, tx, p.WorkspaceID, c.ID); err != nil {
+					return err
+				}
 				m, err := domain.AddMessage(ctx, tx, h.d.Jobs, h.visitorMessage(p, c.ID, body, attIDs, ""))
 				if err != nil {
 					return err
 				}
 				msg = publicMessage(m)
-				return hd.EnqueueAIWidgetAnswer(ctx, tx, h.d.Jobs, h.d.Cfg, p.WorkspaceID, c.ID, m.ID)
+				return hd.EnqueueAIWidgetAnswer(ctx, tx, h.d.Jobs, h.d.Cfg, p.WorkspaceID, c.ID, m.ID, cleanPageURL(in.Body.PageURL))
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)
@@ -254,6 +274,117 @@ func (h *handler) registerConversations(api huma.API) {
 				}
 				_, err = hd.MarkAIHandoff(ctx, tx, p.WorkspaceID, c.ID, "contact")
 				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return nil, nil
+		})
+}
+
+func (h *handler) registerAgentRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{OperationID: "widget-action-decision", Method: http.MethodPost,
+		Path: "/v1/widget/conversations/{id}/actions/{action_id}", Summary: "Confirm or decline an action",
+		Description: "Answers an action the AI agent asked the visitor to confirm. Runs at most once.",
+		Tags:        []string{"Widget"}, DefaultStatus: http.StatusNoContent},
+		func(ctx context.Context, in *struct {
+			ID       string `path:"id"`
+			ActionID string `path:"action_id"`
+			Origin   string `header:"Origin"`
+			Body     struct {
+				Decision string `json:"decision" enum:"confirm,decline"`
+			}
+		}) (*hd.Empty, error) {
+			p, err := h.visitor(ctx, in.Origin)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := h.allowWrite(p, "write", visitorWrites); err != nil {
+				return nil, err
+			}
+			actionID, err := uuid.Parse(in.ActionID)
+			if err != nil {
+				return nil, httpx.NotFound("Action")
+			}
+			confirm := in.Body.Decision == "confirm"
+			err = h.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				c, err := loadConversation(ctx, tx, p, in.ID)
+				if err != nil {
+					return err
+				}
+				status := "declined"
+				if confirm {
+					status = "running"
+				}
+				ok, err := hd.SetAIActionStatus(ctx, tx, p.WorkspaceID, c.ID, actionID, status, "pending")
+				if err != nil {
+					return err
+				}
+				if !ok {
+					var exists bool
+					if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM ai_widget_actions WHERE workspace_id = $1 AND ticket_id = $2 AND id = $3)`,
+						p.WorkspaceID, c.ID, actionID).Scan(&exists); err != nil {
+						return err
+					}
+					if !exists {
+						return httpx.NotFound("Action")
+					}
+					return httpx.E(http.StatusConflict, "action_not_pending", "This action was already answered or has expired.")
+				}
+				_, err = h.d.Jobs.InsertTx(ctx, tx, jobs.AIWidgetActionArgs{WorkspaceID: p.WorkspaceID, TicketID: c.ID,
+					ActionID: actionID, Confirmed: confirm}, &river.InsertOpts{MaxAttempts: 1})
+				return err
+			})
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			return nil, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "widget-rate-message", Method: http.MethodPost,
+		Path: "/v1/widget/conversations/{id}/messages/{message_id}/rating", Summary: "Rate an AI agent reply",
+		Tags: []string{"Widget"}, DefaultStatus: http.StatusNoContent},
+		func(ctx context.Context, in *struct {
+			ID        string `path:"id"`
+			MessageID string `path:"message_id"`
+			Origin    string `header:"Origin"`
+			Body      struct {
+				Rating *string `json:"rating" enum:"up,down" required:"false" nullable:"true"`
+			}
+		}) (*hd.Empty, error) {
+			p, err := h.visitor(ctx, in.Origin)
+			if err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if err := h.allowWrite(p, "write", visitorWrites); err != nil {
+				return nil, err
+			}
+			mid, err := uuid.Parse(in.MessageID)
+			if err != nil {
+				return nil, httpx.NotFound("Message")
+			}
+			err = h.d.DB.Tx(ctx, func(tx pgx.Tx) error {
+				c, err := loadConversation(ctx, tx, p, in.ID)
+				if err != nil {
+					return err
+				}
+				tag, err := tx.Exec(ctx, `UPDATE messages SET ai_rating = $4 WHERE workspace_id = $1 AND ticket_id = $2 AND id = $3
+					AND ai AND kind = 'reply' AND ai_rating IS DISTINCT FROM $4`, p.WorkspaceID, c.ID, mid, in.Body.Rating)
+				if err != nil {
+					return err
+				}
+				if tag.RowsAffected() == 0 {
+					var exists bool
+					if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM messages WHERE workspace_id = $1 AND ticket_id = $2 AND id = $3 AND ai AND kind = 'reply')`,
+						p.WorkspaceID, c.ID, mid).Scan(&exists); err != nil {
+						return err
+					}
+					if !exists {
+						return httpx.NotFound("Message")
+					}
+					return nil // unchanged
+				}
+				return domain.PublishMessageUpdated(ctx, tx, p.WorkspaceID, mid)
 			})
 			if err != nil {
 				return nil, httpx.Wrap(err)

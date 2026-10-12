@@ -7,8 +7,13 @@ import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/cn";
 import { motion } from "motion/react";
 import {
+  BookOpen,
   Bot,
+  ClipboardCheck,
+  FlaskConical,
+  LayoutDashboard,
   Building2,
+  Cable,
   CreditCard,
   Gauge,
   Inbox,
@@ -24,6 +29,7 @@ import {
   Sparkles,
   Clock,
   Tag,
+  Wrench,
   User,
   Users,
   UsersRound,
@@ -50,11 +56,20 @@ type NavPath =
   | "/settings/automations"
   | "/settings/widget"
   | "/settings/api-keys"
+  | "/settings/ai-clients"
   | "/settings/webhooks"
   | "/settings/audit-log"
   | "/settings/billing"
   | "/settings/ai"
+  | "/settings/ai/agent"
+  | "/settings/ai/behaviour"
+  | "/settings/ai/knowledge"
+  | "/settings/ai/tools"
+  | "/settings/ai/playground"
+  | "/settings/ai/tests"
   | "/settings/integrations";
+
+const AGENT_GROUP = "AI agent";
 
 const groups: { title: string; items: { to: NavPath; label: string; icon: ReactNode }[] }[] = [
   {
@@ -92,9 +107,21 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
   },
   { title: "Channels", items: [{ to: "/settings/widget", label: "Chat widget", icon: <MessageCircle /> }] },
   {
+    title: AGENT_GROUP,
+    items: [
+      { to: "/settings/ai/agent", label: "Overview", icon: <LayoutDashboard /> },
+      { to: "/settings/ai/behaviour", label: "Behaviour", icon: <SlidersHorizontal /> },
+      { to: "/settings/ai/knowledge", label: "Knowledge", icon: <BookOpen /> },
+      { to: "/settings/ai/tools", label: "Tools", icon: <Wrench /> },
+      { to: "/settings/ai/playground", label: "Playground", icon: <FlaskConical /> },
+      { to: "/settings/ai/tests", label: "Tests", icon: <ClipboardCheck /> },
+    ],
+  },
+  {
     title: "Developers",
     items: [
       { to: "/settings/api-keys", label: "API keys", icon: <KeyRound /> },
+      { to: "/settings/ai-clients", label: "AI clients", icon: <Cable /> },
       { to: "/settings/webhooks", label: "Webhooks", icon: <Webhook /> },
     ],
   },
@@ -103,13 +130,17 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
 
 /**
  * The AI page is listed when the instance has an AI provider. Admins always see
- * it, because without a provider it explains how to connect one.
+ * it, because without a provider it explains how to connect one. The AI agent
+ * pages are for admins on an instance with AI.
  */
 function useVisibleGroups() {
   const { data: ai, isFetched } = useQuery(q.aiConfig());
   const admin = atLeast(useRole(), "admin");
   const hideAi = isFetched && !ai?.enabled && !admin;
-  return hideAi ? groups.map((g) => ({ ...g, items: g.items.filter((i) => i.to !== "/settings/ai") })) : groups;
+  const hideAgent = !admin || (isFetched && !ai?.enabled);
+  return groups
+    .filter((g) => !(hideAgent && g.title === AGENT_GROUP))
+    .map((g) => (hideAi ? { ...g, items: g.items.filter((i) => i.to !== "/settings/ai") } : g));
 }
 
 export default function SettingsLayout() {
@@ -117,7 +148,10 @@ export default function SettingsLayout() {
   const all = groups.flatMap((g) => g.items);
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const current = all.find((i) => path === i.to || path.startsWith(`${i.to}/`))?.to;
+  // The longest matching entry wins, so /settings/ai/tools is Tools, not AI.
+  const current = all
+    .filter((i) => path === i.to || path.startsWith(`${i.to}/`))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.to;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">

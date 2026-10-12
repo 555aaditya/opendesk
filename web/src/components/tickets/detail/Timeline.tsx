@@ -15,6 +15,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PriorityIcon, priorityLabel, SeverityChip, severityLabel, StatusIcon, statusLabel } from "../bits";
 import { isSeverity, pct } from "@/lib/decisions";
 import { MessageItem } from "./MessageItem";
+import { LiveAgentReply } from "./AgentReply";
 import { isAIActor, OllieAvatar, useAssistantName } from "../ollie";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
 
@@ -170,7 +171,11 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
         text: typeof d.category === "string" ? line("activity.triagedAs", { category: d.category.replace(/_/g, " ") }) : line("activity.triaged"),
       };
     case "ai_answered":
-      return { icon: <Sparkles />, hue: "ai", text: line("activity.aiAnswered") };
+      return { icon: <Sparkles />, hue: "ai", text: line(d.channel === "email" ? "activity.aiAnsweredEmail" : "activity.aiAnswered") };
+    case "ai_suggested_reply":
+      return { icon: <Sparkles />, hue: "ai", text: line("activity.aiSuggested") };
+    case "ai_suggested_reply_sent":
+      return { icon: <Sparkles />, text: line("activity.aiSuggestedSent", { ollie }) };
     case "ai_handoff":
       return { icon: <Hand />, text: line(a.actor.type === "contact" ? "activity.handoffCustomer" : "activity.handoffAi") };
     default:
@@ -295,10 +300,14 @@ export function Timeline({
   });
 
   // Open at the latest message; follow new ones only if already at the bottom.
+  const liveLen = useRealtime((s) => {
+    const l = s.live[ticketId];
+    return l ? l.text.length + l.tools.length : 0;
+  });
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [count, loading]);
+  }, [count, loading, liveLen]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -359,6 +368,7 @@ export function Timeline({
             );
           })
         )}
+        {!loading && <LiveAgentReply ticketId={ticketId} messages={messages} />}
         <TypingIndicator ticketId={ticketId} contactName={contactName} />
       </div>
     </div>

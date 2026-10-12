@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "dev:mock": "VITE_MOCK=1 vite",
+    "dev:widget": "vite --config vite.widget.config.ts",
     "build": "pnpm build:app && pnpm build:widget",
     "build:app": "tsc -b && vite build",
     "build:widget": "vite build --config vite.widget.config.ts",

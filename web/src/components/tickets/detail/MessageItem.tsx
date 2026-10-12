@@ -14,6 +14,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { OllieAvatar, useAssistantName } from "../ollie";
+import { AiActionCard, AiRating } from "./AgentReply";
+import { ImproveAnswerButton } from "@/components/agent/quality";
 import { AiAuthorLabel, TranslateButton, TranslatedNote, useMessageTranslation } from "@/components/ai/ticket/MessageAi";
 
 function authorName(m: Message): string {
@@ -188,6 +190,8 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
             </span>
           )}
         </div>
+        {m.ai && <ImproveAnswerButton m={m} />}
+        {m.ai && m.ai_rating && <AiRating rating={m.ai_rating} />}
         <TranslateButton tr={tr} />
         <Delivery m={m} onRetry={onRetry ? () => onRetry(m) : undefined} />
         <Tooltip content={fullDate(m.created_at)}>
@@ -216,6 +220,7 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
           </div>
         )}
         <Attachments items={m.attachments} />
+        {m.ai_action && <AiActionCard action={m.ai_action} />}
         {failed && m.delivery_error && (
           <p className="mt-3 flex items-start gap-1.5 rounded-md bg-sunken px-2.5 py-2 text-xs text-fg-2">
             <AlertCircle className={`mt-px size-3.5 shrink-0 ${tone.red.text}`} />

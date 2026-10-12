@@ -60,10 +60,14 @@ type Mailbox struct {
 	AutoReplyEnabled  bool          `json:"auto_reply_enabled"`
 	AutoReplySubject  string        `json:"auto_reply_subject"`
 	AutoReplyHTML     string        `json:"auto_reply_html"`
-	Status            string        `json:"status" enum:"active,error,disabled"`
-	LastError         string        `json:"last_error"`
-	LastSyncedAt      *time.Time    `json:"last_synced_at"`
-	CreatedAt         time.Time     `json:"created_at"`
+	// Ollie answers emails to this mailbox (contracts/agent.md "Email"), off by default.
+	AIAnswers             bool       `json:"ai_answers"`
+	AIAnswersMode         string     `json:"ai_answers_mode" enum:"draft,send"`
+	AIAnswersOutsideHours bool       `json:"ai_answers_outside_hours"`
+	Status                string     `json:"status" enum:"active,error,disabled"`
+	LastError             string     `json:"last_error"`
+	LastSyncedAt          *time.Time `json:"last_synced_at"`
+	CreatedAt             time.Time  `json:"created_at"`
 }
 
 // mailboxRow is the stored mailbox, including fields the API never returns.
@@ -101,14 +105,15 @@ func (c credentials) smtpPassword() string {
 
 const mailboxColumns = `id, workspace_id, name, email, display_name, inbound_kind, forwarding_token, outbound_kind,
 	config, credentials_enc, team_id, signature_html, auto_reply_enabled, auto_reply_subject, auto_reply_html,
-	status, last_error, last_synced_at, imap_uid_validity, imap_last_uid, sync_failures, created_at`
+	status, last_error, last_synced_at, imap_uid_validity, imap_last_uid, sync_failures, created_at,
+	ai_answers, ai_answers_mode, ai_answers_outside_hours`
 
 func scanMailbox(row pgx.Row) (*mailboxRow, error) {
 	var m mailboxRow
 	err := row.Scan(&m.ID, &m.WorkspaceID, &m.Name, &m.Email, &m.DisplayName, &m.InboundKind, &m.ForwardingToken,
 		&m.OutboundKind, &m.Config, &m.CredentialsEnc, &m.TeamID, &m.SignatureHTML, &m.AutoReplyEnabled,
 		&m.AutoReplySubject, &m.AutoReplyHTML, &m.Status, &m.LastError, &m.LastSyncedAt, &m.UIDValidity, &m.LastUID,
-		&m.SyncFailures, &m.CreatedAt)
+		&m.SyncFailures, &m.CreatedAt, &m.AIAnswers, &m.AIAnswersMode, &m.AIAnswersOutsideHours)
 	if err != nil {
 		return nil, err
 	}

@@ -60,7 +60,10 @@ func RegisterWorkers(d *deps.Deps, w *river.Workers) {
 	river.AddWorker(w, &EmbedWorker{S: s})
 	river.AddWorker(w, &SummarizeWorker{S: s})
 	river.AddWorker(w, &WidgetAnswerWorker{S: s})
+	river.AddWorker(w, &WidgetActionWorker{S: s})
+	river.AddWorker(w, &EmailAnswerWorker{S: s})
 	river.AddWorker(w, &MaintainWorker{S: s})
+	river.AddWorker(w, &AgentTestRunWorker{S: s})
 }
 
 // Periodic returns this area's scheduled jobs.

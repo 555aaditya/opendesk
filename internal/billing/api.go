@@ -35,30 +35,43 @@ func newURL(u string) *urlBody {
 type UsageReport struct {
 	From         time.Time     `json:"from"`
 	To           time.Time     `json:"to"`
-	TotalCredits int           `json:"total_credits"`
+	TotalCredits float64       `json:"total_credits"`
 	TotalCalls   int           `json:"total_calls"`
 	ByFeature    []FeatureUse  `json:"by_feature"`
 	ByDay        []DayUse      `json:"by_day"`
 	ByMember     []MemberUsage `json:"by_member"`
+	ByModel      []ModelUse    `json:"by_model"`
+	// OwnKeyCalls counts calls made on the workspace's own AI provider key (0 credits).
+	OwnKeyCalls int `json:"own_key_calls"`
 }
 
 type FeatureUse struct {
-	Feature string `json:"feature"`
-	Credits int    `json:"credits"`
-	Calls   int    `json:"calls"`
+	Feature string  `json:"feature"`
+	Credits float64 `json:"credits"`
+	Calls   int     `json:"calls"`
 }
 
 type DayUse struct {
-	Date      string         `json:"date" doc:"YYYY-MM-DD, UTC"`
-	Credits   int            `json:"credits"`
-	Calls     int            `json:"calls"`
-	ByFeature map[string]int `json:"by_feature" doc:"Credits per feature that day"`
+	Date      string             `json:"date" doc:"YYYY-MM-DD, UTC"`
+	Credits   float64            `json:"credits"`
+	Calls     int                `json:"calls"`
+	ByFeature map[string]float64 `json:"by_feature" doc:"Credits per feature that day"`
 }
 
 type MemberUsage struct {
-	User    *domain.UserRef `json:"user" doc:"null for calls without a user (widget answers, automations)"`
-	Credits int             `json:"credits"`
+	User    *domain.UserRef `json:"user" doc:"null for calls without a user (widget agent, automations)"`
+	Credits float64         `json:"credits"`
 	Calls   int             `json:"calls"`
+}
+
+type ModelUse struct {
+	Model        string  `json:"model"`
+	Credits      float64 `json:"credits"`
+	Calls        int     `json:"calls"`
+	InputTokens  int64   `json:"input_tokens"`
+	OutputTokens int64   `json:"output_tokens"`
+	// Source is who paid: "credits" (the instance's provider) or "own_key" (the workspace's key).
+	Source string `json:"source" enum:"credits,own_key"`
 }
 
 // requireBillingAdmin is the gate for routes that open Stripe: a signed-in owner or admin.
@@ -208,12 +221,14 @@ func (s *svc) registerAPI(api huma.API) {
 				ClientReferenceID: stripe.String(wid),
 				LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(s.d.Cfg.StripePriceCredits),
 					Quantity: stripe.Int64(int64(in.Body.Packs))}},
-				SuccessURL:        stripe.String(s.appURL("credits", "success")),
-				CancelURL:         stripe.String(s.appURL("credits", "canceled")),
-				AdaptivePricing:   &stripe.CheckoutSessionCreateAdaptivePricingParams{Enabled: stripe.Bool(true)},
-				InvoiceCreation:   &stripe.CheckoutSessionCreateInvoiceCreationParams{Enabled: stripe.Bool(true)},
-				Metadata:          meta,
-				PaymentIntentData: &stripe.CheckoutSessionCreatePaymentIntentDataParams{Metadata: meta},
+				SuccessURL:      stripe.String(s.appURL("credits", "success")),
+				CancelURL:       stripe.String(s.appURL("credits", "canceled")),
+				AdaptivePricing: &stripe.CheckoutSessionCreateAdaptivePricingParams{Enabled: stripe.Bool(true)},
+				InvoiceCreation: &stripe.CheckoutSessionCreateInvoiceCreationParams{Enabled: stripe.Bool(true)},
+				Metadata:        meta,
+				// Save the card for off-session use, so auto-recharge can charge it later.
+				PaymentIntentData: &stripe.CheckoutSessionCreatePaymentIntentDataParams{Metadata: meta,
+					SetupFutureUsage: stripe.String("off_session")},
 			}
 			s.applyTax(params)
 			sess, err := s.sc.V1CheckoutSessions.Create(ctx, params)
@@ -270,48 +285,56 @@ func parseTime(v string) (time.Time, error) {
 }
 
 func usageReport(ctx context.Context, q db.Querier, wid uuid.UUID, from, to time.Time) (UsageReport, error) {
-	r := UsageReport{From: from, To: to, ByFeature: []FeatureUse{}, ByDay: []DayUse{}, ByMember: []MemberUsage{}}
+	r := UsageReport{From: from, To: to, ByFeature: []FeatureUse{}, ByDay: []DayUse{}, ByMember: []MemberUsage{}, ByModel: []ModelUse{}}
 	const where = ` FROM ai_usage a WHERE a.workspace_id = $1 AND a.created_at >= $2 AND a.created_at < $3`
-	rows, err := q.Query(ctx, `SELECT a.feature, sum(a.credits)::int, count(*)::int`+where+` GROUP BY a.feature ORDER BY 2 DESC, 1`, wid, from, to)
+	var total plan.Milli
+	rows, err := q.Query(ctx, `SELECT a.feature, sum(a.millicredits)::bigint, count(*)::int`+where+` GROUP BY a.feature ORDER BY 2 DESC, 1`, wid, from, to)
 	if err != nil {
 		return r, err
 	}
 	if r.ByFeature, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (FeatureUse, error) {
 		var f FeatureUse
-		return f, row.Scan(&f.Feature, &f.Credits, &f.Calls)
+		var m plan.Milli
+		err := row.Scan(&f.Feature, &m, &f.Calls)
+		f.Credits = m.Credits()
+		total += m
+		return f, err
 	}); err != nil {
 		return r, err
 	}
+	r.TotalCredits = total.Credits()
 	for _, f := range r.ByFeature {
-		r.TotalCredits += f.Credits
 		r.TotalCalls += f.Calls
 	}
-	rows, err = q.Query(ctx, `SELECT to_char(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') d, a.feature, sum(a.credits)::int, count(*)::int`+where+
+	rows, err = q.Query(ctx, `SELECT to_char(a.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') d, a.feature, sum(a.millicredits)::bigint, count(*)::int`+where+
 		` GROUP BY d, a.feature ORDER BY d, a.feature`, wid, from, to)
 	if err != nil {
 		return r, err
 	}
 	type dayFeature struct {
-		day, feature   string
-		credits, calls int
+		day, feature string
+		milli        plan.Milli
+		calls        int
 	}
 	parts, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (dayFeature, error) {
 		var x dayFeature
-		return x, row.Scan(&x.day, &x.feature, &x.credits, &x.calls)
+		return x, row.Scan(&x.day, &x.feature, &x.milli, &x.calls)
 	})
 	if err != nil {
 		return r, err
 	}
+	dayMilli := map[string]plan.Milli{}
 	for _, x := range parts {
 		if n := len(r.ByDay); n == 0 || r.ByDay[n-1].Date != x.day {
-			r.ByDay = append(r.ByDay, DayUse{Date: x.day, ByFeature: map[string]int{}})
+			r.ByDay = append(r.ByDay, DayUse{Date: x.day, ByFeature: map[string]float64{}})
 		}
 		d := &r.ByDay[len(r.ByDay)-1]
-		d.Credits += x.credits
+		dayMilli[x.day] += x.milli
+		d.Credits = dayMilli[x.day].Credits()
 		d.Calls += x.calls
-		d.ByFeature[x.feature] += x.credits
+		d.ByFeature[x.feature] = x.milli.Credits()
 	}
-	rows, err = q.Query(ctx, `SELECT u.id, u.name, u.email, u.avatar_url, sum(a.credits)::int, count(*)::int
+	rows, err = q.Query(ctx, `SELECT u.id, u.name, u.email, u.avatar_url, sum(a.millicredits)::bigint, count(*)::int
 		FROM ai_usage a LEFT JOIN users u ON u.id = a.user_id
 		WHERE a.workspace_id = $1 AND a.created_at >= $2 AND a.created_at < $3
 		GROUP BY u.id, u.name, u.email, u.avatar_url ORDER BY 5 DESC LIMIT 500`, wid, from, to)
@@ -322,14 +345,35 @@ func usageReport(ctx context.Context, q db.Querier, wid uuid.UUID, from, to time
 		var m MemberUsage
 		var id *uuid.UUID
 		var name, email, avatar *string
-		if err := row.Scan(&id, &name, &email, &avatar, &m.Credits, &m.Calls); err != nil {
+		var milli plan.Milli
+		if err := row.Scan(&id, &name, &email, &avatar, &milli, &m.Calls); err != nil {
 			return m, err
 		}
+		m.Credits = milli.Credits()
 		if id != nil {
 			m.User = &domain.UserRef{ID: *id, Name: *name, Email: *email, AvatarURL: domain.Avatar(*avatar)}
 		}
 		return m, nil
 	})
+	if err != nil {
+		return r, err
+	}
+	rows, err = q.Query(ctx, `SELECT a.model, a.source, sum(a.millicredits)::bigint, count(*)::int, sum(a.input_tokens)::bigint, sum(a.output_tokens)::bigint`+where+
+		` GROUP BY a.model, a.source ORDER BY 3 DESC, 4 DESC, 1 LIMIT 100`, wid, from, to)
+	if err != nil {
+		return r, err
+	}
+	r.ByModel, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (ModelUse, error) {
+		var m ModelUse
+		var milli plan.Milli
+		err := row.Scan(&m.Model, &m.Source, &milli, &m.Calls, &m.InputTokens, &m.OutputTokens)
+		m.Credits = milli.Credits()
+		return m, err
+	})
+	if err != nil {
+		return r, err
+	}
+	err = q.QueryRow(ctx, `SELECT count(*)::int`+where+` AND a.source = 'own_key'`, wid, from, to).Scan(&r.OwnKeyCalls)
 	return r, err
 }
 

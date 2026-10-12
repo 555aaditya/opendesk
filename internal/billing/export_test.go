@@ -25,3 +25,7 @@ func RunCancel(ctx context.Context, d *deps.Deps, a jobs.CancelSubscriptionArgs)
 func RunReconcile(ctx context.Context, d *deps.Deps) error {
 	return (&reconcileWorker{s: newSvc(d)}).Work(ctx, &river.Job[jobs.ReconcileBillingArgs]{})
 }
+
+func RunAutoRecharge(ctx context.Context, d *deps.Deps, wid uuid.UUID) error {
+	return (&autoRechargeWorker{s: newSvc(d)}).Work(ctx, &river.Job[jobs.AutoRechargeArgs]{Args: jobs.AutoRechargeArgs{WorkspaceID: wid}})
+}

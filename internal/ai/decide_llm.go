@@ -12,10 +12,26 @@ import (
 // llmDecider answers decision questions with the configured LLM's structured output,
 // for instances without a TypeSafe key. Its probabilities are the model's own estimate,
 // not calibrated, so features apply them without a confidence gate.
-type llmDecider struct{ s *Service }
+type llmDecider struct {
+	s *Service
+	// rt, when set, is the workspace's own key; else the instance's provider.
+	rt *route
+}
 
-func (l *llmDecider) Name() string     { return "llm" }
-func (l *llmDecider) Model() string    { return l.s.models.Fast }
+func (l *llmDecider) Name() string { return "llm" }
+func (l *llmDecider) Model() string {
+	if l.rt != nil {
+		return l.rt.models.Fast
+	}
+	return l.s.models.Fast
+}
+
+func (l *llmDecider) provider() Provider {
+	if l.rt != nil {
+		return l.rt.p
+	}
+	return l.s.provider
+}
 func (l *llmDecider) Calibrated() bool { return false }
 
 const decideSystem = `You answer typed questions about a piece of application state for helpdesk software.
@@ -71,7 +87,7 @@ func (l *llmDecider) Decide(ctx context.Context, req decide.Request) (decide.Res
 	if err != nil {
 		return decide.Result{}, err
 	}
-	resp, err := l.s.provider.Complete(ctx, Request{Model: l.s.models.Fast, MaxTokens: 400 + 60*len(ids), Effort: "low",
+	resp, err := l.provider().Complete(ctx, Request{Model: l.Model(), MaxTokens: 400 + 60*len(ids), Effort: "low",
 		JSONSchema: obj(props, ids...), SchemaName: "decisions",
 		System: []Block{{Text: decideSystem, Cache: true}},
 		Messages: []Message{UserText(block("state", nil, untrusted(string(state))),
@@ -87,9 +103,9 @@ func (l *llmDecider) Decide(ctx context.Context, req decide.Request) (decide.Res
 	if err := parseJSON(resp.Text, &raw); err != nil {
 		return decide.Result{}, err
 	}
-	out := decide.Result{Model: resp.Model, Answers: map[string]decide.Answer{}, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens}
+	out := decide.Result{Model: resp.Model, Answers: map[string]decide.Answer{}, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUSD: resp.CostUSD}
 	if out.Model == "" {
-		out.Model = l.s.models.Fast
+		out.Model = l.Model()
 	}
 	for _, id := range ids {
 		q, r := req.Questions[id], raw[id]

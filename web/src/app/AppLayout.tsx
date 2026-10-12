@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useWaitingAlerts } from "@/components/tickets/useWaitingAlerts";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect } from "react";
 import { Dialog as D } from "radix-ui";
@@ -11,12 +12,14 @@ import { useUpgrade } from "@/lib/upgrade";
 import { toast } from "@/components/ui/toast";
 import { AssistantDock, AssistantRoot } from "@/components/assistant/AssistantRoot";
 import type { Notification } from "@/lib/api/types";
+import { qk } from "@/lib/queries";
 import { Sidebar } from "./Sidebar";
 import { AppHeader } from "./AppHeader";
 import { cn } from "@/lib/cn";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsSheet } from "./ShortcutsSheet";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { CreditsBanner } from "@/components/billing/CreditsBanner";
 import { shell, toggleNav, useNav, useShell } from "./shellStore";
 
 const NewTicketDialog = lazy(() => import("@/components/tickets/NewTicketDialog"));
@@ -35,10 +38,27 @@ function notificationText(n: Notification) {
       return `SLA breached ${subject}`;
     case "ai_handoff":
       return `A customer asked for a person ${subject}`;
+    case "ai_cap_reached":
+      return "Ollie reached this month's agent credit cap";
+    case "credits_low":
+      return "AI credits are running low";
+    case "credits_out":
+      return "AI credits are out";
+    case "auto_recharge_failed":
+      return "Auto-recharge failed and is now off";
+    case "ai_key_failed":
+      return n.data.reason === "no_funds" ? "Your AI provider account is out of funds" : "Your AI provider rejected the workspace's key";
     default:
       return `Notification ${subject}`;
   }
 }
+
+const billingNoticeBody: Partial<Record<Notification["type"], string>> = {
+  credits_low: "Add credits or turn on auto-recharge to keep Ollie working.",
+  credits_out: "Ollie is paused and drafts are unavailable until credits are added.",
+  auto_recharge_failed: "The payment didn't go through. Update the payment method, then turn it back on.",
+  ai_key_failed: "AI features are paused until the key works again. Fix it in AI settings.",
+};
 
 function useRealtimeConnection() {
   const qc = useQueryClient();
@@ -54,15 +74,20 @@ function useRealtimeConnection() {
       userId: uid,
       onNotification: (n) => {
         if (n.type === "customer_replied") return;
+        if (n.type === "ai_key_failed") void qc.invalidateQueries({ queryKey: qk.aiProvider });
         toast.info(notificationText(n), {
-          description: n.ticket?.subject,
+          description: n.type === "ai_cap_reached" ? "Chats go to your team until the cap resets or you raise it." : (billingNoticeBody[n.type] ?? n.ticket?.subject),
           action: n.ticket
             ? {
                 label: "Open",
                 onClick: () =>
                   void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: n.ticket!.id } }),
               }
-            : undefined,
+            : n.type === "ai_cap_reached" || n.type === "ai_key_failed"
+              ? { label: "Settings", onClick: () => void navigate({ to: n.type === "ai_key_failed" ? "/settings/ai" : "/settings/ai/behaviour" }) }
+              : billingNoticeBody[n.type]
+                ? { label: "Billing", onClick: () => void navigate({ to: "/settings/billing" }) }
+                : undefined,
         });
       },
       onSelfMembershipChanged: () => {
@@ -89,6 +114,7 @@ export function AppLayout() {
   // before the router leaves the app; render nothing in between rather than
   // pages that read the signed-in user and the current workspace.
   const authed = useSession((s) => s.status === "authed" && !!s.user && !!s.workspaceId);
+  useWaitingAlerts(authed);
 
   useHotkeys({
     "mod+k": () => shell.palette(!useShell.getState().paletteOpen),
@@ -132,6 +158,7 @@ export function AppLayout() {
         {/* The work panel: pure white, its inner corner softened where it meets the chrome. */}
         <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden border-t border-line bg-surface md:rounded-tl-2xl md:border-l">
           <ConnectionBanner />
+          <CreditsBanner />
           {/* Moving between areas cross-fades the panel; moving within one (ticket to ticket) does not. */}
           <div key={section} className="flex min-h-0 flex-1 flex-col animate-route-in motion-reduce:animate-none">
             <Outlet />

@@ -14,9 +14,11 @@ import type {
   SlaPolicy,
   Ticket,
   TicketStatus,
+  AISettings,
   User,
   Webhook,
   WebhookDelivery,
+  WidgetSettings,
 } from "@/lib/api/types";
 import {
   AGENT_REPLIES,
@@ -77,7 +79,7 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
       settings: {},
       avatar_url: null,
       avatar_source: null,
-      images: { help_center_logo: null, help_center_favicon: null, widget_avatar: null, widget_launcher: null },
+      images: { help_center_logo: null, help_center_favicon: null, widget_avatar: null, widget_launcher: null, widget_bot: null },
       created_at: ago(400 * DAY),
     },
     members: [],
@@ -105,16 +107,74 @@ export function baseWorkspace(id: string, name: string, slug: string): WsData {
     deliveries: {},
     audit: [],
     notifications: [],
-    widget: { greeting: "Hi there! How can we help?", require_email: false, enabled: true, allowed_origins: [] },
+    widget: defaultWidget(),
     events: [],
     seq: 0,
     csat: {},
     billing: defaultBilling(),
-    ai: { enabled: true, auto_triage: false, auto_summarize: false, widget_answers: false, assistant: true, tone: "friendly", reply_language: "customer", instructions: "" },
+    ai: defaultAi(),
     aiUsage: [],
+    mcpServers: [],
+    knowledge: [],
+    knowledgeDocs: {},
     routing: defaultRouting(),
   };
 }
+
+/** settings.widget with every contract default (contracts/api.md "Widget"). */
+export function defaultWidget(): WidgetSettings {
+  return {
+    enabled: true,
+    greeting: "Hi there! How can we help?",
+    require_email: false,
+    allowed_origins: [],
+    color: "",
+    theme: "auto",
+    position: "right",
+    offset_x: 20,
+    offset_y: 20,
+    launcher: "icon",
+    launcher_label: "",
+    radius: "soft",
+    title: "",
+    subtitle: "",
+    show_team: true,
+    suggestions: [],
+    sound: false,
+    bot_name: "",
+  };
+}
+
+/** settings.ai with every contract default (contracts/ai.md, contracts/agent.md). */
+export function defaultAi(): AISettings {
+  return {
+    enabled: true,
+    auto_triage: false,
+    auto_summarize: false,
+    widget_answers: false,
+    assistant: true,
+    tone: "friendly",
+    reply_language: "customer",
+    instructions: "",
+    model: "",
+    fast_model: "",
+    widget_model: "",
+    widget_instructions: "",
+    widget_max_replies: 20,
+    widget_blocked_topics: [],
+    widget_monthly_cap: 0,
+    widget_collect_email: true,
+  };
+}
+
+const FIELDNOTE_AGENT = [
+  "Fieldnote is a note-taking app for teams, on the web, Mac, Windows, iOS and Android.",
+  "Plans: Free (1 workspace, 3 members), Team at $8 per member per month, Business at $15 per member per month with SSO and audit logs.",
+  "Refunds: we refund annual plans in full within 30 days of payment. Monthly plans are not refunded but can be cancelled any time.",
+  "Support hours: Monday to Friday, 8:00 to 18:00 CET. Outside those hours, say the team will reply the next working day.",
+  "Links: pricing https://fieldnote.app/pricing, status https://status.fieldnote.app, help center https://fieldnote.app/help.",
+  "Never promise a feature date. For bugs, ask for the app version and device.",
+].join("\n");
 
 /** Self-hosted entitlements; handlers/billing.ts seeds real plans per workspace. */
 export function defaultBilling(): WsData["billing"] {
@@ -168,7 +228,23 @@ function seedFieldnote(): WsData {
     csat_enabled: true,
     auto_assign: "round_robin",
   };
-  ws.widget = { greeting: "Hi! Ask us anything about Fieldnote.", require_email: true, enabled: true, allowed_origins: ["https://fieldnote.app", "https://www.fieldnote.app"] };
+  ws.widget = {
+    ...defaultWidget(),
+    greeting: "Hi! Ask us anything about Fieldnote.",
+    require_email: true,
+    allowed_origins: ["https://fieldnote.app", "https://www.fieldnote.app"],
+    color: "#4f46e5",
+    title: "Fieldnote support",
+    subtitle: "We usually reply in a few minutes",
+    suggestions: ["Where's my order?", "Change my plan", "Export my notes"],
+  };
+  ws.ai = {
+    ...defaultAi(),
+    widget_answers: true,
+    widget_instructions: FIELDNOTE_AGENT,
+    widget_blocked_topics: ["legal advice", "competitor pricing", "medical advice"],
+    widget_monthly_cap: 500,
+  };
 
   const availability = { maya: "online", jonas: "online", priya: "away", sam: "online", lea: "offline", theo: "online" } as const;
   TEAM.forEach((p, i) =>
@@ -212,7 +288,7 @@ function seedFieldnote(): WsData {
   ];
   ws.sla = sla;
 
-  const mbBase = { signature_html: "", auto_reply_enabled: false, auto_reply_subject: "", auto_reply_html: "", last_error: "", team_id: null as string | null };
+  const mbBase = { signature_html: "", auto_reply_enabled: false, auto_reply_subject: "", auto_reply_html: "", ai_answers: false, ai_answers_mode: "draft" as const, ai_answers_outside_hours: false, last_error: "", team_id: null as string | null };
   const support: Mailbox = {
     ...mbBase,
     id: uuid(),
@@ -228,6 +304,7 @@ function seedFieldnote(): WsData {
     auto_reply_enabled: true,
     auto_reply_subject: "We got your message",
     auto_reply_html: "<p>Thanks for writing in. We usually reply within a few hours on weekdays.</p>",
+    ai_answers: true,
     status: "active",
     last_synced_at: ago(40 * 1000),
     created_at: ago(300 * DAY),
@@ -431,6 +508,7 @@ function seedFieldnote(): WsData {
     for (const m of ws.messages.filter((x) => x.ticket_id === dueSoon.id)) m.created_at = iso(created);
     dueSoon.last_message_at = iso(created);
     dueSoon.last_customer_message_at = iso(created);
+    dueSoon.waiting_since = iso(created);
     dueSoon.sla = computeSla(ws, dueSoon, false);
   }
 
@@ -723,6 +801,9 @@ function seedLumen(): WsData {
       auto_reply_enabled: false,
       auto_reply_subject: "",
       auto_reply_html: "",
+      ai_answers: false,
+      ai_answers_mode: "draft",
+      ai_answers_outside_hours: false,
       status: "active",
       last_error: "",
       last_synced_at: ago(3 * MIN),

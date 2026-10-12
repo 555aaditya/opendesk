@@ -8,6 +8,10 @@ import { monotonePath, niceTicks, useWidth } from "./useSize";
 
 type Day = ReportsOverview["by_day"][number];
 
+/** One line: a numeric key of the day rows, its label and colour. */
+export type LineSeries<D> = { key: keyof D & string; label: string; color: string };
+type Row = { date: string };
+
 const H = 240; // plot height
 const AXIS = 28; // x-axis band, inside the container height
 const ML = 36;
@@ -19,21 +23,33 @@ export const series = [
   { key: "solved", label: "Solved", color: toneVar(SERIES[2]) },
 ] as const;
 
-/** Created vs solved per day: two lines on one axis, crosshair + tooltip on hover and arrow keys. */
-export function VolumeChart({ days }: { days: Day[] }) {
+/**
+ * Lines per day on one axis (created vs solved by default), crosshair and
+ * tooltip on hover and arrow keys. The first series gets a faint area.
+ */
+export function VolumeChart<D extends Row = Day>({
+  days,
+  series: lines = series as unknown as LineSeries<D>[],
+  label = `Tickets created and solved per day, ${days.length} days. Use the arrow keys to read each day.`,
+}: {
+  days: D[];
+  series?: LineSeries<D>[];
+  label?: string;
+}) {
+  const val = (d: D, k: keyof D) => Number(d[k]) || 0;
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const reduce = useReducedMotion();
 
   const plotW = Math.max(0, width - ML - MR);
-  const max = Math.max(1, ...days.map((d) => Math.max(d.created, d.solved)));
+  const max = Math.max(1, ...days.map((d) => Math.max(...lines.map((s) => val(d, s.key)))));
   const ticks = niceTicks(max);
   const top = ticks[ticks.length - 1];
   const x = (i: number) => ML + (days.length <= 1 ? plotW / 2 : (i / (days.length - 1)) * plotW);
   const y = (v: number) => MT + H - (v / top) * H;
 
-  const paths = series.map((s) => {
-    const pts = days.map((d, i) => [x(i), y(d[s.key])] as [number, number]);
+  const paths = lines.map((s) => {
+    const pts = days.map((d, i) => [x(i), y(val(d, s.key))] as [number, number]);
     return { ...s, d: monotonePath(pts), pts };
   });
   const area = paths[0].pts.length
@@ -44,8 +60,8 @@ export function VolumeChart({ days }: { days: Day[] }) {
   const xTicks = days.map((d, i) => ({ d, i })).filter(({ i }) => i % step === 0);
 
   const last = days.length - 1;
-  const ends = series.map((s) => ({ ...s, v: days[last]?.[s.key] ?? 0 }));
-  const endsCollide = ends.length === 2 && Math.abs(y(ends[0].v) - y(ends[1].v)) < 14;
+  const ends = lines.map((s) => ({ ...s, v: days[last] ? val(days[last], s.key) : 0 }));
+  const endsCollide = ends.some((a, i) => ends.some((b, j) => j > i && Math.abs(y(a.v) - y(b.v)) < 14));
 
   const pick = (clientX: number, rect: DOMRect) => {
     if (!days.length) return;
@@ -77,7 +93,7 @@ export function VolumeChart({ days }: { days: Day[] }) {
             </text>
           ))}
 
-          <motion.path d={area} fill={series[0].color} initial={reduce ? false : { fillOpacity: 0 }} animate={{ fillOpacity: 0.07 }} transition={{ duration: 0.25, delay: 0.2, ease: ease.out }} />
+          <motion.path d={area} fill={lines[0].color} initial={reduce ? false : { fillOpacity: 0 }} animate={{ fillOpacity: 0.07 }} transition={{ duration: 0.25, delay: 0.2, ease: ease.out }} />
           {[...paths].reverse().map((p) => (
             <motion.path
               key={p.key}
@@ -109,8 +125,8 @@ export function VolumeChart({ days }: { days: Day[] }) {
           {hover !== null && h && (
             <g>
               <line x1={x(hover)} x2={x(hover)} y1={MT} y2={MT + H} stroke="var(--line-strong)" strokeWidth={1} shapeRendering="crispEdges" />
-              {series.map((s) => (
-                <circle key={s.key} cx={x(hover)} cy={y(h[s.key])} r={4} fill={s.color} stroke="var(--surface)" strokeWidth={2} />
+              {lines.map((s) => (
+                <circle key={s.key} cx={x(hover)} cy={y(val(h, s.key))} r={4} fill={s.color} stroke="var(--surface)" strokeWidth={2} />
               ))}
             </g>
           )}
@@ -121,7 +137,7 @@ export function VolumeChart({ days }: { days: Day[] }) {
       <div
         role="img"
         tabIndex={0}
-        aria-label={`Tickets created and solved per day, ${days.length} days. Use the arrow keys to read each day.`}
+        aria-label={label}
         className="absolute rounded-md outline-none focus-visible:shadow-[0_0_0_2px_var(--focus)]"
         style={{ left: ML, top: MT, width: plotW, height: H }}
         onPointerMove={(e) => pick(e.clientX, e.currentTarget.parentElement!.getBoundingClientRect())}
@@ -144,10 +160,10 @@ export function VolumeChart({ days }: { days: Day[] }) {
           style={{ left: flip ? tipLeft - 12 : tipLeft + 12, top: MT + 4, transform: flip ? "translateX(-100%)" : undefined }}
         >
           <div className="mono mb-1.5 text-[10.5px] text-fg-3">{format(parseISO(h.date), "EEE, MMM d")}</div>
-          {series.map((s) => (
+          {lines.map((s) => (
             <div key={s.key} className="flex items-center gap-2 py-px">
               <span className="size-2 rounded-xs" style={{ background: s.color }} />
-              <span className="mono min-w-6 text-[12.5px] font-semibold text-fg">{h[s.key]}</span>
+              <span className="mono min-w-6 text-[12.5px] font-semibold text-fg">{val(h, s.key)}</span>
               <span className="text-xs text-fg-3">{s.label}</span>
             </div>
           ))}
@@ -157,10 +173,10 @@ export function VolumeChart({ days }: { days: Day[] }) {
   );
 }
 
-export function VolumeLegend() {
+export function VolumeLegend<D extends Row = Day>({ series: lines = series as unknown as LineSeries<D>[] }: { series?: LineSeries<D>[] } = {}) {
   return (
     <div className="flex items-center gap-3">
-      {series.map((s) => (
+      {lines.map((s) => (
         <span key={s.key} className="flex items-center gap-1.5 text-xs text-fg-2">
           <span className="size-2 rounded-xs" style={{ background: s.color }} />
           {s.label}

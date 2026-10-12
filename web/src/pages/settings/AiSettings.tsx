@@ -21,6 +21,8 @@ import { cn } from "@/lib/cn";
 import { AI_TONE, tone } from "@/lib/tones";
 import { IconTile } from "@/components/settings2/bits";
 import { ASSISTANT_NAME } from "@/components/assistant/name";
+import { ModelPicker } from "@/components/ai/ModelPicker";
+import { ProviderSection } from "@/components/ai/ProviderSection";
 
 const PRESET_TONES = ["friendly", "professional", "concise"] as const;
 type ToneChoice = (typeof PRESET_TONES)[number] | "custom";
@@ -48,6 +50,7 @@ function toneChoice(tone: string): ToneChoice {
 export default function AiSettings() {
   const { t } = useTranslation("ai");
   const { data: config, isLoading } = useQuery(q.aiConfig());
+  const { data: models } = useQuery({ ...q.aiModels(), enabled: !!config?.enabled });
   const assistantName = config?.assistant_name || ASSISTANT_NAME;
   const role = useRole();
   const qc = useQueryClient();
@@ -143,7 +146,14 @@ export default function AiSettings() {
           />
           <FeatureRow
             label={t("settings.widget_answers")}
-            description={t("settings.widget_answers_hint")}
+            description={
+              <>
+                {t("settings.widget_answers_hint")}{" "}
+                <Link to="/settings/ai/behaviour" className="text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">
+                  {t("settings.widget_answers_link")}
+                </Link>
+              </>
+            }
             cost={config?.costs?.answer}
             checked={draft.widget_answers}
             disabled={off}
@@ -216,16 +226,34 @@ export default function AiSettings() {
           </Row>
         </Section>
 
+        {available && <ProviderSection canEdit={canEdit} />}
+
         {available && config && (
           <Section title={t("settings.model")}>
             <Row label={t("settings.provider")}>
               <span className="mono text-[12px] text-fg-2">{config.provider}</span>
             </Row>
-            <Row label={t("settings.models")} description={t("settings.models_hint")}>
-              <span className="mono flex flex-col items-end gap-0.5 text-[12px] text-fg-2">
-                <span>{config.models.default}</span>
-                <span className="text-fg-3">{config.models.fast}</span>
-              </span>
+            <Row label={t("settings.main_model")} description={t("settings.main_model_hint")} stack>
+              <ModelPicker
+                value={draft.model ?? ""}
+                onChange={(model) => set({ model })}
+                models={models?.data}
+                defaultId={models?.default || config.models.default}
+                disabled={off}
+                aria-label={t("settings.main_model")}
+                className="max-w-[460px]"
+              />
+            </Row>
+            <Row label={t("settings.fast_model")} description={t("settings.fast_model_hint")} stack>
+              <ModelPicker
+                value={draft.fast_model ?? ""}
+                onChange={(fast_model) => set({ fast_model })}
+                models={models?.data}
+                defaultId={models?.fast || config.models.fast}
+                disabled={off}
+                aria-label={t("settings.fast_model")}
+                className="max-w-[460px]"
+              />
             </Row>
             <Row label={t("settings.search")} description={config.embeddings ? t("settings.embeddings_on") : t("settings.embeddings_off")}>
               <span className={cn("inline-flex h-5 items-center gap-1.5 rounded-sm px-1.5 text-[11px] font-medium", config.embeddings ? tone[AI_TONE].chip : tone.gray.chip)}>
@@ -236,10 +264,12 @@ export default function AiSettings() {
           </Section>
         )}
 
-        {available && config && Object.keys(config.costs).length > 0 && (
+        {available && config?.own_key && <p className="-mt-4 text-[12px] leading-[18px] text-fg-3">{t("settings.own_key_costs")}</p>}
+
+        {available && config && !config.own_key && Object.keys(config.costs).length > 0 && (
           <Section
             title={t("settings.costs")}
-            description={t("settings.costs_hint")}
+            description={config.metered ? t("settings.costs_metered_hint") : t("settings.costs_hint")}
             actions={
               <Link to="/settings/billing" className="inline-flex items-center gap-1 text-[12.5px] text-fg-2 hover:text-fg">
                 {t("settings.billing_link")}
@@ -254,7 +284,7 @@ export default function AiSettings() {
                   <tr key={f} className="border-b border-line-soft last:border-0">
                     <td className="px-4 py-2.5 text-fg-2">{t(`features.${f}`)}</td>
                     <td className="px-4 py-2.5 text-right">
-                      <CreditChip n={config.costs[f]!} />
+                      <CreditChip n={config.costs[f]!} label={config.metered ? t("settings.about_credits", { count: config.costs[f]! }) : undefined} />
                     </td>
                   </tr>
                 ))}
@@ -287,20 +317,22 @@ function FeatureRow({
   onChange,
 }: {
   label: string;
-  description: string;
+  description: React.ReactNode;
   cost: number | undefined;
   checked: boolean;
   disabled: boolean;
   onChange: (v: boolean) => void;
 }) {
   const { t } = useTranslation();
+  const { t: tai } = useTranslation("ai");
+  const { data: config } = useQuery(q.aiConfig());
   return (
     <Row
       label={label}
       description={
         <>
           {description}
-          {cost !== undefined && <CreditChip n={cost} className="ml-1.5 align-[1px]" label={t("credits", { count: cost })} />}
+          {cost !== undefined && !config?.own_key && <CreditChip n={cost} className="ml-1.5 align-[1px]" label={config?.metered ? tai("settings.about_credits", { count: cost }) : t("credits", { count: cost })} />}
         </>
       }
     >

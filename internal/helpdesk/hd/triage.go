@@ -19,6 +19,9 @@ func Engine(cfg *config.Config) DecisionEngine {
 	switch cfg.DecisionsProvider {
 	case "typesafe":
 		return DecisionEngine{Provider: "typesafe", Model: cfg.TypesafeModel, Connected: cfg.TypesafeAPIKey != ""}
+	case "openrouter":
+		// Jev through OpenRouter: the same engine, reached with the OpenRouter key.
+		return DecisionEngine{Provider: "typesafe", Model: cfg.TypesafeModel, Connected: cfg.OpenRouterAPIKey != ""}
 	case "llm":
 		return DecisionEngine{Provider: "llm", Model: cfg.AIFastModel, Connected: cfg.AIEnabled()}
 	}

@@ -1,3 +1,4 @@
+/** @jsxImportSource preact */
 /**
  * opendesk chat widget.
  *
@@ -20,10 +21,9 @@
 
 import { render } from "preact";
 import { Controller, type EventName } from "./controller";
-import { contrastText, isHex } from "./html";
+import { applyHostVars } from "./config";
 import { phoenixFactory } from "./realtime";
 import { browserLanguages, matchLocale, pickLocale, setLocale } from "./i18n";
-import { get, set } from "./store";
 import { css } from "./styles";
 import { App } from "./ui";
 import type { SessionIdentity } from "./types";
@@ -59,6 +59,8 @@ function boot() {
 
 function start(key: string, base: string, fetcher: (u: string, i: RequestInit) => Promise<Response>, socketFactory: typeof phoenixFactory) {
   const c = new Controller({ base, key, fetcher, socketFactory });
+  const get = () => c.store.get();
+  const set = (p: Parameters<typeof c.store.set>[0]) => c.store.set(p);
   const queued = Array.from(window.opendesk?.q ?? []);
 
   // Language: data-lang or opendesk("locale") first, then the browser, then the
@@ -81,14 +83,15 @@ function start(key: string, base: string, fetcher: (u: string, i: RequestInit) =
   root.appendChild(mount);
   document.body.appendChild(host);
 
-  const applyBrand = () => {
-    const b = get().config?.brand_color;
-    if (isHex(b)) {
-      const hex = b.startsWith("#") ? b : `#${b}`;
-      host.style.setProperty("--brand", hex);
-      host.style.setProperty("--brand-fg", contrastText(hex));
+  // Colour, corners and offsets follow the config as CSS variables on the host.
+  let applied: unknown = null;
+  c.store.subscribe(() => {
+    const cfg = get().config;
+    if (cfg && cfg !== applied) {
+      applied = cfg;
+      applyHostVars(host, cfg);
     }
-  };
+  });
 
   // Wait briefly for the catalog so the first paint is already translated.
   void Promise.race([firstLocale, new Promise((r) => setTimeout(r, 1200))]).then(() => render(<App c={c} />, mount));
@@ -131,7 +134,6 @@ function start(key: string, base: string, fetcher: (u: string, i: RequestInit) =
   // Identify before the first session so a known user never starts anonymous.
   for (const a of queued) if (a[0] === "identify") api(...(Array.from(a) as [string, ...unknown[]]));
   void c.boot().then(() => {
-    applyBrand();
     if (!explicit && get().config?.locale) void applyLocale(get().config?.locale);
     for (const a of queued) if (a[0] !== "identify" && a[0] !== "locale") api(...(Array.from(a) as [string, ...unknown[]]));
   });

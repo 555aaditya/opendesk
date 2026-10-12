@@ -13,11 +13,16 @@ import (
 )
 
 // TypeSafe is the client for Jev, TypeSafe's decision model:
-// POST {base}/v1/systemone with a bearer key (docs.typesafe.ai/api). Errors never
+// POST {base}/v1/systemone with a bearer key (docs.typesafe.ai/api), or the same request
+// through OpenRouter (NewOpenRouter). Errors never
 // carry the key, the request or the response body.
 type TypeSafe struct {
 	base, key, model string
-	hc               *http.Client
+	// path is the decisions endpoint under base; extra is merged into each body.
+	path    string
+	extra   map[string]any
+	headers map[string]string
+	hc      *http.Client
 	// Timeout bounds each attempt; Attempts counts the first try.
 	Timeout  time.Duration
 	Attempts int
@@ -41,8 +46,22 @@ func NewTypeSafe(base, key, model string) *TypeSafe {
 	if model == "" {
 		model = DefaultModel
 	}
-	return &TypeSafe{base: strings.TrimRight(base, "/"), key: key, model: model,
+	return &TypeSafe{base: strings.TrimRight(base, "/"), key: key, model: model, path: "/v1/systemone",
 		hc: &http.Client{}, Timeout: attemptTimeout, Attempts: maxAttempts}
+}
+
+// NewOpenRouter reaches Jev through OpenRouter's Decisions API
+// ({base}/alpha/decisions, base = https://openrouter.ai/api). The request is the same;
+// the response also reports the call's cost.
+func NewOpenRouter(base, key, model, appURL string) *TypeSafe {
+	if model == "" {
+		model = "~typesafe/jev-latest"
+	}
+	c := NewTypeSafe(base, key, model)
+	c.path = "/alpha/decisions"
+	c.extra = map[string]any{"provider": map[string]any{"data_collection": "deny"}}
+	c.headers = map[string]string{"HTTP-Referer": appURL, "X-Title": "opendesk"}
+	return c
 }
 
 func (c *TypeSafe) Name() string     { return "jev" }
@@ -53,14 +72,16 @@ type tsRequest struct {
 	State     any                 `json:"state"`
 	Model     string              `json:"model"`
 	Questions map[string]Question `json:"questions"`
+	Provider  any                 `json:"provider,omitempty"`
 }
 
 type tsResponse struct {
 	Model   string            `json:"model"`
 	Answers map[string]Answer `json:"answers"`
 	Usage   struct {
-		InputTokens  int `json:"input_tokens"`
-		OutputTokens int `json:"output_tokens"`
+		InputTokens  int     `json:"input_tokens"`
+		OutputTokens int     `json:"output_tokens"`
+		Cost         float64 `json:"cost"`
 	} `json:"usage"`
 }
 
@@ -74,7 +95,7 @@ func (c *TypeSafe) Decide(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 	}
-	body, err := json.Marshal(tsRequest{State: req.State, Model: c.model, Questions: req.Questions})
+	body, err := json.Marshal(tsRequest{State: req.State, Model: c.model, Questions: req.Questions, Provider: c.extra["provider"]})
 	if err != nil {
 		return Result{}, err
 	}
@@ -106,13 +127,18 @@ func (c *TypeSafe) Decide(ctx context.Context, req Request) (Result, error) {
 func (c *TypeSafe) once(ctx context.Context, body []byte) (Result, int, http.Header, error) {
 	actx, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
-	r, err := http.NewRequestWithContext(actx, http.MethodPost, c.base+"/v1/systemone", bytes.NewReader(body))
+	r, err := http.NewRequestWithContext(actx, http.MethodPost, c.base+c.path, bytes.NewReader(body))
 	if err != nil {
 		return Result{}, 0, nil, ErrUnavailable
 	}
 	r.Header.Set("Authorization", "Bearer "+c.key)
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json")
+	for k, v := range c.headers {
+		if v != "" {
+			r.Header.Set(k, v)
+		}
+	}
 	resp, err := c.hc.Do(r)
 	if err != nil {
 		// Transport errors can quote the URL but never the key or body; still map to a
@@ -135,7 +161,8 @@ func (c *TypeSafe) once(ctx context.Context, body []byte) (Result, int, http.Hea
 	if model == "" {
 		model = c.model
 	}
-	return Result{Model: model, Answers: out.Answers, InputTokens: out.Usage.InputTokens, OutputTokens: out.Usage.OutputTokens},
+	return Result{Model: model, Answers: out.Answers, InputTokens: out.Usage.InputTokens, OutputTokens: out.Usage.OutputTokens,
+			CostUSD: out.Usage.Cost},
 		resp.StatusCode, resp.Header, nil
 }
 

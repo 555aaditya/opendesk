@@ -99,7 +99,7 @@ func newEnv(t *testing.T, stripeOn bool) *env {
 	}
 	d := &deps.Deps{Cfg: cfg, Log: log, DB: database, NATS: nc, Analytics: analytics.New("", "", log), Box: box,
 		Tokens: auth.NewTokens(cfg.AuthSecret), Captcha: captcha.NewTurnstileFromConfig(captcha.TurnstileConfig{Disabled: true}),
-		Limiter: httpx.NewLimiter(), Plan: plan.New(cfg.BillingEnabled())}
+		Limiter: httpx.NewLimiter(), Plan: plan.New(cfg.BillingEnabled(), 1.5)}
 	d.Jobs, err = river.NewClient[pgx.Tx](riverpgxv5.New(database.Pool), &river.Config{})
 	if err != nil {
 		t.Fatal(err)
