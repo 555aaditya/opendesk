@@ -24,8 +24,8 @@ const (
 	StepEmailAnswers = "email_answers"
 )
 
-// Step is one item of the checklist.
-type Step struct {
+// SetupStep is one item of the checklist.
+type SetupStep struct {
 	ID          string `json:"id" enum:"ai_on,identity,knowledge,tools,playground,widget,answers_on,email_answers"`
 	Title       string `json:"title"`
 	Description string `json:"description" doc:"Why the step matters, in one line"`
@@ -36,10 +36,10 @@ type Step struct {
 
 // Setup is the checklist. Completion counts the required steps only.
 type Setup struct {
-	Steps     []Step `json:"steps"`
-	DoneCount int    `json:"done_count" doc:"Required steps done"`
-	Total     int    `json:"total" doc:"Required steps"`
-	Complete  bool   `json:"complete" doc:"Every required step is done"`
+	Steps     []SetupStep `json:"steps"`
+	DoneCount int         `json:"done_count" doc:"Required steps done"`
+	Total     int         `json:"total" doc:"Required steps"`
+	Complete  bool        `json:"complete" doc:"Every required step is done"`
 }
 
 // Load computes the checklist for wid. instanceAI reports an AI provider on the
@@ -68,7 +68,7 @@ func Load(ctx context.Context, q db.Querier, wid uuid.UUID, instanceAI bool) (Se
 			return Setup{}, err
 		}
 	}
-	steps := []Step{
+	steps := []SetupStep{
 		{ID: StepAIOn, Title: "Turn on AI", Description: "Ollie needs AI switched on for the workspace before it can answer anyone.",
 			Done: available && enabled, Href: "/settings/ai"},
 		{ID: StepIdentity, Title: "Name your agent and tell it how to help", Description: "A name, a picture and instructions make answers sound like your team.",
@@ -92,7 +92,7 @@ func Load(ctx context.Context, q db.Querier, wid uuid.UUID, instanceAI bool) (Se
 		if err := q.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM mailboxes WHERE workspace_id = $1 AND ai_answers)`, wid).Scan(&email); err != nil {
 			return Setup{}, err
 		}
-		steps = append(steps, Step{ID: StepEmailAnswers, Title: "Answer email too", Description: "Turn on Ollie for a mailbox to draft or send email replies.",
+		steps = append(steps, SetupStep{ID: StepEmailAnswers, Title: "Answer email too", Description: "Turn on Ollie for a mailbox to draft or send email replies.",
 			Done: email, Optional: true, Href: "/settings/mailboxes"})
 	}
 	s := Setup{Steps: steps}

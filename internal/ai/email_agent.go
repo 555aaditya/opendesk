@@ -393,7 +393,7 @@ type SuggestedReply struct {
 	TicketID  uuid.UUID  `json:"ticket_id"`
 	MessageID uuid.UUID  `json:"message_id" doc:"The customer message it answers"`
 	BodyHTML  string     `json:"body_html"`
-	Sources   []Source   `json:"sources"`
+	Sources   []CitedSource   `json:"sources"`
 	Tools     []string   `json:"tools"`
 	Status    string     `json:"status" enum:"pending,sent,discarded,superseded"`
 	ReplyID   *uuid.UUID `json:"reply_id" doc:"The sent message, once sent"`
@@ -406,7 +406,7 @@ func scanSuggested(row pgx.Row) (SuggestedReply, error) {
 	var r SuggestedReply
 	err := row.Scan(&r.ID, &r.TicketID, &r.MessageID, &r.BodyHTML, &r.Sources, &r.Tools, &r.Status, &r.ReplyID, &r.CreatedAt)
 	if r.Sources == nil {
-		r.Sources = []Source{}
+		r.Sources = []CitedSource{}
 	}
 	if r.Tools == nil {
 		r.Tools = []string{}
@@ -416,7 +416,7 @@ func scanSuggested(row pgx.Row) (SuggestedReply, error) {
 
 // suggestReply stores a suggested reply in tx, superseding the ticket's pending one,
 // with its activity and the ai_suggested_reply.created event.
-func (s *Service) suggestReply(ctx context.Context, tx pgx.Tx, wid, tid, trigger uuid.UUID, body string, sources []Source, tools []string) error {
+func (s *Service) suggestReply(ctx context.Context, tx pgx.Tx, wid, tid, trigger uuid.UUID, body string, sources []CitedSource, tools []string) error {
 	if _, err := tx.Exec(ctx, `UPDATE ai_suggested_replies SET status = 'superseded', decided_at = now()
 		WHERE workspace_id = $1 AND ticket_id = $2 AND status = 'pending'`, wid, tid); err != nil {
 		return err

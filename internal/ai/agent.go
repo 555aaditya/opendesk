@@ -482,18 +482,18 @@ func passageLinks(ps []Passage) string {
 	return hd.SanitizeRich("<ul>" + b.String() + "</ul>")
 }
 
-// Source is a cited passage in API responses (contracts/agent.md).
-type Source struct {
+// CitedSource is a cited passage in API responses (contracts/agent.md).
+type CitedSource struct {
 	Kind  string  `json:"kind" enum:"article,page,file,snippet"`
 	ID    string  `json:"id"`
 	Title string  `json:"title"`
 	URL   *string `json:"url"`
 }
 
-func toSources(ps []Passage) []Source {
-	out := make([]Source, 0, len(ps))
+func toSources(ps []Passage) []CitedSource {
+	out := make([]CitedSource, 0, len(ps))
 	for _, p := range ps {
-		s := Source{Kind: p.Kind, ID: p.ID, Title: p.Title}
+		s := CitedSource{Kind: p.Kind, ID: p.ID, Title: p.Title}
 		if p.URL != "" {
 			u := p.URL
 			s.URL = &u

@@ -6,11 +6,11 @@ import (
 	"github.com/useopendesk/opendesk/internal/ai/agentsetup"
 )
 
-func setupSteps(t *testing.T, e *env) (agentsetup.Setup, map[string]agentsetup.Step) {
+func setupSteps(t *testing.T, e *env) (agentsetup.Setup, map[string]agentsetup.SetupStep) {
 	t.Helper()
 	var s agentsetup.Setup
 	e.Do("GET", "/v1/ai/agent/setup", e.admin(), nil).Want(t, 200).JSON(t, &s)
-	m := map[string]agentsetup.Step{}
+	m := map[string]agentsetup.SetupStep{}
 	for _, st := range s.Steps {
 		if st.Title == "" || st.Description == "" || st.Href == "" {
 			t.Fatalf("step without copy: %+v", st)

@@ -524,7 +524,7 @@ func (s *Service) saveOutcome(ctx context.Context, wid, runID, testID uuid.UUID,
 func (s *Service) answerTest(ctx context.Context, wid uuid.UUID, draft *AgentDraft, t pendingTest) testOutcome {
 	ctx, cancel := context.WithTimeout(ctx, agentRunTestTimeout)
 	defer cancel()
-	out := testOutcome{res: AgentTestResult{Tools: []string{}, Sources: []Source{}, Checks: []AgentTestCheck{}}}
+	out := testOutcome{res: AgentTestResult{Tools: []string{}, Sources: []CitedSource{}, Checks: []AgentTestCheck{}}}
 	fail := func(err error) testOutcome {
 		msg := testErrorText(err)
 		if isNoCredits(err) {

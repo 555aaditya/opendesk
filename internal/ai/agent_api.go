@@ -62,7 +62,7 @@ type PlaygroundAction struct {
 // PlaygroundOutput is the playground's done event (and the JSON response).
 type PlaygroundOutput struct {
 	TextHTML string            `json:"text_html"`
-	Sources  []Source          `json:"sources"`
+	Sources  []CitedSource          `json:"sources"`
 	Handoff  bool              `json:"handoff"`
 	Action   *PlaygroundAction `json:"action"`
 	Credits  float64           `json:"credits"`
