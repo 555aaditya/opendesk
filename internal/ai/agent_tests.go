@@ -90,7 +90,7 @@ type AgentTestResult struct {
 	AnswerHTML string            `json:"answer_html"`
 	Handoff    bool              `json:"handoff"`
 	Tools      []string          `json:"tools" doc:"Display names of the tools the agent ran"`
-	Sources    []CitedSource          `json:"sources" doc:"The passages the answer cited"`
+	Sources    []CitedSource     `json:"sources" doc:"The passages the answer cited"`
 	Action     *PlaygroundAction `json:"action" doc:"A tool call that needs confirmation; never run in tests"`
 	Checks     []AgentTestCheck  `json:"checks"`
 	Error      *string           `json:"error"`

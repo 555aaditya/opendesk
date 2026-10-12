@@ -389,15 +389,15 @@ func (s *Service) postEmailAnswer(ctx context.Context, in agentInput, mode strin
 // SuggestedReply is the agent's reply waiting for a teammate on an email ticket
 // (contracts/agent.md "Email").
 type SuggestedReply struct {
-	ID        uuid.UUID  `json:"id"`
-	TicketID  uuid.UUID  `json:"ticket_id"`
-	MessageID uuid.UUID  `json:"message_id" doc:"The customer message it answers"`
-	BodyHTML  string     `json:"body_html"`
-	Sources   []CitedSource   `json:"sources"`
-	Tools     []string   `json:"tools"`
-	Status    string     `json:"status" enum:"pending,sent,discarded,superseded"`
-	ReplyID   *uuid.UUID `json:"reply_id" doc:"The sent message, once sent"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID        uuid.UUID     `json:"id"`
+	TicketID  uuid.UUID     `json:"ticket_id"`
+	MessageID uuid.UUID     `json:"message_id" doc:"The customer message it answers"`
+	BodyHTML  string        `json:"body_html"`
+	Sources   []CitedSource `json:"sources"`
+	Tools     []string      `json:"tools"`
+	Status    string        `json:"status" enum:"pending,sent,discarded,superseded"`
+	ReplyID   *uuid.UUID    `json:"reply_id" doc:"The sent message, once sent"`
+	CreatedAt time.Time     `json:"created_at"`
 }
 
 const suggestedColumns = `id, ticket_id, message_id, body_html, sources, tools, status, reply_id, created_at`
