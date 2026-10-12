@@ -4,8 +4,8 @@
 // before they are saved.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { FlaskConical } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ClipboardCheck, FlaskConical } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NoAccess, Row, Section, SettingsPage } from "@/components/layout";
@@ -22,10 +22,12 @@ import { UnsavedGuard } from "@/components/settings2/UnsavedGuard";
 import { OllieMark } from "@/components/assistant/OllieMark";
 import { ModelPicker } from "@/components/ai/ModelPicker";
 import { ChipEditor } from "@/components/agent/ChipEditor";
+import { EmailMailboxes } from "@/components/agent/EmailMailboxes";
 import { BotAvatar, Counter, CreditsField } from "@/components/agent/bits";
 import {
   agentSettings,
   BOT_NAME_MAX,
+  playgroundSettings,
   CAP_MAX,
   INSTRUCTIONS_MAX,
   TOPICS_MAX,
@@ -42,6 +44,7 @@ import { AI_TONE } from "@/lib/tones";
 import { cn } from "@/lib/cn";
 
 const PLAYGROUND = "/settings/ai/playground";
+const TESTS = "/settings/ai/tests";
 
 export default function AgentBehaviour() {
   const { t } = useTranslation("agent");
@@ -104,6 +107,18 @@ export default function AgentBehaviour() {
     onError: (e) => toast.error(e, t("behaviour.saveError")),
   });
 
+  // Run the agent's tests, against these edits when there are any.
+  const { t: tq } = useTranslation("agentQuality");
+  const navigate = useNavigate();
+  const runTests = useMutation({
+    mutationFn: () => api.ai.agent.runs.start({ settings: dirty ? playgroundSettings({ ai: draft, botName }) : undefined }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.agentTestRuns });
+      void navigate({ to: TESTS });
+    },
+    onError: (e) => toast.error(e, tq("behaviour.runError")),
+  });
+
   const discard = () => {
     setDraft(base);
     setBotName(baseName);
@@ -126,15 +141,20 @@ export default function AgentBehaviour() {
       title={t("behaviour.title")}
       description={t("behaviour.description")}
       actions={
-        <Button asChild>
-          <Link to={PLAYGROUND}>
-            <FlaskConical className="size-3.5 text-fg-3" />
-            {dirty ? t("behaviour.tryChanges") : t("behaviour.openPlayground")}
-          </Link>
-        </Button>
+        <>
+          <Button icon={<ClipboardCheck className="size-3.5 text-fg-3" />} loading={runTests.isPending} disabled={tooLong || nameBad} onClick={() => runTests.mutate()}>
+            {dirty ? tq("behaviour.runTestsDraft") : tq("behaviour.runTests")}
+          </Button>
+          <Button asChild>
+            <Link to={PLAYGROUND}>
+              <FlaskConical className="size-3.5 text-fg-3" />
+              {dirty ? t("behaviour.tryChanges") : t("behaviour.openPlayground")}
+            </Link>
+          </Button>
+        </>
       }
     >
-      <UnsavedGuard when={dirty && !save.isPending} allow={(p) => p === PLAYGROUND} />
+      <UnsavedGuard when={dirty && !save.isPending} allow={(p) => p === PLAYGROUND || p === TESTS} />
       {isLoading || !config ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-16 rounded-lg" />
@@ -255,6 +275,8 @@ export default function AgentBehaviour() {
               <Switch checked={draft.widget_collect_email} onCheckedChange={(widget_collect_email) => set({ widget_collect_email })} aria-label={t("behaviour.collectEmail")} />
             </Row>
           </Section>
+
+          <EmailMailboxes />
         </>
       )}
 

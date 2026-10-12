@@ -5,12 +5,13 @@
 
 import type { AgentReport, AgentSource, PlaygroundDone, PlaygroundMessage, PlaygroundToolEvent } from "@/lib/api/types";
 import { db, type WsData } from "../db";
-import { DEFAULT_MODEL, MODELS, effectiveModels, reserve, round3, spend } from "../credits";
+import { DEFAULT_MODEL, effectiveModels, offersModel, reserve, round3, spend } from "../credits";
 import { chunk, eventStream, get, invalid, post, wantsStream, type Ctx } from "../router";
 import { DAY, isRecord, markdownToHtml, stripHtml } from "../util";
 import { assertAi, requireAiAdmin, score, terms } from "./ai";
 import { knowledgeDocs } from "./knowledge";
 import { mcpTool } from "./mcp";
+import { channelSplit } from "./emailAnswers";
 
 // ─── Report ────────────────────────────────────────────────────────────────
 
@@ -89,14 +90,15 @@ export function agentReport(ws: WsData, from: string, to: string, today = new Da
   ].sort((a, b) => b.calls - a.calls);
   const days = r.by_day.length;
   r.gaps = GAPS.slice(0, days < 7 ? 8 : days < 30 ? 10 : GAPS.length).map(([question, n]) => ({ question, count: Math.max(1, Math.round((n * days) / 30)) }));
+  r.channels = channelSplit(ws, r);
   return r;
 }
 
 // ─── Playground ────────────────────────────────────────────────────────────
 
-type Visitor = { name?: string; email?: string; verified?: boolean; user_id?: string };
-type Overrides = { widget_model?: string; widget_instructions?: string; widget_blocked_topics?: string[]; tone?: string; reply_language?: string; instructions?: string };
-type Plan = {
+export type Visitor = { name?: string; email?: string; verified?: boolean; user_id?: string };
+export type Overrides = { widget_model?: string; widget_instructions?: string; widget_blocked_topics?: string[]; tone?: string; reply_language?: string; instructions?: string };
+export type Plan = {
   tools: PlaygroundToolEvent[];
   sources: AgentSource[];
   text: string;
@@ -117,14 +119,14 @@ function parseBody(ctx: Ctx): { messages: PlaygroundMessage[]; settings: Overrid
   });
   if (messages[messages.length - 1].role !== "visitor") throw invalid("The last message must be the visitor's");
   const settings: Overrides = isRecord(b.settings) ? (b.settings as Overrides) : {};
-  if (settings.widget_model !== undefined && settings.widget_model !== "" && !MODELS.some((m) => m.id === settings.widget_model)) throw invalid("widget_model must be empty or one of the offered models");
+  if (settings.widget_model !== undefined && settings.widget_model !== "" && !offersModel(ctx.ws, settings.widget_model)) throw invalid("widget_model must be empty or one of the offered models");
   if (settings.widget_blocked_topics !== undefined && (!Array.isArray(settings.widget_blocked_topics) || settings.widget_blocked_topics.some((x) => typeof x !== "string"))) throw invalid("widget_blocked_topics must be a list of topics");
   const visitor: Visitor = isRecord(b.visitor) ? (b.visitor as Visitor) : {};
   return { messages, settings, visitor };
 }
 
 /** The widget model: the draft override, else the workspace's widget_model, else model, else the default. */
-function widgetModel(ws: WsData, o: Overrides): string {
+export function widgetModel(ws: WsData, o: Overrides): string {
   if (o.widget_model) return o.widget_model;
   if (o.widget_model === "") return effectiveModels(ws).model;
   return effectiveModels(ws).widget || DEFAULT_MODEL;
@@ -172,7 +174,7 @@ function blockedTopic(text: string, topics: string[]): string | null {
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const HUMAN = /\b(human|real person|a person|someone|representative|live agent|an agent|support agent|talk to (the )?team|mensch|persona|humain)\b/i;
 
-function plan(ws: WsData, messages: PlaygroundMessage[], o: Overrides, visitor: Visitor): Plan {
+export function plan(ws: WsData, messages: PlaygroundMessage[], o: Overrides, visitor: Visitor): Plan {
   const last = messages[messages.length - 1].text;
   const lower = last.toLowerCase();
   const first = (visitor.name ?? "").trim().split(/\s+/)[0] ?? "";

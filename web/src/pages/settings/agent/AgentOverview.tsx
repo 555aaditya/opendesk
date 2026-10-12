@@ -1,7 +1,8 @@
 // Settings > AI agent > Overview: how the widget agent did over a range
 // (GET /v1/ai/agent/report): conversations, resolutions, handoffs, ratings
 // and credits, a by-day chart, the tools it called, and the questions it
-// couldn't answer, each one a click away from a help article.
+// couldn't answer, each one a click away from a help article. The setup
+// checklist (GET /v1/ai/agent/setup) leads the page until it is complete.
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -17,7 +18,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
 import { SummaryStrip } from "@/components/settings2/bits";
 import { AgentOffNotice } from "@/components/agent/bits";
+import { AgentSetupPanel } from "@/components/agent/SetupChecklist";
 import { agentSettings } from "@/components/agent/settings";
+import { ReviewQueue } from "@/components/agent/ReviewQueue";
 import { useAI } from "@/lib/ai";
 import type { AgentReport, ReportsRange } from "@/lib/api/types";
 import { credits, number, percent } from "@/lib/format";
@@ -47,6 +50,7 @@ export default function AgentOverview() {
 
   return (
     <SettingsPage wide title={t("overview.title")} description={t("overview.description")} actions={<RangePicker value={range} onChange={setRange} />}>
+      <AgentSetupPanel />
       {ai.config && !on && <AgentOffNotice className="-mb-3" />}
       {report.isLoading ? (
         <OverviewSkeleton />
@@ -88,6 +92,7 @@ export default function AgentOverview() {
       ) : (
         <div className={cn("flex flex-col gap-9 transition-opacity duration-150", report.isPlaceholderData && "opacity-60")}>
           <Tiles d={d} />
+          <ReviewQueue />
           <Trend d={d} />
           <div className="grid grid-cols-1 gap-9 lg:grid-cols-2 lg:gap-6">
             <Tools d={d} />

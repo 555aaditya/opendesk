@@ -10,6 +10,7 @@ import {
   ArrowUp,
   BookOpen,
   Check,
+  ClipboardCheck,
   FileText,
   Globe,
   Hand,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Square,
   UserRound,
+  Wand2,
   Wrench,
   X,
 } from "lucide-react";
@@ -33,9 +35,10 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ModelPicker } from "@/components/ai/ModelPicker";
 import { AgentOffNotice, BotAvatar, Counter, Eyebrow } from "@/components/agent/bits";
 import { agentSettings, INSTRUCTIONS_MAX, playgroundSettings, useAgentDraft } from "@/components/agent/settings";
+import { ImproveAnswerDialog, TestEditor, toTestMessages } from "@/components/agent/quality";
 import { api } from "@/lib/api/endpoints";
 import { errorMessage } from "@/lib/api/client";
-import type { AgentSource, PlaygroundBody, PlaygroundDone, PlaygroundToolEvent } from "@/lib/api/types";
+import type { AgentExpectation, AgentSource, AgentTestBody, PlaygroundBody, PlaygroundDone, PlaygroundMessage, PlaygroundToolEvent } from "@/lib/api/types";
 import { useAI } from "@/lib/ai";
 import { credits } from "@/lib/format";
 import { springs } from "@/lib/motion";
@@ -68,6 +71,12 @@ const nextId = () => `t${++seq}`;
 /** The streamed text without the `[n]` source markers. */
 const stripMarkers = (s: string) => s.replace(MARKERS, "");
 
+type AgentTurn = Extract<Turn, { role: "agent" }>;
+
+/** The conversation as the agent sees it: visitor turns and finished agent replies. */
+const toMessages = (ts: Turn[]): PlaygroundMessage[] =>
+  ts.filter((x) => x.role === "visitor" || (x.role === "agent" && !x.error && x.text)).map((x) => ({ role: x.role, text: stripMarkers(x.text).slice(0, 4000) }));
+
 export default function AgentPlayground() {
   const { t } = useTranslation("agent");
   const admin = atLeast(useRole(), "admin");
@@ -86,6 +95,9 @@ export default function AgentPlayground() {
   const [model, setModel] = useState<string | null>(null);
   const [instructions, setInstructions] = useState<string | null>(null);
   const [visitor, setVisitor] = useState({ name: "", email: "", verified: false });
+  // Save as test and Improve answer, opened from an agent reply.
+  const [saving, setSaving] = useState<Partial<AgentTestBody> | null>(null);
+  const [improving, setImproving] = useState<{ question: string; answer: string } | null>(null);
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -167,6 +179,22 @@ export default function AgentPlayground() {
     setText("");
   };
 
+  const before = (turn: AgentTurn) => turns.slice(0, turns.findIndex((x) => x.id === turn.id));
+  const saveAsTest = (turn: AgentTurn) => {
+    const expectations: AgentExpectation[] = [{ kind: turn.handoff ? "handoff" : "no_handoff" }];
+    if (turn.sources.length) expectations.push({ kind: "cites_knowledge" });
+    const email = visitor.email.trim();
+    setSaving({
+      messages: toTestMessages(toMessages(before(turn))),
+      expectations,
+      visitor: visitor.verified ? { verified: true, email: email || undefined } : undefined,
+    });
+  };
+  const improve = (turn: AgentTurn) => {
+    const asked = before(turn).filter((x) => x.role === "visitor");
+    setImproving({ question: asked[asked.length - 1]?.text ?? "", answer: stripMarkers(turn.text).trim() });
+  };
+
   if (!admin)
     return (
       <SettingsPage title={t("playground.title")}>
@@ -190,6 +218,8 @@ export default function AgentPlayground() {
           botSrc={botSrc}
           suggestions={suggestions}
           spent={spent}
+          onSaveTest={saveAsTest}
+          onImprove={improve}
         />
         <aside className="flex flex-col gap-4">
           <SettingsPanel
@@ -210,6 +240,8 @@ export default function AgentPlayground() {
           <p className="px-1 text-[11.5px] leading-[17px] text-fg-3">{t("playground.note", { n: ai.cost("playground") ?? 3 })}</p>
         </aside>
       </div>
+      {saving && <TestEditor initial={saving} onClose={() => setSaving(null)} />}
+      {improving && <ImproveAnswerDialog question={improving.question} answer={improving.answer} onClose={() => setImproving(null)} />}
     </SettingsPage>
   );
 }
@@ -226,6 +258,8 @@ function Chat({
   botSrc,
   suggestions,
   spent,
+  onSaveTest,
+  onImprove,
 }: {
   turns: Turn[];
   busy: boolean;
@@ -238,6 +272,8 @@ function Chat({
   botSrc: string | null;
   suggestions: string[];
   spent: number;
+  onSaveTest: (turn: AgentTurn) => void;
+  onImprove: (turn: AgentTurn) => void;
 }) {
   const { t } = useTranslation("agent");
   const scroller = useRef<HTMLDivElement>(null);
@@ -290,7 +326,7 @@ function Chat({
         ) : (
           <ol className="flex flex-col gap-4">
             {turns.map((x) => (
-              <li key={x.id}>{x.role === "visitor" ? <VisitorBubble text={x.text} /> : <AgentBubble turn={x} botName={botName} botSrc={botSrc} />}</li>
+              <li key={x.id}>{x.role === "visitor" ? <VisitorBubble text={x.text} /> : <AgentBubble turn={x} botName={botName} botSrc={botSrc} onSaveTest={busy ? undefined : () => onSaveTest(x)} onImprove={busy ? undefined : () => onImprove(x)} />}</li>
             ))}
           </ol>
         )}
@@ -345,13 +381,27 @@ function VisitorBubble({ text }: { text: string }) {
 
 const SOURCE_ICON: Record<AgentSource["kind"], typeof Globe> = { article: BookOpen, page: Globe, file: FileText, snippet: MessageSquareQuote };
 
-function AgentBubble({ turn, botName, botSrc }: { turn: Extract<Turn, { role: "agent" }>; botName: string; botSrc: string | null }) {
+function AgentBubble({
+  turn,
+  botName,
+  botSrc,
+  onSaveTest,
+  onImprove,
+}: {
+  turn: AgentTurn;
+  botName: string;
+  botSrc: string | null;
+  onSaveTest?: () => void;
+  onImprove?: () => void;
+}) {
   const { t } = useTranslation("agent");
+  const { t: tq } = useTranslation("agentQuality");
+  const finished = !turn.streaming && !turn.error && !!turn.text.trim();
   const reduce = useReducedMotion();
   const shown = stripMarkers(turn.text);
   const waiting = turn.streaming && !shown && !turn.tools.length;
   return (
-    <motion.div initial={reduce ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={springs.snap} className="flex items-start gap-2.5">
+    <motion.div initial={reduce ? false : { opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={springs.snap} className="group/bubble flex items-start gap-2.5">
       <BotAvatar src={botSrc} size={26} className="mt-0.5" />
       <div className="flex min-w-0 max-w-[85%] flex-col gap-1.5">
         <span className="text-[11.5px] font-medium text-fg-3">{botName}</span>
@@ -450,6 +500,16 @@ function AgentBubble({ turn, botName, botSrc }: { turn: Extract<Turn, { role: "a
             {turn.credits !== null && (
               <span className="mono ml-auto text-[10.5px] tabular-nums text-fg-4">{t("playground.replyCredits", { n: credits(turn.credits) })}</span>
             )}
+          </div>
+        )}
+        {finished && onSaveTest && onImprove && (
+          <div className="flex items-center gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/bubble:opacity-100 motion-reduce:transition-none">
+            <Button size="xs" variant="ghost" icon={<ClipboardCheck className="size-3" />} onClick={onSaveTest}>
+              {tq("playground.saveTest")}
+            </Button>
+            <Button size="xs" variant="ghost" icon={<Wand2 className="size-3" />} onClick={onImprove}>
+              {tq("playground.improve")}
+            </Button>
           </div>
         )}
       </div>

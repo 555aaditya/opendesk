@@ -64,8 +64,13 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 | `member.added` / `member.updated` / `member.removed` | agents | `user:<uid>` | `{ "member": Member }` / `{ "user_id" }`. `member.updated` also on availability and picture changes (in every workspace of that user) |
 | `workspace.updated`      | agents     | —                                     | `{ "workspace": Workspace }` (name, settings, logo and brand images) |
 | `notification.created`   | agents     | `user:<uid>`                          | `{ "notification": Notification }` |
+| `ai_suggested_reply.created` / `ai_suggested_reply.updated` | agents | — | `{ "ticket_id": "...", "suggested_reply": SuggestedReply }` (`contracts/agent.md` "Email"). `created` when the agent suggests a reply on an email ticket (it supersedes the pending one); `updated` when a teammate sends or discards it |
 | `ai_mcp_server.created` / `ai_mcp_server.updated` / `ai_mcp_server.deleted` | agents | — | `{ "mcp_server": McpServer }` / `{ "mcp_server_id" }` (`contracts/agent.md`). `updated` also when a sync changes the tools or the status |
 | `ai_knowledge.created` / `ai_knowledge.updated` / `ai_knowledge.deleted` | agents | — | `{ "source": KnowledgeSource }` / `{ "source_id" }` (`contracts/agent.md`). `updated` on every status change of a sync |
+| `ai_agent_test.created` / `ai_agent_test.updated` / `ai_agent_test.deleted` | agents | — | `{ "test": AgentTest }` / `{ "test_id" }` (`contracts/agent.md` "Tests") |
+| `ai_agent_test_run.created` / `ai_agent_test_run.updated` | agents | — | `{ "run": AgentTestRun }` (without `results`): on start, when the job picks it up, after each test and when it ends or is stopped |
+| `ai_agent_test_result.updated` | agents | — | `{ "result": AgentTestResult }`: a test of a run finished (`passed`, `failed` or `error`); it becomes that test's `last_result` |
+| `ai_agent_review.updated` | agents | — | `{ "message_id", "outcome": "dismissed" \| "improved" }`: an agent reply left the review queue |
 | `billing.updated`        | agents     | —                                     | `Billing` (`contracts/billing.md`): plan, status, seats, limits, usage, credits, prices. Sent on subscription changes, seat syncs and credit purchases |
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `team.*`, `webhook.*` | agents | — | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |
 | `integration.created` / `integration.updated` / `integration.deleted` | agents | — | `{ "integration": Integration }` / `{ "integration_id" }` (`contracts/integrations.md`; never credentials) |

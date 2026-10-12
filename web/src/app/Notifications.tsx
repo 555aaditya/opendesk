@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AtSign, Bell, CornerDownLeft, Gauge, Hand, TimerOff, UserPlus } from "lucide-react";
+import { AtSign, Bell, CornerDownLeft, CreditCard, Gauge, Hand, KeyRound, Sparkles, TimerOff, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -25,6 +25,10 @@ const kind: Record<Notification["type"], { icon: React.ReactNode; tone: Tone }> 
   sla_breached: { icon: <TimerOff />, tone: "red" },
   ai_handoff: { icon: <Hand />, tone: AI_TONE },
   ai_cap_reached: { icon: <Gauge />, tone: AI_TONE },
+  credits_low: { icon: <Sparkles />, tone: "amber" },
+  credits_out: { icon: <Sparkles />, tone: "red" },
+  auto_recharge_failed: { icon: <CreditCard />, tone: "red" },
+  ai_key_failed: { icon: <KeyRound />, tone: "red" },
 };
 
 function describe(n: Notification, t: TFunction<"shell">): string {
@@ -45,6 +49,14 @@ function describe(n: Notification, t: TFunction<"shell">): string {
       return contact ? t("notifications.type.handoff", { who: contact }) : t("notifications.type.handoffAnon");
     case "ai_cap_reached":
       return t("notifications.type.capReached");
+    case "credits_low":
+      return t("notifications.type.creditsLow");
+    case "credits_out":
+      return t("notifications.type.creditsOut");
+    case "auto_recharge_failed":
+      return t("notifications.type.rechargeFailed");
+    case "ai_key_failed":
+      return n.data.reason === "no_funds" ? t("notifications.type.keyNoFunds") : t("notifications.type.keyRejected");
     default:
       return t("notifications.type.other");
   }
@@ -85,6 +97,8 @@ export function NotificationsButton() {
     if (!n.read_at) markRead.mutate({ ids: [n.id] });
     setOpen(false);
     if (n.type === "ai_cap_reached") void navigate({ to: "/settings/ai/behaviour" });
+    else if (n.type === "ai_key_failed") void navigate({ to: "/settings/ai" });
+    else if (n.type === "credits_low" || n.type === "credits_out" || n.type === "auto_recharge_failed") void navigate({ to: "/settings/billing" });
     else if (n.ticket)
       void navigate({
         to: "/inbox/$folder/{-$ticketId}",

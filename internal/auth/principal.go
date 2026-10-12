@@ -67,6 +67,10 @@ type Principal struct {
 	// it: it runs with the user's own role and checks, and is attributed to ai on
 	// behalf of the user.
 	Assistant bool
+	// GrantID is set when a user acts through an AI client connected to the MCP server
+	// with OAuth (contracts/agent.md). Scopes then bound the request like an API key's,
+	// on top of the user's role, and account routes are refused.
+	GrantID uuid.UUID
 }
 
 func (p *Principal) HasScope(s string) bool { return slices.Contains(p.Scopes, s) }

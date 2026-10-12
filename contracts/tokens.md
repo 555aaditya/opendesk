@@ -14,6 +14,7 @@ and a consumer accepts exactly one purpose. `exp` is required.
 | `passkey_login` | `POST /v1/auth/passkey/login/begin` | 5 min | `POST /v1/auth/passkey/login/finish` |
 | `passkey_register` | `POST /v1/me/passkeys/register/begin` | 5 min | `POST /v1/me/passkeys/register/finish` |
 | `assistant_approval` | a Ollie run's `approval` event | 15 min | `POST /v1/assistant/actions/{id}/decision` |
+| `mcp_access` | `POST /oauth/token` (MCP OAuth, `contracts/agent.md`) | 1 h | the MCP server, `{API_URL}/mcp` (Bearer), when `aud` is the MCP resource |
 
 ## Claims
 
@@ -30,6 +31,13 @@ and a consumer accepts exactly one purpose. `exp` is required.
 { "purpose": "passkey_login", "jti": "<uuid>", "iat": 0, "exp": 0 }
 { "purpose": "passkey_register", "sub": "<user_id>", "sid": "<session_id>", "jti": "<uuid>", "iat": 0, "exp": 0 }
 { "purpose": "assistant_approval", "sub": "<user_id>", "sid": "<session_id>", "wid": "<workspace_id>", "jti": "<action_id>", "iat": 0, "exp": 0 }
+
+// mcp_access: an AI client acting for a user in one workspace. aud is the MCP resource
+// ({API_URL}/mcp, RFC 8707); gid is the grant, checked on every request (revoked grants and
+// ended memberships stop working at once); scope is space-separated and is bounded again by
+// the user's current role.
+{ "purpose": "mcp_access", "sub": "<user_id>", "wid": "<workspace_id>", "gid": "<grant_id>",
+  "scope": "tickets:read kb:read", "aud": ["https://api.opendesk.sh/mcp"], "iss": "<API_URL>", "jti": "<uuid>", "iat": 0, "exp": 0 }
 
 // ws (agent / API-key socket)
 { "purpose": "ws", "sub": "<user_id or api_key_id>", "kind": "user" | "api_key",
@@ -51,6 +59,9 @@ in the claims.
 | API key         | `od_live_` + 32 bytes base64url | `Authorization: Bearer od_live_...`              |
 | visitor token   | `od_vis_` + 32 bytes base64url  | `Authorization: Visitor od_vis_...` (widget API) |
 | one-time tokens | 32 bytes base64url              | email links (verify, reset, invite, oauth login) |
+| MCP OAuth code  | 32 bytes base64url, single use, 60 s | `code` on the client's redirect; exchanged with the PKCE verifier |
+| MCP refresh token | `od_mcpr_` + 32 bytes base64url, 30 days, rotates on use | `POST /oauth/token`; a rotated one presented again revokes the grant |
+| MCP client secret | `od_mcps_` + 32 bytes base64url | confidential clients from `POST /oauth/register` |
 
 Passwords: Argon2id only (`m=64MiB, t=3, p=2`, 16-byte salt, 32-byte key), PHC string format.
 

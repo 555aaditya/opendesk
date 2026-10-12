@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/core/oauthgrant"
 	"github.com/useopendesk/opendesk/internal/crypto"
 	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/displayname"
@@ -230,6 +231,9 @@ func (s *svc) registerAuth(api huma.API) {
 					return err
 				}
 				if err := revokeOtherSessions(ctx, tx, uid, uuid.Nil); err != nil {
+					return err
+				}
+				if _, err := oauthgrant.Revoke(ctx, tx, userPrincipal(uid, ri), uid, uuid.Nil, uuid.Nil, oauthgrant.ReasonSignedOut); err != nil {
 					return err
 				}
 				_, err = auditUser(ctx, tx, userPrincipal(uid, ri), uid, "password.reset", nil)

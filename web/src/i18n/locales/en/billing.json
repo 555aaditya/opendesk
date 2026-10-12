@@ -59,7 +59,11 @@
     "checkoutCancel": "Checkout cancelled. Nothing was charged.",
     "credits": "Credits added",
     "creditsBody": "Purchased credits never expire.",
-    "creditsPending": "Payment received. Your credits appear in a moment."
+    "creditsPending": "Payment received. Your credits appear in a moment.",
+    "cardSaved": "Payment method saved",
+    "cardSavedBody": "Auto-recharge can now charge it when credits run low.",
+    "autoRechargeOn": "Auto-recharge is on",
+    "cardCanceled": "No payment method was added."
   },
   "upgrade": {
     "title": "Upgrade to Pro",
@@ -121,7 +125,9 @@
     "packSize": "{{credits}} credits per pack",
     "packTotal": "{{credits}} credits for {{price}}",
     "buyCta": "Buy {{credits}} credits",
-    "meterLabel": "{{used}} of {{total}} monthly credits used"
+    "meterLabel": "{{used}} of {{total}} monthly credits used",
+    "packsDec": "Fewer packs",
+    "packsInc": "More packs"
   },
   "selfHosted": {
     "title": "Self-hosted: unlimited",
@@ -157,7 +163,10 @@
     "chart": "Show as chart",
     "metered": "Credits follow real usage: longer conversations and larger models use more.",
     "byModel": "By model",
-    "decisionModel": "Decision model"
+    "decisionModel": "Decision model",
+    "ownKey": "On your key",
+    "ownKeyTag": "your key",
+    "ownKeyHint": "Requests on your own provider key use no credits."
   },
   "features": {
     "summarize": "Summaries",
@@ -169,6 +178,7 @@
     "copilot": "Ask about a ticket",
     "draft_reply": "Draft replies",
     "answer": "Widget answers",
+    "answer_email": "Email answers",
     "playground": "Agent playground",
     "kb_draft": "Article drafts",
     "assistant": "Assistant",
@@ -191,5 +201,47 @@
   "errors": {
     "load": "Couldn't load billing",
     "loadBody": "Check your connection and try again."
+  },
+  "autoRecharge": {
+    "title": "Auto-recharge",
+    "description": "Buy credits automatically when they run low, so Ollie never pauses.",
+    "on": "On",
+    "off": "Off",
+    "toggle": "Auto-recharge",
+    "threshold": "Recharge below",
+    "thresholdHint": "When remaining credits fall below this, buy more.",
+    "thresholdSuffix": "credits",
+    "packs": "Packs per recharge",
+    "packsQuote": "{{credits}} credits for {{price}} each time",
+    "limit": "Monthly limit",
+    "limitHint": "At most {{amount}} a month, then it waits for next month.",
+    "limitHintNoPrice": "Recharges per month, then it waits for next month.",
+    "limitSuffix": "recharges",
+    "last": "Last recharge {{date}}: {{credits}} credits for {{price}}",
+    "none": "No recharges yet",
+    "thisMonth": "{{used}} of {{limit}} this month",
+    "offHint": "While it's off, owners and admins get a notice when credits run low and when they run out.",
+    "needCardTitle": "Add a payment method to turn on auto-recharge",
+    "needCardBody": "Stripe keeps the card. Each recharge is charged to it, up to your monthly limit.",
+    "addCard": "Add a payment method",
+    "failedTitle": "Auto-recharge turned off {{date}}",
+    "failure": {
+      "card_declined": "The card was declined, so nothing was charged. Update the payment method, then turn it back on.",
+      "authentication_required": "The bank asked to confirm the payment, which can't happen automatically. Use another card, then turn it back on.",
+      "no_payment_method": "There's no saved payment method. Add one, then turn it back on.",
+      "payment_failed": "The payment didn't go through. Update the payment method, then turn it back on.",
+      "unavailable": "Credit packs aren't available right now. Try again later."
+    }
+  },
+  "banner": {
+    "outTitle": "AI credits are out.",
+    "outBody": "Ollie is paused: the chat agent stops answering and drafts are unavailable.",
+    "lowTitle": "AI credits are running low.",
+    "lowBody": "{{remaining}} left. Ollie pauses when they run out.",
+    "failed": "Auto-recharge turned off after a failed payment.",
+    "buy": "Buy credits",
+    "turnOn": "Turn on auto-recharge",
+    "settings": "Recharge settings",
+    "dismiss": "Dismiss"
   }
 }

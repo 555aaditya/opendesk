@@ -22,6 +22,7 @@ import { AI_TONE, tone } from "@/lib/tones";
 import { IconTile } from "@/components/settings2/bits";
 import { ASSISTANT_NAME } from "@/components/assistant/name";
 import { ModelPicker } from "@/components/ai/ModelPicker";
+import { ProviderSection } from "@/components/ai/ProviderSection";
 
 const PRESET_TONES = ["friendly", "professional", "concise"] as const;
 type ToneChoice = (typeof PRESET_TONES)[number] | "custom";
@@ -225,6 +226,8 @@ export default function AiSettings() {
           </Row>
         </Section>
 
+        {available && <ProviderSection canEdit={canEdit} />}
+
         {available && config && (
           <Section title={t("settings.model")}>
             <Row label={t("settings.provider")}>
@@ -261,7 +264,9 @@ export default function AiSettings() {
           </Section>
         )}
 
-        {available && config && Object.keys(config.costs).length > 0 && (
+        {available && config?.own_key && <p className="-mt-4 text-[12px] leading-[18px] text-fg-3">{t("settings.own_key_costs")}</p>}
+
+        {available && config && !config.own_key && Object.keys(config.costs).length > 0 && (
           <Section
             title={t("settings.costs")}
             description={config.metered ? t("settings.costs_metered_hint") : t("settings.costs_hint")}
@@ -327,7 +332,7 @@ function FeatureRow({
       description={
         <>
           {description}
-          {cost !== undefined && <CreditChip n={cost} className="ml-1.5 align-[1px]" label={config?.metered ? tai("settings.about_credits", { count: cost }) : t("credits", { count: cost })} />}
+          {cost !== undefined && !config?.own_key && <CreditChip n={cost} className="ml-1.5 align-[1px]" label={config?.metered ? tai("settings.about_credits", { count: cost }) : t("credits", { count: cost })} />}
         </>
       }
     >

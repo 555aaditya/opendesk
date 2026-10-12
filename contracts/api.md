@@ -130,9 +130,17 @@ type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_afte
   engine: DecisionEngine; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
 type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type BusinessHours = { enabled: boolean; timezone: string /* the workspace timezone */; schedule: Record<Weekday, { start: string; end: string }[]> /* "HH:MM", 24h */; holidays: { date: string /* YYYY-MM-DD */; name: string }[] };
-type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie";
+type OnboardingStepId = "connect_mailbox" | "invite_teammate" | "upload_photo" | "install_widget" | "publish_article" | "setup_triage" | "create_label" | "try_ollie" | "setup_ai_agent";
 type OnboardingStep = { id: OnboardingStepId; title: string; description: string; done: boolean; href: string /* app path */; requires: "admin" | "agent" };
 type Onboarding = { steps: OnboardingStep[]; done_count: number; total: number; dismissed: boolean };
+type AgentSetupStepId = "ai_on" | "identity" | "knowledge" | "tools" | "playground" | "widget" | "answers_on" | "email_answers";
+type AgentSetup = { steps: { id: AgentSetupStepId; title: string; description: string; done: boolean; optional: boolean; href: string }[];
+  done_count: number; total: number; complete: boolean };  // GET /v1/ai/agent/setup; counts required steps
+type OAuthClientInfo = { name: string; uri: string; redirect_host: string; local: boolean /* loopback redirect */ };
+type OAuthRequest = { id: string; client: OAuthClientInfo; scopes: string[]; expires_at: string;
+  workspaces: { id: string; name: string; role: Role; scopes: string[] /* requested ∩ role */ }[] };
+type AIClientConnection = { id: string; client: OAuthClientInfo; user: UserRef; mine: boolean; scopes: string[];
+  created_at: string; last_used_at: string | null };
 type Automation = { id: string; name: string; trigger: "ticket_created" | "customer_replied" | "agent_replied" | "ticket_updated"; conditions: Condition[]; actions: Action[]; enabled: boolean; position: number; run_count: number };
 type Condition = {
   field: "subject" | "body" | "from_email" | "channel" | "mailbox_id" | "priority" | "severity" | "status" | "tag" | "sentiment" | "ai_decide" | `field.${string}` | `contact.field.${string}`;
@@ -146,6 +154,8 @@ type Mailbox = {
   inbound_kind: "forwarding" | "imap" | "google" | "microsoft"; outbound_kind: "smtp" | "google" | "microsoft" | "system";
   forwarding_address: string; config: { imap_host?: string; imap_port?: number; imap_username?: string; imap_tls?: "tls" | "starttls" | "none"; smtp_host?: string; smtp_port?: number; smtp_username?: string; smtp_tls?: "tls" | "starttls" | "none"; oauth_email?: string };
   team_id: string | null; signature_html: string; auto_reply_enabled: boolean; auto_reply_subject: string; auto_reply_html: string;
+  ai_answers: boolean /* Ollie answers emails to this mailbox, default false (contracts/agent.md "Email") */; ai_answers_mode: "draft" | "send" /* default "draft" */;
+  ai_answers_outside_hours: boolean /* only outside business hours, while business hours are on; default false */;
   status: "active" | "error" | "disabled"; last_error: string; last_synced_at: string | null; created_at: string;
 };
 type KbCollection = { id: string; name: string; slug: string; description: string; position: number; article_count: number };
@@ -154,9 +164,9 @@ type ApiKey = { id: string; name: string; prefix: string; scopes: string[]; last
 type Webhook = { id: string; url: string; description: string; events: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = { id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed"; attempts: number; response_code: number | null; duration_ms: number | null; created_at: string };
 type AuditLog = { id: string; actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null }; action: string; entity_type: string; entity_id: string | null; data: Record<string, unknown>; ip: string; created_at: string };
-type Notification = { id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached"; ticket: { id: string; number: number; subject: string } | null; data: Record<string, unknown>; read_at: string | null; created_at: string };
+type Notification = { id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached" | "credits_low" | "credits_out" | "auto_recharge_failed" | "ai_key_failed"; ticket: { id: string; number: number; subject: string } | null; data: Record<string, unknown>; read_at: string | null; created_at: string };
 // Notification.data: assigned {by, actor_type, actor?: {id, name}}; mentioned {message_id, by, actor?: {id, name}, preview};
-// customer_replied {message_id?, preview?, contact?: {id, name}}; sla_breached {kind}; ai_handoff {via: "ai" | "contact", contact?: {id, name}}; ai_cap_reached {cap} (ticket null; the widget agent reached `widget_monthly_cap`, once a month to owners and admins).
+// customer_replied {message_id?, preview?, contact?: {id, name}}; sla_breached {kind}; ai_handoff {via: "ai" | "contact", contact?: {id, name}}; ai_cap_reached {cap} (ticket null; the widget agent reached `widget_monthly_cap`, once a month to owners and admins); credits_low {remaining}, credits_out {remaining}, auto_recharge_failed {reason} (ticket null; owners and admins, contracts/billing.md "Auto-recharge"); ai_key_failed {provider: "openrouter" | "openai" | "anthropic", reason: "rejected" | "no_funds"} (ticket null; the workspace's own AI key failed, at most once an hour to owners and admins, contracts/ai.md "Provider per workspace").
 // Mentions in note HTML: <span data-type="mention" data-id="<user_id>">@Name</span> (also data-mention="<user_id>"), or "@<full name or email>" in text.
 ```
 
@@ -217,6 +227,9 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/invitations/lookup?token=` | → `{workspace_name, email, role}` public |
 | CRUD | `/v1/teams`, `/v1/teams/{id}` | `{name, member_ids}` |
 | CRUD | `/v1/api-keys`, `/v1/api-keys/{id}` | admin users only (not API keys). create `{name, scopes, expires_at?}` → `ApiKey & {secret}` (`secret` shown once; `prefix` is `od_live_` + 8 chars); PATCH `{name}`; DELETE revokes |
+| GET | `/v1/ai-clients/server` | members → `{url, resource_metadata, authorization_server, scopes, tools[]}`: the MCP server for AI client setup (`contracts/agent.md` "opendesk MCP server") |
+| GET · DELETE | `/v1/ai-clients/connections` · `/v1/ai-clients/connections/{id}` | members (users only) → `{data: AIClientConnection[]}`: AI clients connected with OAuth, your own (admins: everyone's); DELETE disconnects one (your own; admins any) → 204, audit `oauth.grant_revoked` |
+| GET · POST | `/v1/oauth/requests/{id}` · `/v1/oauth/requests/{id}/approve` · `/v1/oauth/requests/{id}/deny` | signed-in users (no workspace header, no API keys): the MCP OAuth consent page. GET → `OAuthRequest`; approve `{workspace_id}` → `{redirect_to}` (audit `oauth.grant_created`); deny → `{redirect_to}`. `410 request_expired` once decided or after 10 minutes |
 | CRUD | `/v1/webhooks`, `/v1/webhooks/{id}` | `{url, description, events, enabled}` create → `Webhook & {secret}`. `events: ["*"]` (or `[]`) is every event, including types added later; a list may use `resource.*` |
 | GET | `/v1/webhooks/{id}/deliveries` | list |
 | POST | `/v1/webhooks/{id}/test` | sends `webhook.test` → 202 `WebhookDelivery` |
@@ -224,7 +237,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/audit-logs` | admin, list, optional `?action=&entity_type=` |
 | GET | `/v1/events?since=<seq>&limit=` | `limit` default 500, max 1000 → `{data: Envelope[], latest_seq, resync: bool}`. Members, and API keys with `realtime` or `tickets:read` |
 | POST | `/v1/realtime/token` | → `{token, url, expires_at}` (users and keys with `realtime`) |
-| GET | `/v1/notifications?unread=` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` → 204. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached, ai_handoff) and the AI area (ai_cap_reached) with a `notification.created` event to `user:<uid>` |
+| GET | `/v1/notifications?unread=` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` → 204. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached, ai_handoff) the AI area (ai_cap_reached, ai_key_failed) and billing (credits_low, credits_out, auto_recharge_failed) with a `notification.created` event to `user:<uid>` |
 
 Core notes:
 - App links in system email: `/verify?token=`, `/reset?token=`, `/invite?token=` on `APP_URL`.
@@ -246,6 +259,10 @@ Core notes:
   `admin`; `owner` moves only by transfer. `DELETE /v1/members/{own id}` leaves (owner: `409 owner_cannot_leave`).
 - `POST /v1/invitations/accept` needs the signed-in user's email to equal the invited one (`403 invitation_email_mismatch`).
 - Role and list endpoints for API keys: workspace/members/teams read `settings:read`; writes `settings:write`.
+- MCP OAuth (outside `/v1`, `contracts/agent.md` "OAuth"): `/.well-known/oauth-protected-resource[/mcp]`,
+  `/.well-known/oauth-authorization-server`, `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/token`,
+  `POST /oauth/revoke`. A user acting through an OAuth grant is bound by the granted scopes like an API key, on top of
+  their role; account routes and routes API keys may not call refuse it.
 
 ### Helpdesk (owner: backend-helpdesk)
 | method | path | notes |
@@ -398,7 +415,8 @@ when the policy is applied (ticket created, priority changed).
 Steps, in order, and when each is done: `connect_mailbox` a mailbox exists; `invite_teammate` another member or a pending
 invitation; `upload_photo` the caller has a picture; `install_widget` a widget session was ever opened; `publish_article` a
 published article; `setup_triage` auto-assignment is not `none` anywhere or auto-triage is on; `create_label` a label other
-than the seeded ones; `try_ollie` any Ollie feature was used in the workspace. Titles are English copy the app may override.
+than the seeded ones; `try_ollie` any Ollie feature was used in the workspace; `setup_ai_agent` (admin) the AI agent's setup
+checklist is complete (`GET /v1/ai/agent/setup`, `contracts/agent.md` "Setup"). Titles are English copy the app may override.
 
 ### Public, no auth (owner: backend-helpdesk)
 | method | path | notes |
@@ -470,7 +488,7 @@ runs of whitespace collapsed, and refuse `<`, `>` and control characters (`422 v
 ### Email (owner: backend-email)
 | method | path | notes |
 | --- | --- | --- |
-| CRUD | `/v1/mailboxes`, `/v1/mailboxes/{id}` | create `{name, email, display_name?, inbound_kind, outbound_kind, config, password?, smtp_password?, team_id?}` |
+| CRUD | `/v1/mailboxes`, `/v1/mailboxes/{id}` | create `{name, email, display_name?, inbound_kind, outbound_kind, config, password?, smtp_password?, team_id?}`. PATCH also takes `ai_answers`, `ai_answers_mode`, `ai_answers_outside_hours` (admin; turning `ai_answers` on answers `422 ai_off` while AI is off for the instance or the workspace; audit `mailbox.updated` with the new values) |
 | POST | `/v1/mailboxes/{id}/test` | → `{inbound: {ok, error}, outbound: {ok, error}}` |
 | POST | `/v1/mailboxes/oauth/{provider}/start` | `{mailbox_id?, name, email?}` → `{url}` (google, microsoft) |
 | GET | `/v1/mailboxes/oauth/{provider}/callback` | → 302 `APP_URL/settings/mailboxes?connected=<id>` |

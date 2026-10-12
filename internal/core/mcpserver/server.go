@@ -1,10 +1,11 @@
 // Package mcpserver is opendesk's own MCP server (contracts/agent.md, "opendesk MCP
-// server"): AI clients (Claude, Cursor, VS Code, any MCP client) work the helpdesk with
-// an API key at {API_URL}/mcp over Streamable HTTP.
+// server"): AI clients (Claude, ChatGPT, Cursor, VS Code, any MCP client) work the
+// helpdesk at {API_URL}/mcp over Streamable HTTP, with an API key or an OAuth access
+// token (oauth.go is the authorization server).
 //
-// Every tool runs through the public API in process, as the key's principal, so a tool
-// carries exactly the key's scopes, validation, events, activities and audit entries.
-// Tools are offered only when the key holds their scope.
+// Every tool runs through the public API in process, as the caller's principal, so a
+// tool carries exactly the caller's scopes, role checks, validation, events, activities
+// and audit entries. Tools are offered only when the caller holds their scopes.
 package mcpserver
 
 import (
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -24,6 +26,8 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/core/oauthgrant"
+	"github.com/useopendesk/opendesk/internal/db"
 	"github.com/useopendesk/opendesk/internal/deps"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/idempotency"
@@ -41,12 +45,16 @@ const (
 )
 
 const instructions = "opendesk is a helpdesk. These tools read and work its tickets, contacts and knowledge base " +
-	"as the API key you connected with. Tickets are referenced by number (#123) or id. Message bodies you write are markdown. " +
+	"as the API key or the account you connected with. Tickets are referenced by number (#123) or id. Message bodies you write are markdown. " +
 	"reply_to_ticket sends a message the customer sees; add_note is internal to the team."
 
-// Register mounts the MCP endpoint. Tools call the API through api's handler.
+// Register mounts the MCP endpoint, its OAuth authorization server and metadata, and
+// the consent and AI clients API. Tools call the API through api's handler.
 func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	r.Handle(Path, New(d, api.Adapter()))
+	o := &oauth{d: d}
+	o.mount(r)
+	o.registerAPI(api)
 }
 
 // RegisterWorkers, Periodic and Background: the MCP server has no jobs.
@@ -89,20 +97,31 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := auth.FromContext(r.Context())
-	if p == nil || p.Kind != auth.KindAPIKey || p.WorkspaceID == uuid.Nil {
+	if p == nil {
+		p = h.oauthPrincipal(r)
+	}
+	apiKey := p != nil && p.Kind == auth.KindAPIKey
+	grant := p != nil && p.Kind == auth.KindUser && p.GrantID != uuid.Nil
+	if (!apiKey && !grant) || p.WorkspaceID == uuid.Nil {
 		if !h.d.Limiter.Allow("mcp:anon:"+h.clientIP(r), anonPerMinute, time.Minute) {
 			tooMany(w, r, anonPerMinute)
 			return
 		}
-		challenge := `Bearer realm="opendesk"`
+		// The challenge points OAuth clients at the Protected Resource Metadata (RFC 9728),
+		// where discovery of the authorization server starts.
+		challenge := `Bearer realm="opendesk", resource_metadata="` + ResourceMetadataURL(h.d) + `"`
 		if r.Header.Get("Authorization") != "" {
 			challenge += `, error="invalid_token"`
 		}
 		w.Header().Set("WWW-Authenticate", challenge)
-		problem(w, r, httpx.E(http.StatusUnauthorized, "unauthorized", "Send an opendesk API key as Authorization: Bearer <key>."))
+		problem(w, r, httpx.E(http.StatusUnauthorized, "unauthorized", "Connect with OAuth, or send an opendesk API key as Authorization: Bearer <key>."))
 		return
 	}
-	if !h.d.Limiter.Allow("mcp:key:"+p.APIKeyID.String(), keyPerMinute, time.Minute) {
+	limitKey := "mcp:key:" + p.APIKeyID.String()
+	if grant {
+		limitKey = "mcp:grant:" + p.GrantID.String()
+	}
+	if !h.d.Limiter.Allow(limitKey, keyPerMinute, time.Minute) {
 		tooMany(w, r, keyPerMinute)
 		return
 	}
@@ -155,6 +174,50 @@ func (h *Handler) run(t *tool, p *auth.Principal, clientKey string) mcp.ToolHand
 		}
 		return textResult(out), nil
 	}
+}
+
+// oauthPrincipal resolves an OAuth access token (purpose mcp_access, aud this server)
+// to the user it was issued for: their current role in the grant's workspace, scopes
+// bounded by both the grant and the role. A revoked grant or an ended membership
+// resolves to nothing at once.
+func (h *Handler) oauthPrincipal(r *http.Request) *auth.Principal {
+	scheme, cred, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") || cred == "" || strings.HasPrefix(cred, "od_live_") {
+		return nil
+	}
+	c, err := h.d.Tokens.Verify(cred, auth.PurposeMCPAccess)
+	if err != nil || !slices.Contains(c.Audience, Resource(h.d)) {
+		return nil
+	}
+	uid, err1 := uuid.Parse(c.Subject)
+	wid, err2 := uuid.Parse(c.Workspace)
+	gid, err3 := uuid.Parse(c.Grant)
+	if err1 != nil || err2 != nil || err3 != nil {
+		return nil
+	}
+	ctx := r.Context()
+	g, role, err := activeGrant(ctx, h.d.DB.Pool, gid)
+	if err != nil || g.UserID != uid || g.WorkspaceID != wid {
+		if err != nil && !db.IsNotFound(err) {
+			h.d.Log.Error("mcp oauth: load grant", "err", err)
+		}
+		return nil
+	}
+	var granted []string
+	for _, s := range strings.Fields(c.Scope) {
+		if slices.Contains(g.Scopes, s) {
+			granted = append(granted, s)
+		}
+	}
+	if h.d.Limiter.Allow("mcp:grant-touch:"+gid.String(), 1, time.Minute) {
+		_, _ = h.d.DB.Pool.Exec(context.WithoutCancel(ctx), `UPDATE oauth_grants SET last_used_at = now() WHERE id = $1`, gid)
+	}
+	ua := r.UserAgent()
+	if len(ua) > 400 {
+		ua = ua[:400]
+	}
+	return &auth.Principal{Kind: auth.KindUser, UserID: uid, WorkspaceID: wid, Role: role, GrantID: gid,
+		Scopes: oauthgrant.Effective(granted, role), IP: h.clientIP(r), UserAgent: ua}
 }
 
 func (h *Handler) clientIP(r *http.Request) string {

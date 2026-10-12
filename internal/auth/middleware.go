@@ -144,11 +144,15 @@ func RequireUser(ctx context.Context) (*Principal, error) {
 	if p == nil || p.Kind != KindUser {
 		return nil, ErrUnauthenticated
 	}
+	if p.GrantID != uuid.Nil {
+		return nil, ErrForbidden
+	}
 	return p, nil
 }
 
 // RequireWorkspace demands a workspace caller with at least minRole (users) or scope (API keys).
-// Pass scope "" for routes API keys may not call.
+// A user acting through an OAuth grant needs both. Pass scope "" for routes API keys and
+// OAuth grants may not call.
 func RequireWorkspace(ctx context.Context, minRole Role, scope string) (*Principal, error) {
 	p := FromContext(ctx)
 	if p == nil || p.Kind == KindVisitor {
@@ -160,6 +164,9 @@ func RequireWorkspace(ctx context.Context, minRole Role, scope string) (*Princip
 			return nil, ErrNoWorkspace
 		}
 		if !p.Role.AtLeast(minRole) {
+			return nil, ErrForbidden
+		}
+		if p.GrantID != uuid.Nil && (scope == "" || !p.HasScope(scope)) {
 			return nil, ErrForbidden
 		}
 	case KindAPIKey:

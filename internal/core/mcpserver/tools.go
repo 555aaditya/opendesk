@@ -87,7 +87,7 @@ func errorResult(d *deps.Deps, name string, err error) *mcp.CallToolResult {
 	case errors.As(err, &ae) && ae.Status < 500:
 		b = body{Error: ae.Detail, Code: ae.Code, Status: ae.Status}
 		if ae.Status == 403 {
-			b.Error = "The API key is not allowed to do that. " + ae.Detail
+			b.Error = "This connection is not allowed to do that. " + ae.Detail
 		}
 	default:
 		d.Log.Error("mcp tool failed", "tool", name, "err", err)

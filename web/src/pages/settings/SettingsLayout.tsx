@@ -9,9 +9,11 @@ import { motion } from "motion/react";
 import {
   BookOpen,
   Bot,
+  ClipboardCheck,
   FlaskConical,
   LayoutDashboard,
   Building2,
+  Cable,
   CreditCard,
   Gauge,
   Inbox,
@@ -54,6 +56,7 @@ type NavPath =
   | "/settings/automations"
   | "/settings/widget"
   | "/settings/api-keys"
+  | "/settings/ai-clients"
   | "/settings/webhooks"
   | "/settings/audit-log"
   | "/settings/billing"
@@ -63,6 +66,7 @@ type NavPath =
   | "/settings/ai/knowledge"
   | "/settings/ai/tools"
   | "/settings/ai/playground"
+  | "/settings/ai/tests"
   | "/settings/integrations";
 
 const AGENT_GROUP = "AI agent";
@@ -110,12 +114,14 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
       { to: "/settings/ai/knowledge", label: "Knowledge", icon: <BookOpen /> },
       { to: "/settings/ai/tools", label: "Tools", icon: <Wrench /> },
       { to: "/settings/ai/playground", label: "Playground", icon: <FlaskConical /> },
+      { to: "/settings/ai/tests", label: "Tests", icon: <ClipboardCheck /> },
     ],
   },
   {
     title: "Developers",
     items: [
       { to: "/settings/api-keys", label: "API keys", icon: <KeyRound /> },
+      { to: "/settings/ai-clients", label: "AI clients", icon: <Cable /> },
       { to: "/settings/webhooks", label: "Webhooks", icon: <Webhook /> },
     ],
   },

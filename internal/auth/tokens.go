@@ -22,6 +22,9 @@ const (
 	// PurposeAssistantApproval approves one proposed assistant action (jti), for the
 	// user (sub) and session (sid) it was proposed to; the action runs at most once.
 	PurposeAssistantApproval = "assistant_approval"
+	// PurposeMCPAccess is an OAuth access token for the MCP server: aud is the MCP
+	// resource URL, gid the grant it was issued under, scope the granted scopes.
+	PurposeMCPAccess = "mcp_access"
 )
 
 const (
@@ -31,6 +34,7 @@ const (
 	MFATTL        = 5 * time.Minute
 	OAuthStateTTL = 10 * time.Minute
 	PasskeyTTL    = 5 * time.Minute
+	MCPAccessTTL  = time.Hour
 )
 
 // Claims is the union of fields used across purposes.
@@ -45,6 +49,9 @@ type Claims struct {
 	Avatar    string `json:"avatar,omitempty"`
 	// Free-form payload for oauth_state (provider, redirect, mailbox flow).
 	Data map[string]string `json:"data,omitempty"`
+	// mcp_access: the OAuth grant and its space-separated scopes.
+	Grant string `json:"gid,omitempty"`
+	Scope string `json:"scope,omitempty"`
 	jwt.RegisteredClaims
 }
 

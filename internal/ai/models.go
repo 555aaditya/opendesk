@@ -28,7 +28,7 @@ func featureTier(feature string) string {
 	switch feature {
 	case "rewrite", "translate", "triage", "decide":
 		return tierFast
-	case "answer", "playground":
+	case "answer", "answer_email", "playground":
 		return tierWidget
 	}
 	return tierDefault

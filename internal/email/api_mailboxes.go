@@ -74,6 +74,10 @@ type updateMailboxInput struct {
 		AutoReplySubject *string             `json:"auto_reply_subject,omitempty" maxLength:"200"`
 		AutoReplyHTML    *string             `json:"auto_reply_html,omitempty"`
 		Status           *string             `json:"status,omitempty" enum:"active,disabled"`
+		// Ollie answers emails to this mailbox (contracts/agent.md "Email").
+		AIAnswers             *bool   `json:"ai_answers,omitempty" doc:"Ollie answers emails to this mailbox; needs AI on"`
+		AIAnswersMode         *string `json:"ai_answers_mode,omitempty" enum:"draft,send" doc:"draft: a suggested reply a teammate sends; send: Ollie replies"`
+		AIAnswersOutsideHours *bool   `json:"ai_answers_outside_hours,omitempty" doc:"Only outside business hours (while business hours are on)"`
 	}
 }
 
@@ -250,6 +254,11 @@ func (s *service) registerMailboxRoutes(api huma.API) {
 				if err := checkTeam(ctx, tx, p.WorkspaceID, m.TeamID); err != nil {
 					return err
 				}
+				if m.AIAnswers && contains(changes, "ai_answers") {
+					if err := s.checkAIOn(ctx, tx, p.WorkspaceID); err != nil {
+						return err
+					}
+				}
 				sealed, err := s.sealCreds(creds)
 				if err != nil {
 					return err
@@ -263,17 +272,23 @@ func (s *service) registerMailboxRoutes(api huma.API) {
 					next_sync_at = CASE WHEN $15 THEN NULL ELSE next_sync_at END,
 					imap_uid_validity = CASE WHEN $16 THEN 0 ELSE imap_uid_validity END,
 					imap_last_uid = CASE WHEN $16 THEN 0 ELSE imap_last_uid END,
+					ai_answers = $17, ai_answers_mode = $18, ai_answers_outside_hours = $19,
 					updated_at = now() WHERE workspace_id = $1 AND id = $2`,
 					p.WorkspaceID, id, m.Name, m.Email, m.DisplayName, m.OutboundKind, m.Config, sealed, m.TeamID,
 					m.SignatureHTML, m.AutoReplyEnabled, m.AutoReplySubject, m.AutoReplyHTML, m.Status,
-					reactivate || resetSync || contains(changes, "credentials"), resetSync)
+					reactivate || resetSync || contains(changes, "credentials"), resetSync,
+					m.AIAnswers, m.AIAnswersMode, m.AIAnswersOutsideHours)
 				if err != nil {
 					return err
 				}
 				if err := s.publishMailbox(ctx, tx, p.WorkspaceID, id, "mailbox.updated"); err != nil {
 					return err
 				}
-				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "mailbox.updated", "mailbox", &id, map[string]any{"changes": changes}); err != nil {
+				data := map[string]any{"changes": changes}
+				if contains(changes, "ai_answers") || contains(changes, "ai_answers_mode") || contains(changes, "ai_answers_outside_hours") {
+					data["ai_answers"] = map[string]any{"enabled": m.AIAnswers, "mode": m.AIAnswersMode, "outside_hours": m.AIAnswersOutsideHours}
+				}
+				if err := audit.Log(ctx, tx, p, p.WorkspaceID, "mailbox.updated", "mailbox", &id, data); err != nil {
 					return err
 				}
 				if m.Status == "active" {
@@ -473,6 +488,17 @@ func applyPatch(m *mailboxRow, creds *credentials, in *updateMailboxInput) (chan
 	if b.AutoReplyEnabled != nil && *b.AutoReplyEnabled != m.AutoReplyEnabled {
 		m.AutoReplyEnabled = *b.AutoReplyEnabled
 		changes = append(changes, "auto_reply_enabled")
+	}
+	if b.AIAnswers != nil && *b.AIAnswers != m.AIAnswers {
+		m.AIAnswers = *b.AIAnswers
+		changes = append(changes, "ai_answers")
+	}
+	if b.AIAnswersMode != nil && (*b.AIAnswersMode == "draft" || *b.AIAnswersMode == "send") {
+		set("ai_answers_mode", &m.AIAnswersMode, b.AIAnswersMode)
+	}
+	if b.AIAnswersOutsideHours != nil && *b.AIAnswersOutsideHours != m.AIAnswersOutsideHours {
+		m.AIAnswersOutsideHours = *b.AIAnswersOutsideHours
+		changes = append(changes, "ai_answers_outside_hours")
 	}
 	if b.TeamID != nil {
 		var next *uuid.UUID

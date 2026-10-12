@@ -31,10 +31,20 @@ describe("aggregateUsage", () => {
       ["u2", 0.2],
     ]);
     expect(u.by_model).toEqual([
-      { model: sonnet, credits: 5.8, calls: 2, input_tokens: 8378, output_tokens: 902 },
-      { model: haiku, credits: 0.2, calls: 1, input_tokens: 867, output_tokens: 93 },
-      { model: "jev", credits: 0.005, calls: 1, input_tokens: 333, output_tokens: 0 },
+      { model: sonnet, source: "credits", credits: 5.8, calls: 2, input_tokens: 8378, output_tokens: 902 },
+      { model: haiku, source: "credits", credits: 0.2, calls: 1, input_tokens: 867, output_tokens: 93 },
+      { model: "jev", source: "credits", credits: 0.005, calls: 1, input_tokens: 333, output_tokens: 0 },
     ]);
+    expect(u.own_key_calls).toBe(0);
+  });
+});
+
+describe("aggregateUsage on an own key", () => {
+  it("keeps own-key calls apart from credits and counts them", () => {
+    const own = [...rows, { feature: "draft_reply" as const, user_id: "u1", credits: 0, model: sonnet, input_tokens: 4000, output_tokens: 400, at: "2026-10-02T09:00:00Z", source: "own_key" as const }];
+    const u = aggregateUsage(own, "2026-10-01", "2026-10-03", ref);
+    expect([u.total_credits, u.total_calls, u.own_key_calls]).toEqual([6.005, 5, 1]);
+    expect(u.by_model?.find((m) => m.source === "own_key")).toMatchObject({ model: sonnet, credits: 0, calls: 1 });
   });
 });
 

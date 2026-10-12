@@ -39,11 +39,70 @@ model, not a persona: everything it decides is shown as Ollie. Without a TypeSaf
 keeps working on the LLM path; nothing is gated on Jev.
 
 Every call: `d.Plan.Reserve` → model → `d.Plan.Spend` with the call's real cost (see
-`contracts/billing.md`). Prompts carry only the data the feature needs. Customer content is sent to
+`contracts/billing.md`). A workspace on its own provider key skips `Reserve` and is recorded with 0
+credits ("Provider per workspace" below). Prompts carry only the data the feature needs. Customer content is sent to
 the configured provider only; provider responses are not used for training (Anthropic API default;
 on OpenRouter, `data_collection: "deny"`). No prompt or completion
 text is logged; usage rows store counts only. Workspace admins can turn AI features off
 (`settings.ai`).
+
+## Provider per workspace
+
+A workspace runs its AI on the instance's provider (the default; on Cloud, paid in opendesk credits)
+or on its own key. Owners and admins choose in Settings > AI. Kinds:
+
+| kind | key | where calls go |
+| --- | --- | --- |
+| `openrouter` | an OpenRouter API key | the instance's `OPENROUTER_BASE_URL`, same `data_collection: "deny"` routing and headers |
+| `openai` | an OpenAI-compatible base URL and key | `{base_url}/chat/completions`; `base_url` is https on a public address (the SSRF guard used for webhooks and MCP servers: private, loopback and link-local targets refused, checked again at connect time, no redirects, no proxy), except on a development instance, which also allows loopback http. `model` is required |
+| `anthropic` | an Anthropic API key | the Anthropic Messages API (`ANTHROPIC_BASE_URL` when set) |
+
+- The key is sealed with `d.Box` (`ai_provider_keys`, one row per workspace) and never returned or
+  logged: the API shows the kind, the base URL host and the last 4 characters.
+- Routing: with a key, **every LLM call** of the workspace uses it: drafts, summaries, copilot,
+  rewrite, translate, KB drafts, LLM triage and the `llm` decision engine, the widget agent and its
+  playground, Ollie (the assistant and its connected tools), and the email agent. No call falls back to
+  the instance's provider.
+- Stays on the instance: **embeddings** (semantic search, retrieval; not charged, as before) and
+  **Jev decisions** (triage, the widget relevance check, `ai_decide`), which keep their small credit
+  cost. If Jev cannot run for lack of credits, triage runs on the workspace's key instead.
+- Models: `GET /v1/ai/models` lists the provider's models (OpenRouter `GET /v1/models`, the endpoint's
+  `GET /models`, Anthropic `GET /v1/models`; cached an hour), with `credits_per_mtok: null`. The key's
+  `model` and `fast_model` are the defaults (OpenRouter `anthropic/claude-sonnet-5.5` and
+  `anthropic/claude-haiku-5.5`, Anthropic `claude-sonnet-5-5` and `claude-haiku-4-5-20251001` when
+  empty). `settings.ai` model choices must be one of these (`422` otherwise); a stored choice the
+  provider does not list falls back to the key's default.
+- Billing: calls on the key charge no credits and are never refused for lack of credits; usage rows
+  are still written with `millicredits = 0` and `source = "own_key"` (contracts/billing.md).
+- Failures: a 401 or 403 from the provider marks the key `rejected`; a 402 (or an OpenAI
+  `insufficient_quota`) marks it `no_funds`. The call fails like a provider outage (`502
+  ai_key_rejected` / `502 ai_key_no_funds`; automatic features skip as for `ai_unavailable`), and owners
+  and admins get the in-app notification `ai_key_failed` at most once an hour. The next successful call
+  sets the state back to `ok`. Replacing the key resets it.
+- Audit: `ai.provider_key_set`, `ai.provider_key_replaced`, `ai.provider_key_removed` with `{kind,
+  base_url_host?}`, never the key. Removing the key returns the workspace to the instance's provider.
+
+| method | path | min role | body → response |
+| --- | --- | --- | --- |
+| GET | `/v1/ai/provider` | admin (`settings:read`) | → `AIProvider` |
+| POST | `/v1/ai/provider/test` | admin (`settings:write`) | `AIProviderKeyInput` → `AIProviderTest`; nothing is stored. 20 tests or saves per workspace per minute (`429`) |
+| PUT | `/v1/ai/provider` | admin (`settings:write`) | `AIProviderKeyInput` → `AIProvider`; tests the key first (`422 provider_test_failed` with the test's message), then stores or replaces it |
+| DELETE | `/v1/ai/provider` | admin (`settings:write`) | → 204 |
+
+```ts
+type AIKeyKind = "openrouter" | "openai" | "anthropic"
+interface AIProvider { mode: "instance" | "own_key"; instance_provider: string; billing: boolean /* instance calls are charged in credits */;
+  key: { kind: AIKeyKind; base_url_host: string; last4: string; model: string; fast_model: string;
+    status: "ok" | "rejected" | "no_funds"; status_at: string | null; created_by: UserRef | null; created_at: string; updated_at: string } | null }
+interface AIProviderKeyInput { kind: AIKeyKind; api_key: string /* 8..500 printable ASCII, write only */;
+  base_url?: string /* openai only */; model?: string /* required for openai */; fast_model?: string }
+interface AIProviderTest { ok: boolean; reason?: "invalid_key" | "no_funds" | "unreachable" | "busy" | "model_unavailable";
+  message?: string /* plain words for the admin; never the provider's response */; models: string[] }
+```
+
+The test is a tiny call: the provider's model list (on OpenRouter also `GET /v1/key`, whose exhausted
+`limit_remaining` reads as `no_funds`); an endpoint without a model list gets a one-line completion on
+`model`. A base URL that fails the SSRF guard is `422 validation_failed`.
 
 Untrusted content (customer emails, chat, KB) is always placed in delimited data blocks and the
 system prompt instructs the model to treat it as data. Model output is sanitized with the
@@ -111,8 +170,8 @@ interface AIModel {
 
 | method | path | min role | credits (typical) | body → response |
 | --- | --- | --- | --- | --- |
-| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast} /* the workspace's effective choices */, embeddings: boolean, features: AISettings, costs: Record<string, number> /* typical credits per call, the minimum balance to start one (contracts/billing.md) */, metered: boolean /* credits follow real usage */, assistant_name: "Ollie", decisions: DecisionEngine /* contracts/api.md */}` |
-| GET | `/v1/ai/models` | viewer | 0 | → `{data: AIModel[], default, fast}` ("Models" above) |
+| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast} /* the workspace's effective choices */, embeddings: boolean, features: AISettings, costs: Record<string, number> /* typical credits per call, the minimum balance to start one (contracts/billing.md) */, metered: boolean /* credits follow real usage */, assistant_name: "Ollie", decisions: DecisionEngine /* contracts/api.md */, own_key: boolean /* LLM calls run on the workspace's key ("Provider per workspace") */}`; `provider` and `models` are the workspace's |
+| GET | `/v1/ai/models` | viewer | 0 | → `{data: AIModel[], default, fast}` ("Models" above; on the workspace's own key, its provider's models) |
 | PATCH | `/v1/ai/settings` | admin | 0 | `Partial<AISettings>` → `AISettings` |
 | POST | `/v1/tickets/{id}/ai/draft` | agent | 3 | `{instructions?: string, tone?: string}` → `{body_html, body_text, sources: KBSource[]}`; uses the thread, contact, saved replies and the top KB matches |
 | POST | `/v1/tickets/{id}/ai/summary` | viewer | 1 | `{}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; stored on the ticket (`custom.ai_summary`) and published as `ticket.updated` |
@@ -141,6 +200,8 @@ Errors, all `application/problem+json`:
 | 502 | `ai_unavailable` | the provider failed or timed out |
 | 502 | `ai_bad_output` | the model returned output that failed validation |
 | 422 | `ai_refused` | the model declined the request |
+| 502 | `ai_key_rejected` | the workspace's own key was refused by its provider (401, 403) |
+| 502 | `ai_key_no_funds` | the workspace's own provider account is out of funds or quota |
 
 A failed call costs nothing: credits are spent only after the feature succeeded, and a
 usage row (`ai_usage`, counts only) is written with every spend. Without billing (self-host)

@@ -52,6 +52,12 @@ func NewOpenRouter(base, apiKey, appURL string) *OpenAI {
 
 func (o *OpenAI) Name() string { return o.name }
 
+// withClient replaces the HTTP client (a guarded one for user-chosen endpoints).
+func (o *OpenAI) withClient(c *http.Client) *OpenAI {
+	o.http = c
+	return o
+}
+
 type oaMessage struct {
 	Role    string `json:"role"`
 	Content any    `json:"content"`
@@ -179,8 +185,12 @@ func (o *OpenAI) send(ctx context.Context, build func(mode int32) map[string]any
 		if res.StatusCode == http.StatusOK {
 			return res, nil
 		}
-		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
+		// The body is read only to spot an exhausted quota; it is never logged or returned.
+		errBody, _ := io.ReadAll(io.LimitReader(res.Body, 64<<10))
 		res.Body.Close()
+		if res.StatusCode == http.StatusTooManyRequests && bytes.Contains(errBody, []byte("insufficient_quota")) {
+			return nil, errors.Join(ErrUnavailable, ErrNoFunds)
+		}
 		if res.StatusCode == http.StatusBadRequest && jsonReq && mode > 0 {
 			o.jsonMode.CompareAndSwap(mode, mode-1)
 			continue

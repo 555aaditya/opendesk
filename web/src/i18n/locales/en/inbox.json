@@ -342,6 +342,9 @@
     "triaged": "<b>{{who}}</b> triaged this",
     "triagedAs": "<b>{{who}}</b> triaged this as <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> answered from the knowledge base",
+    "aiAnsweredEmail": "<b>{{who}}</b> answered by email",
+    "aiSuggested": "<b>{{who}}</b> suggested a reply",
+    "aiSuggestedSent": "<b>{{who}}</b> sent {{ollie}}'s suggested reply",
     "handoffCustomer": "The customer asked for a person",
     "handoffAi": "<b>{{who}}</b> handed this to the team",
     "other": "<b>{{who}}</b> updated this ticket <m>{{type}}</m>"

@@ -5,12 +5,13 @@
 // /settings/billing, and the "webhook" lands a moment later (billing.updated),
 // even across the full page load that follows, via sessionStorage.
 
-import type { AIFeature, Billing, BillingUsage, UserRef } from "@/lib/api/types";
+import type { AIFeature, AutoRecharge, AutoRechargeFailure, Billing, BillingUsage, NotificationType, UserRef } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
-import { HttpError, forbidden, get, post, type Ctx } from "../router";
+import { HttpError, forbidden, get, patch, post, type Ctx } from "../router";
 import { FAST_MODEL, DEFAULT_MODEL, JEV, meter, round3 } from "../credits";
-import { DAY, NOW, int, pick, rand } from "../util";
+import { DAY, NOW, int, nowIso, pick, rand, uuid } from "../util";
+import { CREDIT_PACK_SIZE } from "@/components/billing/model";
 
 type MockPlan = "free" | "pro" | "past_due" | "cancel" | "self_hosted";
 
@@ -29,7 +30,18 @@ const seeded = new WeakSet<WsData>();
 
 // ─── Persistence across the reload that follows a checkout ─────────────────
 
-type Persisted = Record<string, { plan?: MockPlan; interval?: "month" | "year"; packs?: number; pending?: { plan?: MockPlan; interval?: "month" | "year"; packs?: number } }>;
+type Persisted = Record<
+  string,
+  {
+    plan?: MockPlan;
+    interval?: "month" | "year";
+    packs?: number;
+    pending?: { plan?: MockPlan; interval?: "month" | "year"; packs?: number };
+    /** A saved payment method (auto-recharge), and the auto-recharge settings. */
+    card?: boolean;
+    autoRecharge?: Pick<AutoRecharge, "enabled" | "threshold" | "packs" | "monthly_limit">;
+  }
+>;
 const KEY = "od-mock-billing";
 
 function load(): Persisted {
@@ -74,6 +86,7 @@ function applyPlan(ws: WsData, plan: MockPlan, interval: "month" | "year" = "mon
       cancel_at_period_end: false,
       limits: { max_mailboxes: 0, max_members: 0 },
       prices: { pro_month: null, pro_year: null, credit_pack: null },
+      auto_recharge: null,
     } satisfies Partial<Billing>);
     Object.assign(c, { unlimited: true, monthly: 0 });
     return;
@@ -114,6 +127,7 @@ export function billingOut(ws: WsData): Billing {
   c.purchased = purchased;
   c.remaining = c.unlimited ? 0 : round3(Math.max(0, c.monthly - c.used) + purchased);
   const members = ws.members.length + (b.plan === "free" ? ws.invitations.length : 0);
+  b.auto_recharge = autoRechargeOut(ws);
   return structuredClone({
     ...b,
     billed_seats: billedSeats(ws),
@@ -247,7 +261,7 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
   const days = new Map<string, { credits: number; calls: number; by_feature: Partial<Record<AIFeature, number>> }>();
   const feats = new Map<AIFeature, { credits: number; calls: number }>();
   const members = new Map<string, { credits: number; calls: number }>();
-  const models = new Map<string, { credits: number; calls: number; input_tokens: number; output_tokens: number }>();
+  const models = new Map<string, { model: string; source: "credits" | "own_key"; credits: number; calls: number; input_tokens: number; output_tokens: number }>();
   for (const r of inRange) {
     const dayKey = r.at.slice(0, 10);
     const day = days.get(dayKey) ?? { credits: 0, calls: 0, by_feature: {} };
@@ -264,12 +278,13 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
     m.credits += r.credits;
     m.calls += 1;
     members.set(key, m);
-    const mo = models.get(r.model) ?? { credits: 0, calls: 0, input_tokens: 0, output_tokens: 0 };
+    const source = r.source ?? "credits";
+    const mo = models.get(`${source}:${r.model}`) ?? { model: r.model, source, credits: 0, calls: 0, input_tokens: 0, output_tokens: 0 };
     mo.credits += r.credits;
     mo.calls += 1;
     mo.input_tokens += r.input_tokens;
     mo.output_tokens += r.output_tokens;
-    models.set(r.model, mo);
+    models.set(`${source}:${r.model}`, mo);
   }
   const rounded = <T extends { credits: number }>(v: T): T => ({ ...v, credits: round3(v.credits) });
   return {
@@ -286,7 +301,8 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
         by_feature: Object.fromEntries(Object.entries(v.by_feature).map(([k, n]) => [k, round3(n)])) as Partial<Record<AIFeature, number>>,
       })),
     by_member: [...members].map(([id, v]) => rounded({ user: id ? ref(id) : null, ...v })).sort((a, b) => b.credits - a.credits),
-    by_model: [...models].map(([model, v]) => rounded({ model, ...v })).sort((a, b) => b.credits - a.credits),
+    by_model: [...models.values()].map((v) => rounded(v)).sort((a, b) => b.credits - a.credits || b.calls - a.calls),
+    own_key_calls: inRange.filter((r) => r.source === "own_key").length,
   };
 }
 
@@ -313,6 +329,7 @@ function settle(ws: WsData) {
   if (packs) {
     addPacks(ws, packs);
     entry.packs = (entry.packs ?? 0) + packs;
+    notified.delete(ws);
   }
   delete entry.pending;
   save(p);
@@ -327,6 +344,10 @@ function scheduleSettle(ws: WsData, ms = 1600) {
 export function registerBilling() {
   const params = new URLSearchParams(location.search);
   const forced = params.get("mock_plan") as MockPlan | null;
+  // ?mock_credits=low|out shows the running-low banner; ?mock_recharge=decline|auth makes recharges fail.
+  const forcedCredits = params.get("mock_credits");
+  const failMode = params.get("mock_recharge");
+  rechargeFailure = failMode === "decline" ? "card_declined" : failMode === "auth" ? "authentication_required" : null;
   const persisted = load();
 
   db.workspaces.forEach((ws, i) => {
@@ -344,7 +365,12 @@ export function registerBilling() {
       }
     }
     if (entry?.pending) scheduleSettle(ws);
+    // Fieldnote has a card on file from its Pro checkout.
+    if (i === 0 || entry?.card) cards.add(ws);
+    if (entry?.autoRecharge && ws.billing.billing_enabled) Object.assign(autoRechargeOut(ws) ?? {}, entry.autoRecharge);
+    if (forcedCredits === "low" || forcedCredits === "out") forceCredits(ws, forcedCredits);
   });
+  registerAutoRecharge();
 
   get("/v1/billing", (ctx) => billingOut(ctx.ws));
 
@@ -393,3 +419,179 @@ export function registerBilling() {
   });
 }
 
+
+// ─── Auto-recharge (contracts/billing.md "Auto-recharge") ──────────────────
+
+/** Below this a widget reply or a draft can't start: Ollie is paused. */
+export const OUT_OF_CREDITS_BELOW = 3;
+/** How long the simulated off-session payment takes. */
+export const RECHARGE_DELAY = 900;
+
+type RechargeRow = NonNullable<AutoRecharge["last_recharge"]>;
+const recharges = new WeakMap<WsData, RechargeRow[]>();
+const cards = new WeakSet<WsData>();
+const inFlight = new WeakSet<WsData>();
+/** Running-low notices already sent this period (period_end), per workspace. */
+const notified = new WeakMap<WsData, { low?: string; out?: string }>();
+let rechargeFailure: AutoRechargeFailure | null = null;
+
+/** Tests: make the next recharges fail with `code`, or succeed with null. */
+export function setRechargeFailure(code: AutoRechargeFailure | null) {
+  rechargeFailure = code;
+}
+/** Tests and the setup Checkout: the workspace has a saved card. */
+export function saveCard(ws: WsData, saved = true) {
+  if (saved) cards.add(ws);
+  else cards.delete(ws);
+}
+
+function defaultAutoRecharge(): AutoRecharge {
+  return { enabled: false, threshold: 200, packs: 1, monthly_limit: 5, recharges_this_month: 0, low_at: 10, last_recharge: null, failure: null };
+}
+
+/** The live auto-recharge state: counts and low_at derived; null when billing is off. */
+function autoRechargeOut(ws: WsData): AutoRecharge | null {
+  const b = ws.billing;
+  if (!b.billing_enabled) return null;
+  const ar = (b.auto_recharge ??= defaultAutoRecharge());
+  const month = new Date().toISOString().slice(0, 7);
+  const rows = recharges.get(ws) ?? [];
+  ar.recharges_this_month = rows.filter((r) => r.at.startsWith(month)).length;
+  ar.last_recharge = rows.at(-1) ?? null;
+  ar.low_at = ar.enabled ? ar.threshold : Math.min(ar.threshold, Math.max(Math.floor(b.credits.monthly / 5), 5));
+  if (ar.enabled) ar.failure = null;
+  return ar;
+}
+
+function persistAutoRecharge(ws: WsData, ar: AutoRecharge) {
+  const p = load();
+  const entry = (p[ws.workspace.slug] ??= {});
+  entry.autoRecharge = { enabled: ar.enabled, threshold: ar.threshold, packs: ar.packs, monthly_limit: ar.monthly_limit };
+  save(p);
+}
+
+function isAdmin(ws: WsData) {
+  const r = role(ws);
+  return r === "owner" || r === "admin";
+}
+
+function notify(ws: WsData, type: string, data: Record<string, unknown>) {
+  if (!isAdmin(ws)) return;
+  const n = { id: uuid(), type: type as NotificationType, ticket: null, data, read_at: null, created_at: nowIso() };
+  ws.notifications.unshift(n);
+  publish(ws, "notification.created", { notification: n }, { topics: [`user:${db.meId}`] });
+}
+
+/** A running-low or out notice, once a period; a grant re-arms both. */
+function noticeOnce(ws: WsData, kind: "low" | "out", remaining: number) {
+  const period = ws.billing.credits.period_end;
+  const sent = notified.get(ws) ?? {};
+  if (sent[kind] === period) return;
+  notified.set(ws, { ...sent, [kind]: period });
+  notify(ws, kind === "low" ? "credits_low" : "credits_out", { remaining: round3(remaining) });
+  changed(ws);
+}
+
+/**
+ * After a charged call (credits.ts spend): queue a recharge below the threshold
+ * when auto-recharge is on with recharges left this month; otherwise tell
+ * admins when credits cross below low_at, and again when they run out.
+ */
+export function afterSpend(ws: WsData, before: number, after: number) {
+  billingOut(ws);
+  const ar = ws.billing.auto_recharge;
+  if (!ar || ws.billing.credits.unlimited) return;
+  if (ar.enabled && after < ar.threshold && ar.recharges_this_month < ar.monthly_limit) {
+    scheduleRecharge(ws);
+    return;
+  }
+  if (before >= OUT_OF_CREDITS_BELOW && after < OUT_OF_CREDITS_BELOW) noticeOnce(ws, "out", after);
+  else if (before >= ar.low_at && after < ar.low_at && after >= OUT_OF_CREDITS_BELOW) noticeOnce(ws, "low", after);
+}
+
+function scheduleRecharge(ws: WsData) {
+  if (inFlight.has(ws)) return;
+  inFlight.add(ws);
+  setTimeout(() => {
+    inFlight.delete(ws);
+    recharge(ws);
+  }, RECHARGE_DELAY);
+}
+
+/** The simulated off-session PaymentIntent: credits granted, or auto-recharge off on failure. */
+function recharge(ws: WsData) {
+  const b = billingOut(ws);
+  const ar = ws.billing.auto_recharge;
+  const pack = b.prices.credit_pack;
+  if (!ar?.enabled || !pack || b.credits.remaining >= ar.threshold || ar.recharges_this_month >= ar.monthly_limit) return;
+  const failure: AutoRechargeFailure | null = !cards.has(ws) ? "no_payment_method" : rechargeFailure;
+  if (failure) {
+    ar.enabled = false;
+    ar.failure = { code: failure, at: nowIso() };
+    persistAutoRecharge(ws, ar);
+    notify(ws, "auto_recharge_failed", { reason: failure });
+    changed(ws);
+    return;
+  }
+  addPacks(ws, ar.packs);
+  const rows = recharges.get(ws) ?? [];
+  rows.push({ at: nowIso(), packs: ar.packs, credits: ar.packs * (pack.credits ?? PACK), amount: pack.unit_amount * ar.packs, currency: pack.currency });
+  recharges.set(ws, rows);
+  notified.delete(ws);
+  changed(ws);
+}
+
+/** ?mock_credits=low|out: a balance that shows the banner. */
+function forceCredits(ws: WsData, kind: "low" | "out") {
+  const ar = autoRechargeOut(ws);
+  if (!ar) return;
+  purchasedTotal.set(ws, 0);
+  const left = kind === "out" ? 1.5 : Math.max(OUT_OF_CREDITS_BELOW + 1, Math.round(ar.low_at * 0.6));
+  ws.billing.credits.used = round3(ws.billing.credits.monthly - left);
+}
+
+const int01 = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
+
+function registerAutoRecharge() {
+  patch("/v1/billing/auto-recharge", (ctx) => {
+    requireStripe(ctx.ws);
+    requireAdmin(ctx.ws);
+    const body = (ctx.body ?? {}) as Record<string, unknown>;
+    if (body.enabled !== undefined && typeof body.enabled !== "boolean") throw new HttpError(422, "validation_failed", "enabled must be true or false");
+    if (body.threshold !== undefined && !int01(body.threshold, 1, 100000)) throw new HttpError(422, "validation_failed", "threshold must be 1 to 100,000 credits");
+    if (body.packs !== undefined && !int01(body.packs, 1, 20)) throw new HttpError(422, "validation_failed", "packs must be 1 to 20");
+    if (body.monthly_limit !== undefined && !int01(body.monthly_limit, 1, 30)) throw new HttpError(422, "validation_failed", "monthly_limit must be 1 to 30");
+    billingOut(ctx.ws);
+    const ar = ctx.ws.billing.auto_recharge!;
+    const nextThreshold = typeof body.threshold === "number" ? body.threshold : ar.threshold;
+    const nextPacks = typeof body.packs === "number" ? body.packs : ar.packs;
+    if (nextPacks * CREDIT_PACK_SIZE <= nextThreshold)
+      throw new HttpError(422, "recharge_too_small", "Each recharge must bring your credits back above the threshold. Buy more packs per recharge or lower the threshold.");
+    if (body.enabled === true && !ar.enabled) {
+      if (!ctx.ws.billing.prices.credit_pack) throw new HttpError(422, "credits_unavailable", "Credit packs are not available.");
+      if (!cards.has(ctx.ws)) throw new HttpError(409, "payment_method_required", "Add a payment method before turning on auto-recharge.");
+      ar.failure = null;
+    }
+    if (typeof body.enabled === "boolean") ar.enabled = body.enabled;
+    if (typeof body.threshold === "number") ar.threshold = body.threshold;
+    if (typeof body.packs === "number") ar.packs = body.packs;
+    if (typeof body.monthly_limit === "number") ar.monthly_limit = body.monthly_limit;
+    persistAutoRecharge(ctx.ws, ar);
+    const out = billingOut(ctx.ws);
+    changed(ctx.ws);
+    // Already below the threshold: recharge now.
+    if (ar.enabled && out.credits.remaining < ar.threshold && ar.recharges_this_month < ar.monthly_limit) scheduleRecharge(ctx.ws);
+    return out;
+  });
+
+  // Stripe Checkout in setup mode: the card is attached before the customer is back.
+  post("/v1/billing/payment-method", (ctx) => {
+    requireStripe(ctx.ws);
+    requireAdmin(ctx.ws);
+    cards.add(ctx.ws);
+    const p = load();
+    (p[slugOf(ctx)] ??= {}).card = true;
+    save(p);
+    return { url: "/settings/billing?payment_method=success" };
+  });
+}

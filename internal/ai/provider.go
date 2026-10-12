@@ -73,6 +73,12 @@ var (
 	ErrRefused = errors.New("ai model declined the request")
 	// ErrBadOutput means the model output could not be used (invalid JSON, empty).
 	ErrBadOutput = errors.New("ai output unusable")
+	// ErrKeyRejected means the provider refused the API key (401, 403). It comes joined
+	// with ErrUnavailable, so features treat it as an outage.
+	ErrKeyRejected = errors.New("ai provider rejected the key")
+	// ErrNoFunds means the provider account is out of funds or quota (402). It comes
+	// joined with ErrUnavailable.
+	ErrNoFunds = errors.New("ai provider account out of funds")
 )
 
 // Timeouts for model calls. Streams get longer because output arrives incrementally.
@@ -111,8 +117,13 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 
 // statusError maps a final HTTP failure to our errors.
 func statusError(status int) error {
-	if status == http.StatusTooManyRequests || status == 529 {
+	switch status {
+	case http.StatusTooManyRequests, 529:
 		return ErrBusy
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return errors.Join(ErrUnavailable, ErrKeyRejected)
+	case http.StatusPaymentRequired:
+		return errors.Join(ErrUnavailable, ErrNoFunds)
 	}
 	return ErrUnavailable
 }

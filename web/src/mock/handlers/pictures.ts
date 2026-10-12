@@ -23,6 +23,7 @@ import { publish } from "../gateway";
 import { HttpError, del, forbidden, get, invalid, notFound, patch, post, put, respond, strArr, type Ctx } from "../router";
 import { isRecord, nowIso, uuid } from "../util";
 import { aiOff, decisionEngine } from "./ai";
+import { agentSetup } from "./aiClients";
 import { memberOut } from "./workspace";
 
 const MAX_BYTES = 5 << 20;
@@ -141,6 +142,7 @@ export function onboarding(ws: WsData): Onboarding {
     setup_triage: (ws.workspace.settings.auto_assign ?? "none") !== "none" || ws.routing.rules.some((r) => r.mode !== "none") || ws.ai.auto_triage,
     create_label: ws.tags.some((t) => !SEEDED_LABELS.includes(t.name.toLowerCase())),
     try_ollie: ws.aiUsage.some((u) => u.user_id !== null),
+    setup_ai_agent: agentSetup(ws).complete,
   };
   const steps: OnboardingStep[] = [
     { id: "connect_mailbox", title: "Connect a mailbox", description: "Bring your support email in so messages become tickets.", done: done.connect_mailbox, href: "/settings/mailboxes", requires: "admin" },
@@ -151,6 +153,7 @@ export function onboarding(ws: WsData): Onboarding {
     { id: "setup_triage", title: "Set up triage and assignment", description: "Let Ollie sort new tickets and route them to whoever is available.", done: done.setup_triage, href: "/settings/triage", requires: "admin" },
     { id: "create_label", title: "Create a label", description: "Group tickets by topic, product or customer type.", done: done.create_label, href: "/settings/tags", requires: "admin" },
     { id: "try_ollie", title: "Try Ollie", description: "Ask Ollie to draft a reply, summarize a ticket or find an answer.", done: done.try_ollie, href: "/inbox/all", requires: "agent" },
+    { id: "setup_ai_agent", title: "Set up the AI agent", description: "Teach Ollie your answers, test it, then let it reply to chats.", done: done.setup_ai_agent, href: "/settings/ai/agent", requires: "admin" },
   ];
   return { steps, done_count: steps.filter((s) => s.done).length, total: steps.length, dismissed: !!row?.onboarding_dismissed };
 }

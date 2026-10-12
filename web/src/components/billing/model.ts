@@ -1,6 +1,6 @@
 // Pure billing helpers: money, limits, credits and usage series. No React.
 
-import type { AIFeature, Billing, BillingUsage, Price } from "@/lib/api/types";
+import type { AIFeature, AutoRecharge, Billing, BillingUsage, Price } from "@/lib/api/types";
 
 /** Fraction digits a currency uses (USD 2, JPY 0). Stripe amounts are in those minor units. */
 export function currencyDigits(currency: string, locale = "en"): number {
@@ -73,7 +73,8 @@ export type CreditBreakdown = {
   low: boolean;
 };
 
-export function creditBreakdown(c: Billing["credits"]): CreditBreakdown {
+/** `lowAt` is Billing.auto_recharge.low_at; older servers fall back to a tenth of the allowance. */
+export function creditBreakdown(c: Billing["credits"], lowAt?: number): CreditBreakdown {
   const monthlyUsed = Math.min(c.used, c.monthly);
   const monthlyLeft = Math.max(0, c.monthly - c.used);
   const ratio = c.monthly > 0 ? monthlyUsed / c.monthly : 0;
@@ -85,8 +86,51 @@ export function creditBreakdown(c: Billing["credits"]): CreditBreakdown {
     purchased: c.purchased,
     remaining: c.remaining,
     ratio,
-    low: !c.unlimited && c.remaining <= Math.max(5, c.monthly * 0.1),
+    low: !c.unlimited && (lowAt !== undefined ? c.remaining < lowAt : c.remaining <= Math.max(5, c.monthly * 0.1)),
   };
+}
+
+// ─── Running low and auto-recharge (contracts/billing.md "Auto-recharge") ──
+
+/** Below this many credits a widget reply or a draft can't start: Ollie is paused. */
+export const OUT_OF_CREDITS_BELOW = 3;
+export const CREDIT_PACK_SIZE = 2000;
+
+export type CreditsAlert = "out" | "low";
+
+/** Out (Ollie paused) or running low; null when there's nothing to say. */
+export function creditsAlert(b: Billing | null | undefined): CreditsAlert | null {
+  if (!b || !b.billing_enabled || b.credits.unlimited) return null;
+  if (b.credits.remaining < OUT_OF_CREDITS_BELOW) return "out";
+  return creditBreakdown(b.credits, b.auto_recharge?.low_at).low ? "low" : null;
+}
+
+/** Auto-recharge is on and has a recharge left this month, so a low balance refills itself. */
+export function rechargeCovers(ar: AutoRecharge | null | undefined): boolean {
+  return !!ar?.enabled && ar.recharges_this_month < ar.monthly_limit;
+}
+
+/** The app-wide banner: shown when credits are out or low and auto-recharge won't refill them. */
+export function creditsBanner(b: Billing | null | undefined): CreditsAlert | null {
+  const alert = creditsAlert(b);
+  if (!alert || rechargeCovers(b?.auto_recharge)) return null;
+  return alert;
+}
+
+/** What one recharge buys and costs: packs × the credit pack price. */
+export function rechargeQuote(pack: Price | null | undefined, packs: number, locale = "en"): { credits: number; price: string | null; amount: number | null } {
+  const credits = (pack?.credits ?? CREDIT_PACK_SIZE) * packs;
+  if (!pack) return { credits, price: null, amount: null };
+  return { credits, price: formatPrice(pack, locale, packs), amount: pack.unit_amount * packs };
+}
+
+/** The settings with a pending patch applied (what the card shows while a save is in flight). */
+export function withPatch(ar: AutoRecharge, patch: Partial<AutoRecharge>): AutoRecharge {
+  const next = { ...ar, ...patch };
+  if (patch.enabled) next.failure = null;
+  // With auto-recharge on, low is the threshold; turning it off waits for the server's figure.
+  if (next.enabled && (patch.threshold !== undefined || patch.enabled)) next.low_at = next.threshold;
+  return next;
 }
 
 /** The workspace has a Stripe subscription to manage. */

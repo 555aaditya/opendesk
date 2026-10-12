@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/useopendesk/opendesk/internal/auth"
+	"github.com/useopendesk/opendesk/internal/core/oauthgrant"
 	"github.com/useopendesk/opendesk/internal/displayname"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/images"
@@ -149,6 +150,9 @@ func (s *svc) registerMe(api huma.API) {
 					return err
 				}
 				if err := revokeOtherSessions(ctx, tx, p.UserID, p.SessionID); err != nil {
+					return err
+				}
+				if _, err := oauthgrant.Revoke(ctx, tx, p, p.UserID, uuid.Nil, uuid.Nil, oauthgrant.ReasonSignedOut); err != nil {
 					return err
 				}
 				if _, err := tx.Exec(ctx, `UPDATE one_time_tokens SET used_at = now() WHERE user_id = $1 AND purpose = $2 AND used_at IS NULL`,

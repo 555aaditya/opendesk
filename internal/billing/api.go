@@ -41,6 +41,8 @@ type UsageReport struct {
 	ByDay        []DayUse      `json:"by_day"`
 	ByMember     []MemberUsage `json:"by_member"`
 	ByModel      []ModelUse    `json:"by_model"`
+	// OwnKeyCalls counts calls made on the workspace's own AI provider key (0 credits).
+	OwnKeyCalls int `json:"own_key_calls"`
 }
 
 type FeatureUse struct {
@@ -68,6 +70,8 @@ type ModelUse struct {
 	Calls        int     `json:"calls"`
 	InputTokens  int64   `json:"input_tokens"`
 	OutputTokens int64   `json:"output_tokens"`
+	// Source is who paid: "credits" (the instance's provider) or "own_key" (the workspace's key).
+	Source string `json:"source" enum:"credits,own_key"`
 }
 
 // requireBillingAdmin is the gate for routes that open Stripe: a signed-in owner or admin.
@@ -217,12 +221,14 @@ func (s *svc) registerAPI(api huma.API) {
 				ClientReferenceID: stripe.String(wid),
 				LineItems: []*stripe.CheckoutSessionCreateLineItemParams{{Price: stripe.String(s.d.Cfg.StripePriceCredits),
 					Quantity: stripe.Int64(int64(in.Body.Packs))}},
-				SuccessURL:        stripe.String(s.appURL("credits", "success")),
-				CancelURL:         stripe.String(s.appURL("credits", "canceled")),
-				AdaptivePricing:   &stripe.CheckoutSessionCreateAdaptivePricingParams{Enabled: stripe.Bool(true)},
-				InvoiceCreation:   &stripe.CheckoutSessionCreateInvoiceCreationParams{Enabled: stripe.Bool(true)},
-				Metadata:          meta,
-				PaymentIntentData: &stripe.CheckoutSessionCreatePaymentIntentDataParams{Metadata: meta},
+				SuccessURL:      stripe.String(s.appURL("credits", "success")),
+				CancelURL:       stripe.String(s.appURL("credits", "canceled")),
+				AdaptivePricing: &stripe.CheckoutSessionCreateAdaptivePricingParams{Enabled: stripe.Bool(true)},
+				InvoiceCreation: &stripe.CheckoutSessionCreateInvoiceCreationParams{Enabled: stripe.Bool(true)},
+				Metadata:        meta,
+				// Save the card for off-session use, so auto-recharge can charge it later.
+				PaymentIntentData: &stripe.CheckoutSessionCreatePaymentIntentDataParams{Metadata: meta,
+					SetupFutureUsage: stripe.String("off_session")},
 			}
 			s.applyTax(params)
 			sess, err := s.sc.V1CheckoutSessions.Create(ctx, params)
@@ -352,18 +358,22 @@ func usageReport(ctx context.Context, q db.Querier, wid uuid.UUID, from, to time
 	if err != nil {
 		return r, err
 	}
-	rows, err = q.Query(ctx, `SELECT a.model, sum(a.millicredits)::bigint, count(*)::int, sum(a.input_tokens)::bigint, sum(a.output_tokens)::bigint`+where+
-		` GROUP BY a.model ORDER BY 2 DESC, 1 LIMIT 100`, wid, from, to)
+	rows, err = q.Query(ctx, `SELECT a.model, a.source, sum(a.millicredits)::bigint, count(*)::int, sum(a.input_tokens)::bigint, sum(a.output_tokens)::bigint`+where+
+		` GROUP BY a.model, a.source ORDER BY 3 DESC, 4 DESC, 1 LIMIT 100`, wid, from, to)
 	if err != nil {
 		return r, err
 	}
 	r.ByModel, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (ModelUse, error) {
 		var m ModelUse
 		var milli plan.Milli
-		err := row.Scan(&m.Model, &milli, &m.Calls, &m.InputTokens, &m.OutputTokens)
+		err := row.Scan(&m.Model, &m.Source, &milli, &m.Calls, &m.InputTokens, &m.OutputTokens)
 		m.Credits = milli.Credits()
 		return m, err
 	})
+	if err != nil {
+		return r, err
+	}
+	err = q.QueryRow(ctx, `SELECT count(*)::int`+where+` AND a.source = 'own_key'`, wid, from, to).Scan(&r.OwnKeyCalls)
 	return r, err
 }
 

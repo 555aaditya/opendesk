@@ -2,8 +2,9 @@
 // AI credits and usage. Stripe Checkout and the billing portal are hosted by
 // Stripe; this page only starts them and reflects billing.updated live.
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useSearch } from "@tanstack/react-router";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import type { TFunction } from "i18next";
+import { useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { ArrowUpRight, Check, CreditCard, Server, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,17 +14,19 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty";
-import { NumberInput } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Segmented } from "@/components/ui/tabs";
 import { toast } from "@/components/ui/toast";
-import { useBilling, useBuyCredits, useCanManageBilling, useCheckout, useFmt, usePortal } from "@/components/billing/hooks";
+import { RESUME_AUTO_RECHARGE_KEY, useBilling, useBuyCredits, useCanManageBilling, useCheckout, useFmt, usePortal } from "@/components/billing/hooks";
+import { AutoRechargeSection } from "@/components/billing/AutoRecharge";
+import { Stepper } from "@/components/settings2/Stepper";
+import { api } from "@/lib/api/endpoints";
 import { Meter } from "@/components/billing/Meter";
 import { creditBreakdown, formatMoney, formatPrice, hasSubscription, isSelfHosted, limitState, stackDays, yearlySavings } from "@/components/billing/model";
 import { UsageChart, UsageDayTable, UsageLegend, shadeOf } from "@/components/billing/UsageChart";
 import { isApiError } from "@/lib/api/client";
-import type { Billing, BillingStatus, ReportsRange } from "@/lib/api/types";
+import type { AutoRechargePatch, Billing, BillingStatus, ReportsRange } from "@/lib/api/types";
 import { q, qk } from "@/lib/queries";
 import { cn } from "@/lib/cn";
 import { AI_TONE, SERIES, tone, toneFor, toneVar, type Tone } from "@/lib/tones";
@@ -35,6 +38,7 @@ export default function BillingPage() {
   const { t } = useTranslation("billing");
   const { data: b, isPending, isError, refetch } = useBilling();
   const confirming = useCheckoutReturn(b);
+  useScrollToHash(!isPending);
 
   return (
     <SettingsPage title={t("page.title")} description={b && isSelfHosted(b) ? t("page.descriptionSelfHosted") : t("page.description")}>
@@ -57,6 +61,7 @@ export default function BillingPage() {
           {b.plan === "free" && <Upgrade b={b} />}
           {b.plan === "free" && <Limits b={b} />}
           <Credits b={b} />
+          <AutoRechargeSection b={b} />
           <Usage />
         </>
       )}
@@ -77,7 +82,7 @@ function useCheckoutReturn(b: Billing | undefined) {
   const handled = useRef(false);
 
   useEffect(() => {
-    if (handled.current || (!search.checkout && !search.credits)) return;
+    if (handled.current || (!search.checkout && !search.credits && !search.payment_method)) return;
     handled.current = true;
     if (search.checkout === "success") setConfirming(true);
     else if (search.checkout === "canceled") toast.info(t("toast.checkoutCancel"));
@@ -86,9 +91,10 @@ function useCheckoutReturn(b: Billing | undefined) {
       creditsBase.current = qc.getQueryData<Billing>(qk.billing)?.credits.purchased ?? 0;
       toast.info(t("toast.creditsPending"));
     }
+    if (search.payment_method) resumeAutoRecharge(search.payment_method === "success", qc, t);
     void qc.invalidateQueries({ queryKey: qk.billing });
     void navigate({ to: "/settings/billing", search: {}, replace: true });
-  }, [search.checkout, search.credits, navigate, qc, t]);
+  }, [search.checkout, search.credits, search.payment_method, navigate, qc, t]);
 
   // The webhook may land after the customer is back; billing.updated (or a refetch) confirms it.
   useEffect(() => {
@@ -114,6 +120,44 @@ function useCheckoutReturn(b: Billing | undefined) {
   }, [confirming, qc]);
 
   return confirming;
+}
+
+/** Back from saving a card: turn on auto-recharge with the settings chosen before leaving. */
+function resumeAutoRecharge(saved: boolean, qc: QueryClient, t: TFunction<"billing">) {
+  let patch: AutoRechargePatch | null;
+  try {
+    patch = JSON.parse(sessionStorage.getItem(RESUME_AUTO_RECHARGE_KEY) ?? "null") as AutoRechargePatch | null;
+    sessionStorage.removeItem(RESUME_AUTO_RECHARGE_KEY);
+  } catch {
+    patch = null;
+  }
+  if (!saved) {
+    toast.info(t("toast.cardCanceled"));
+    return;
+  }
+  if (!patch) {
+    toast.success(t("toast.cardSaved"), { description: t("toast.cardSavedBody") });
+    return;
+  }
+  api.billing
+    .autoRecharge({ ...patch, enabled: true })
+    .then((b) => {
+      qc.setQueryData(qk.billing, b);
+      toast.success(t("toast.autoRechargeOn"), { description: t("toast.cardSavedBody") });
+    })
+    .catch((e: unknown) => toast.error(e));
+}
+
+/** Scrolls to #credits or #auto-recharge (the app banner links there) once the page has rendered. */
+function useScrollToHash(ready: boolean) {
+  const hash = useRouterState({ select: (s) => s.location.hash });
+  useEffect(() => {
+    if (!ready || !hash) return;
+    const el = document.getElementById(hash);
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "start", behavior: reduce ? "auto" : "smooth" });
+  }, [ready, hash]);
 }
 
 // ─── Pieces ────────────────────────────────────────────────────────────────
@@ -368,54 +412,65 @@ function Credits({ b }: { b: Billing }) {
   const canManage = useCanManageBilling();
   const buy = useBuyCredits();
   const [packs, setPacks] = useState(1);
-  const c = creditBreakdown(b.credits);
+  const c = creditBreakdown(b.credits, b.auto_recharge?.low_at);
   const pack = b.prices.credit_pack;
   const perPack = pack?.credits ?? 2000;
 
   return (
-    <Section title={t("credits.title")} description={t("credits.description")} flush>
-      <div className="grid gap-5 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <IconTile tone={AI_TONE}>
-              <Sparkles strokeWidth={1.75} />
-            </IconTile>
-            <div className="flex items-baseline gap-2">
-              <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{fmt.credits(c.remaining)}</span>
-              <span className="text-[12.5px] text-fg-3">{t("credits.remaining")}</span>
-              {c.low && <span className="size-1.5 self-center animate-pulse-soft rounded-full bg-tone-amber-solid motion-reduce:animate-none" aria-hidden />}
+    <div id="credits" className="scroll-mt-6">
+      <Section title={t("credits.title")} description={t("credits.description")} flush>
+        <div className="grid gap-5 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <IconTile tone={AI_TONE}>
+                <Sparkles strokeWidth={1.75} />
+              </IconTile>
+              <div className="flex items-baseline gap-2">
+                <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{fmt.credits(c.remaining)}</span>
+                <span className="text-[12.5px] text-fg-3">{t("credits.remaining")}</span>
+                {c.low && <span className="size-1.5 self-center animate-pulse-soft rounded-full bg-tone-amber-solid motion-reduce:animate-none" aria-hidden />}
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
-              <span className="text-fg-2">{t("credits.monthly")}</span>
-              <span className="mono text-fg-3 tabular-nums">{t("credits.monthlyUsed", { used: fmt.credits(c.monthlyUsed), total: fmt.credits(c.monthly) })}</span>
+            <div className="mt-4">
+              <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
+                <span className="text-fg-2">{t("credits.monthly")}</span>
+                <span className="mono text-fg-3 tabular-nums">{t("credits.monthlyUsed", { used: fmt.credits(c.monthlyUsed), total: fmt.credits(c.monthly) })}</span>
+              </div>
+              <Meter value={c.monthlyUsed} max={c.monthly} label={t("credits.meterLabel", { used: c.monthlyUsed, total: c.monthly })} className="h-1.5" />
+              <div className="mono mt-1.5 text-[11px] text-fg-4">{t("credits.resets", { date: fmt.date(b.credits.period_end) })}</div>
             </div>
-            <Meter value={c.monthlyUsed} max={c.monthly} label={t("credits.meterLabel", { used: c.monthlyUsed, total: c.monthly })} className="h-1.5" />
-            <div className="mono mt-1.5 text-[11px] text-fg-4">{t("credits.resets", { date: fmt.date(b.credits.period_end) })}</div>
+            {c.low && <p className="mt-3 text-[12.5px] text-tone-amber">{t("credits.low")}</p>}
           </div>
-          {c.low && <p className="mt-3 text-[12.5px] text-tone-amber">{t("credits.low")}</p>}
-        </div>
-        <div className="flex gap-6 sm:flex-col sm:gap-3 sm:border-l sm:border-line-soft sm:pl-6">
-          <Fact label={t("credits.purchased")} value={fmt.credits(c.purchased)} hint={t("credits.purchasedHint")} />
-        </div>
-      </div>
-      {canManage && pack && (
-        <div className="flex flex-wrap items-center gap-3 border-t border-line-soft bg-sunken/50 px-5 py-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium">{t("credits.buyTitle")}</div>
-            <div className="mono mt-0.5 text-[11.5px] text-fg-3">{t("credits.packSize", { credits: fmt.num(perPack) })}</div>
+          <div className="flex gap-6 sm:flex-col sm:gap-3 sm:border-l sm:border-line-soft sm:pl-6">
+            <Fact label={t("credits.purchased")} value={fmt.credits(c.purchased)} hint={t("credits.purchasedHint")} />
           </div>
-          <NumberInput value={packs} onChange={(n) => setPacks(Math.max(1, Math.min(20, Math.round(n) || 1)))} min={1} max={20} aria-label={t("credits.packs")} className="w-[76px]" />
-          <span className="mono whitespace-nowrap text-right text-[12px] text-fg-2 tabular-nums">
-            {t("credits.packTotal", { credits: fmt.num(perPack * packs), price: formatPrice(pack, fmt.locale, packs) })}
-          </span>
-          <Button loading={buy.isPending} onClick={() => buy.mutate(packs)}>
-            {t("credits.buy")}
-          </Button>
         </div>
-      )}
-    </Section>
+        {canManage && pack && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-line-soft bg-sunken/50 px-5 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium">{t("credits.buyTitle")}</div>
+              <div className="mono mt-0.5 text-[11.5px] text-fg-3">{t("credits.packSize", { credits: fmt.num(perPack) })}</div>
+            </div>
+            <Stepper
+              value={packs}
+              onChange={setPacks}
+              min={1}
+              max={20}
+              aria-label={t("credits.packs")}
+              decLabel={t("credits.packsDec")}
+              incLabel={t("credits.packsInc")}
+              className="w-[104px]"
+            />
+            <span className="mono whitespace-nowrap text-right text-[12px] text-fg-2 tabular-nums">
+              {t("credits.packTotal", { credits: fmt.num(perPack * packs), price: formatPrice(pack, fmt.locale, packs) })}
+            </span>
+            <Button loading={buy.isPending} onClick={() => buy.mutate(packs)}>
+              {t("credits.buy")}
+            </Button>
+          </div>
+        )}
+      </Section>
+    </div>
   );
 }
 
@@ -500,7 +555,7 @@ function Usage() {
         </div>
       ) : isError || !data || !stacked ? (
         <EmptyState compact lit={3} title={t("usage.error")} action={<Button onClick={() => void refetch()}>{t("retry")}</Button>} />
-      ) : total === 0 ? (
+      ) : total === 0 && !data.total_calls ? (
         <EmptyState compact lit={0} title={t("usage.empty")} description={t("usage.emptyBody")} />
       ) : (
         <>
@@ -515,6 +570,12 @@ function Usage() {
                   <div className="label-caps mb-1">{t("usage.calls")}</div>
                   <div className="text-[20px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-fg-3">{fmt.num(data.total_calls)}</div>
                 </div>
+                {!!data.own_key_calls && (
+                  <div title={t("usage.ownKeyHint")}>
+                    <div className="label-caps mb-1">{t("usage.ownKey")}</div>
+                    <div className="text-[20px] font-semibold leading-6 tracking-[-0.02em] tabular-nums text-fg-3">{fmt.num(data.own_key_calls)}</div>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <UsageLegend series={stacked.series} />
@@ -565,8 +626,8 @@ function Usage() {
                 const known = models?.data.find((x) => x.id === m.model);
                 const vendor = known?.vendor || (m.model.includes("/") ? m.model.split("/")[0] : "");
                 return {
-                  key: m.model,
-                  label: m.model === "jev" ? t("usage.decisionModel") : modelName(m.model, models?.data),
+                  key: `${m.source ?? "credits"}:${m.model}`,
+                  label: (m.model === "jev" ? t("usage.decisionModel") : modelName(m.model, models?.data)) + (m.source === "own_key" ? ` · ${t("usage.ownKeyTag")}` : ""),
                   icon: <VendorMark vendor={m.model === "jev" ? "" : vendor} className="size-4 text-[9px]" />,
                   color: toneVar(SERIES[i % SERIES.length]),
                   calls: m.calls,

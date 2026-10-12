@@ -288,7 +288,7 @@ function seedFieldnote(): WsData {
   ];
   ws.sla = sla;
 
-  const mbBase = { signature_html: "", auto_reply_enabled: false, auto_reply_subject: "", auto_reply_html: "", last_error: "", team_id: null as string | null };
+  const mbBase = { signature_html: "", auto_reply_enabled: false, auto_reply_subject: "", auto_reply_html: "", ai_answers: false, ai_answers_mode: "draft" as const, ai_answers_outside_hours: false, last_error: "", team_id: null as string | null };
   const support: Mailbox = {
     ...mbBase,
     id: uuid(),
@@ -304,6 +304,7 @@ function seedFieldnote(): WsData {
     auto_reply_enabled: true,
     auto_reply_subject: "We got your message",
     auto_reply_html: "<p>Thanks for writing in. We usually reply within a few hours on weekdays.</p>",
+    ai_answers: true,
     status: "active",
     last_synced_at: ago(40 * 1000),
     created_at: ago(300 * DAY),
@@ -800,6 +801,9 @@ function seedLumen(): WsData {
       auto_reply_enabled: false,
       auto_reply_subject: "",
       auto_reply_html: "",
+      ai_answers: false,
+      ai_answers_mode: "draft",
+      ai_answers_outside_hours: false,
       status: "active",
       last_error: "",
       last_synced_at: ago(3 * MIN),

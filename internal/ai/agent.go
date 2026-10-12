@@ -69,6 +69,9 @@ type agentInput struct {
 	needsHuman bool
 	// playground runs only read-only tools; any other tool comes back as the action.
 	playground bool
+	// email answers a customer email (email_agent.go): the email prompt, read-only
+	// tools only (senders are not verified), no confirm actions.
+	email *emailContext
 }
 
 // agentEvents receives a reply as it is produced.
@@ -106,9 +109,8 @@ type agentToolSpec struct {
 // runAgent runs the loop for one reply.
 func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (agentResult, error) {
 	var res agentResult
-	tp, ok := s.provider.(ToolProvider)
-	if !ok {
-		return res, ErrNoTools
+	if err := s.toolsFor(ctx, in.wid); err != nil {
+		return res, err
 	}
 	passages, err := s.retrieveAgent(ctx, in.wid, in.query, agentPassages, 0)
 	if err != nil {
@@ -128,7 +130,11 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 		tools = append(tools, sp.spec)
 		byName[sp.spec.Name] = sp
 	}
-	system := []Block{{Text: agentSystem, Cache: true}, {Text: agentGuidance(in), Cache: true}}
+	sys := agentSystem
+	if in.email != nil {
+		sys = emailAgentSystem
+	}
+	system := []Block{{Text: sys, Cache: true}, {Text: agentGuidance(in), Cache: true}}
 	user := []string{agentVisitorBlock(in), in.thread, renderPassages(passages, 1)}
 	if len(in.set.WidgetBlockedTopics) > 0 {
 		user = append(user, block("blocked_topics", nil, untrusted(strings.Join(in.set.WidgetBlockedTopics, "\n"))))
@@ -137,6 +143,9 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 		user = append(user, in.extra)
 	}
 	ask := "Reply to the visitor's latest message."
+	if in.email != nil {
+		ask = emailAsk
+	}
 	if in.needsHuman {
 		ask = "The visitor needs a person on the team: write one short line saying a person will reply here, then call handoff_to_human."
 	}
@@ -162,7 +171,7 @@ func (s *Service) runAgent(ctx context.Context, in agentInput, ev agentEvents) (
 			ev.delta("\n\n")
 		}
 		turnText := strings.Builder{}
-		resp, err := tp.Chat(ctx, req, func(d string) {
+		resp, err := c.chat(ctx, req, func(d string) {
 			turnText.WriteString(d)
 			if ev.delta != nil {
 				ev.delta(d)
@@ -259,6 +268,9 @@ func (s *Service) agentTools(ctx context.Context, in agentInput) ([]agentToolSpe
 			Description: "Hand the conversation to a person on the support team. Write a short line to the visitor before calling it.",
 			Schema:      obj(map[string]any{"reason": map[string]any{"type": "string", "description": "Why a person is needed, a few words"}}, "reason")}},
 	}
+	if in.email != nil {
+		specs[1].spec.Description = emailHandoffTool
+	}
 	tb := s.agentToolbox()
 	if tb == nil {
 		return specs, nil
@@ -267,6 +279,9 @@ func (s *Service) agentTools(ctx context.Context, in agentInput) ([]agentToolSpe
 	if err != nil {
 		s.d.Log.Warn("agent tools unavailable", "workspace_id", in.wid, "err", err)
 		return specs, nil
+	}
+	if in.email != nil {
+		tools = emailTools(tools)
 	}
 	seen := map[string]bool{"search_knowledge": true, "handoff_to_human": true}
 	for _, t := range tools {
@@ -401,13 +416,16 @@ func agentGuidance(in agentInput) string {
 	if strings.TrimSpace(in.set.WidgetInstructions) != "" {
 		b.WriteString("What the company wants you to know and do:\n" + untrusted(in.set.WidgetInstructions) + "\n")
 	}
-	if in.set.WidgetCollectEmail && in.visitor.Email == "" {
+	if in.set.WidgetCollectEmail && in.visitor.Email == "" && in.email == nil {
 		b.WriteString("The visitor has not given an email. Before handing off, ask for one so the team can follow up, unless they already wrote it in the chat or decline.\n")
 	}
 	return guidance(in.company, in.set, "", "") + "\n" + block("agent_guidance", nil, strings.TrimSpace(b.String()))
 }
 
 func agentVisitorBlock(in agentInput) string {
+	if in.email != nil {
+		return in.email.block(in.visitor)
+	}
 	v := in.visitor
 	lines := []string{"verified: " + strconv.FormatBool(v.Verified)}
 	if v.Name != "" {

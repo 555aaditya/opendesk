@@ -313,6 +313,19 @@ function seedSources(ws: WsData) {
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 
+/** A Q&A snippet created like POST /v1/ai/knowledge (Improve answer, contracts/agent.md). */
+export function addSnippet(ws: WsData, question: string, answer: string): KnowledgeSource {
+  checkLimits(ws);
+  const snippet = checkSnippet({ question, answer });
+  const s: KnowledgeSource = { ...blank("snippet", snippet.question.slice(0, 100)), snippet, status: "ready", last_synced_at: nowIso() };
+  ws.knowledge.push(s);
+  ws.knowledgeDocs[s.id] = makeDocs(s, 1);
+  recount(ws, s);
+  publish(ws, "ai_knowledge.created", { source: out(s) });
+  audit(ws, "ai.knowledge_created", s);
+  return s;
+}
+
 export function registerKnowledge() {
   const fieldnote = db.workspaces[0];
   if (fieldnote && !fieldnote.knowledge.length) seedSources(fieldnote);

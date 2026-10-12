@@ -119,6 +119,14 @@ export function ModelPicker({
           onClick={(e) => e.stopPropagation()}
         >
           <Command loop value={value || "__default"} label={ariaLabel ?? t("model.choose")} className="flex flex-col">
+            {list.length > 12 && (
+              // A provider key can list hundreds of models: search by id, name or vendor.
+              <Command.Input
+                autoFocus
+                placeholder={t("model.search")}
+                className="h-9 w-full border-b border-line-soft bg-transparent px-3 text-[12.5px] text-fg outline-none placeholder:text-fg-4"
+              />
+            )}
             <Command.List className="max-h-[340px] overflow-y-auto p-1">
               <Command.Empty className="px-2 py-5 text-center text-xs text-fg-3">{t("model.none")}</Command.Empty>
               <Row
@@ -135,6 +143,7 @@ export function ModelPicker({
                 <Row
                   key={m.id}
                   value={m.id}
+                  keywords={[m.name, vendorOf(m)]}
                   selected={value === m.id}
                   onSelect={() => pick(m.id)}
                   icon={<VendorMark vendor={vendorOf(m)} />}
@@ -169,8 +178,10 @@ function Row({
   meta,
   price,
   badge,
+  keywords,
 }: {
   value: string;
+  keywords?: string[];
   selected: boolean;
   onSelect: () => void;
   icon: ReactNode;
@@ -182,6 +193,7 @@ function Row({
   return (
     <Command.Item
       value={value}
+      keywords={keywords}
       onSelect={onSelect}
       className="flex cursor-default items-center gap-2.5 rounded-md px-2 py-1.5 text-fg outline-none data-[selected=true]:bg-hover"
     >

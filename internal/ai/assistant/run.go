@@ -244,8 +244,9 @@ func (s *Service) sendMessage(ctx context.Context, sid uuid.UUID, in MessageInpu
 	if err != nil {
 		return httpx.Wrap(err)
 	}
-	// Out of credits is answered before anything is stored or streamed.
-	if err := s.d.Plan.Reserve(ctx, s.d.DB.Pool, p.WorkspaceID, "assistant"); err != nil {
+	// Out of credits is answered before anything is stored or streamed (a workspace on
+	// its own key needs none).
+	if err := s.ai.Reserve(ctx, p.WorkspaceID, "assistant"); err != nil {
 		return ai.APIError(err)
 	}
 	if !s.begin(sid) {

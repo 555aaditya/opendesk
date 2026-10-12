@@ -5,7 +5,8 @@
 import type { AIFeature, AIModel } from "@/lib/api/types";
 import type { AiUsageRow, WsData } from "./db";
 import { db } from "./db";
-import { billingOut } from "./handlers/billing";
+import { afterSpend, billingOut } from "./handlers/billing";
+import { aiKeyOf, checkKeyOnUse, keyModels, OWN_DEFAULTS } from "./aiKey";
 import { HttpError } from "./router";
 import { nowIso } from "./util";
 
@@ -20,6 +21,7 @@ export const COSTS: Record<AIFeature, number> = {
   copilot: 2,
   draft_reply: 3,
   answer: 3,
+  answer_email: 3,
   playground: 3,
   kb_draft: 5,
   assistant: 2,
@@ -60,12 +62,25 @@ export function modelFactor(model: string): number {
 export const round3 = (n: number) => Math.round(n * 1000) / 1000;
 const ceil3 = (n: number) => Math.ceil(n * 1000 - 1e-6) / 1000;
 
-const known = (id: string | undefined) => !!id && MODELS.some((m) => m.id === id);
+/** The models the workspace may choose: the instance's, or its own key's provider's. */
+export function offeredModels(ws: WsData): { data: AIModel[]; default: string; fast: string } {
+  const k = aiKeyOf(ws);
+  if (!k) return { data: MODELS, default: DEFAULT_MODEL, fast: FAST_MODEL };
+  const def = OWN_DEFAULTS[k.kind];
+  return { data: keyModels(k), default: k.model || def?.[0] || "", fast: k.fast_model || def?.[1] || k.model };
+}
 
-/** The workspace's effective models: its choice, else the instance defaults. */
+/** Whether id is a model the workspace may choose. */
+export function offersModel(ws: WsData, id: string): boolean {
+  return offeredModels(ws).data.some((m) => m.id === id);
+}
+
+/** The workspace's effective models: its choice, else the defaults of its provider. */
 export function effectiveModels(ws: WsData) {
-  const model = known(ws.ai.model) ? ws.ai.model! : DEFAULT_MODEL;
-  const fast = known(ws.ai.fast_model) ? ws.ai.fast_model! : FAST_MODEL;
+  const offered = offeredModels(ws);
+  const known = (id: string | undefined) => !!id && offered.data.some((m) => m.id === id);
+  const model = known(ws.ai.model) ? ws.ai.model! : offered.default;
+  const fast = known(ws.ai.fast_model) ? ws.ai.fast_model! : offered.fast;
   const widget = known(ws.ai.widget_model) ? ws.ai.widget_model! : model;
   return { model, fast, widget };
 }
@@ -82,6 +97,7 @@ export function modelFor(ws: WsData, feature: AIFeature): string {
     case "translate":
       return m.fast;
     case "answer":
+    case "answer_email":
     case "playground":
       return m.widget;
     default:
@@ -111,8 +127,14 @@ export function meter(feature: AIFeature, model: string, random: () => number = 
   };
 }
 
-/** Throws 402 no_credits when the balance is below `feature`'s typical cost. */
+/** Throws 402 no_credits when the balance is below `feature`'s typical cost. A
+ * workspace on its own key needs no credits for LLM calls (Jev decisions still do),
+ * but a key its provider rejects fails the call with 502. */
 export function reserve(ws: WsData, feature: AIFeature) {
+  if (aiKeyOf(ws) && modelFor(ws, feature) !== JEV) {
+    checkKeyOnUse(ws);
+    return;
+  }
   billingOut(ws); // derive remaining from the current plan, allowance and packs
   const c = ws.billing.credits;
   if (c.unlimited) return;
@@ -127,13 +149,24 @@ export function reserve(ws: WsData, feature: AIFeature) {
  */
 export function spend(ws: WsData, feature: AIFeature, userId: string | null = db.meId, model = modelFor(ws, feature)): number {
   const row = meter(feature, model);
+  if (aiKeyOf(ws) && model !== JEV) {
+    // On the workspace's own key: recorded, no credits.
+    ws.aiUsage.push({ ...row, credits: 0, source: "own_key", user_id: userId, at: nowIso() });
+    return 0;
+  }
   const c = ws.billing.credits;
+  let before = 0;
   if (!c.unlimited) {
     billingOut(ws);
+    before = c.remaining;
     row.credits = round3(Math.min(row.credits, c.remaining));
     c.used = round3(c.used + row.credits);
   }
   ws.aiUsage.push({ ...row, user_id: userId, at: nowIso() });
-  if (!c.unlimited) billingOut(ws);
+  if (!c.unlimited) {
+    billingOut(ws);
+    // Auto-recharge and running-low notices (contracts/billing.md "Auto-recharge").
+    if (row.credits > 0) afterSpend(ws, before, c.remaining);
+  }
   return row.credits;
 }

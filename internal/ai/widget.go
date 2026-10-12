@@ -32,7 +32,7 @@ func isNoCredits(err error) bool { return errors.Is(err, plan.ErrNoCredits) }
 var wantsPerson = regexp.MustCompile(`(?i)\b(human|real person|a person|live agent|an agent|representative|operator|someone real|talk to (?:someone|support|a person)|speak (?:to|with) (?:someone|a person|an agent)|mensch|mitarbeiter|humain|une personne|conseiller|humano|una persona|persona real|agente|operatore|atendente|uma pessoa|medewerker|człowiek|konsultant)\b`)
 
 // Agent features: what the monthly agent cap counts.
-var agentFeatures = []string{"answer", "answer_check"}
+var agentFeatures = []string{"answer", "answer_check", "answer_email"}
 
 const (
 	// needsHumanAt is the Jev confidence at which the visitor is handed to the team.

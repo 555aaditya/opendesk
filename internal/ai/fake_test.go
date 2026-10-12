@@ -94,8 +94,12 @@ func feature(system string) string {
 		return "translate"
 	case strings.Contains(system, "company's website chat"):
 		return "widget"
+	case strings.Contains(system, "company's support email"):
+		return "email"
 	case strings.Contains(system, "help center articles"):
 		return "kb"
+	case strings.Contains(system, "You grade answers"):
+		return "judge"
 	}
 	return "unknown"
 }
@@ -109,6 +113,7 @@ var defaultReplies = map[string]string{
 	"translate": `{"translation":"Hallo Welt","source_language":"en"}`,
 	"kb":        `{"title":"Get a refund","body_html":"<h2>Steps</h2><ol><li>Open billing</li></ol><script>x</script>","excerpt":"How refunds work."}`,
 	"widget":    "You can reset your password from the sign-in page [1].",
+	"email":     "Hi Jane,\n\nYou can reset your password from the sign-in page [1].\n\nBest regards,\nOllie\nAcme",
 }
 
 func (f *fakeLLM) serve(w http.ResponseWriter, r *http.Request) {

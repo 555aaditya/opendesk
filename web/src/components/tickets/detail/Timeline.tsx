@@ -171,7 +171,11 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
         text: typeof d.category === "string" ? line("activity.triagedAs", { category: d.category.replace(/_/g, " ") }) : line("activity.triaged"),
       };
     case "ai_answered":
-      return { icon: <Sparkles />, hue: "ai", text: line("activity.aiAnswered") };
+      return { icon: <Sparkles />, hue: "ai", text: line(d.channel === "email" ? "activity.aiAnsweredEmail" : "activity.aiAnswered") };
+    case "ai_suggested_reply":
+      return { icon: <Sparkles />, hue: "ai", text: line("activity.aiSuggested") };
+    case "ai_suggested_reply_sent":
+      return { icon: <Sparkles />, text: line("activity.aiSuggestedSent", { ollie }) };
     case "ai_handoff":
       return { icon: <Hand />, text: line(a.actor.type === "contact" ? "activity.handoffCustomer" : "activity.handoffAi") };
     default:

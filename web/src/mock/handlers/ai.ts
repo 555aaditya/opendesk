@@ -4,7 +4,9 @@
 
 import type { AIConfig, AIModels, AISettings, DecisionEngine, KbArticle, KBArticleDraft, SearchResults, Ticket } from "@/lib/api/types";
 import { db, userRef, type WsData } from "../db";
-import { COSTS, DEFAULT_MODEL, FAST_MODEL, MODELS, effectiveModels, reserve, spend } from "../credits";
+import { COSTS, effectiveModels, offeredModels, offersModel, reserve, spend } from "../credits";
+import { aiKeyOf } from "../aiKey";
+import { registerAiProvider } from "./aiProvider";
 import { publish } from "../gateway";
 import { HttpError, forbidden, get, invalid, patch, post, strArr, type Ctx } from "../router";
 import { escapeHtml, hasControl, isRecord, nowIso, oneLine, stripControl, stripHtml, uuid } from "../util";
@@ -50,9 +52,11 @@ function config(ws: WsData): AIConfig {
     return { enabled: false, provider: "none", models: { default: "", fast: "" }, embeddings: false, features: { ...ws.ai, enabled: false }, costs: {}, metered: false, assistant_name: ASSISTANT_NAME, decisions: decisionEngine() };
   }
   const m = effectiveModels(ws);
+  const key = aiKeyOf(ws);
   return {
     enabled: true,
-    provider: "openrouter",
+    provider: key?.kind ?? "openrouter",
+    own_key: !!key,
     models: { default: m.model, fast: m.fast },
     embeddings: true,
     features: ws.ai,
@@ -230,7 +234,7 @@ function settingsPatch(ctx: Ctx): Partial<AISettings> {
   for (const k of ["model", "fast_model", "widget_model"] as const) {
     if (!(k in b)) continue;
     const v = b[k];
-    if (typeof v !== "string" || (v !== "" && !MODELS.some((m) => m.id === v))) throw invalid(`${k} must be empty or one of the offered models`);
+    if (typeof v !== "string" || (v !== "" && !offersModel(ctx.ws, v))) throw invalid(`${k} must be empty or one of the offered models`);
     out[k] = v;
   }
   if ("widget_instructions" in b) {
@@ -269,10 +273,12 @@ function settingsPatch(ctx: Ctx): Partial<AISettings> {
 export function registerAi() {
   get("/v1/ai/config", (ctx) => config(ctx.ws));
 
-  get("/v1/ai/models", (): AIModels => {
+  get("/v1/ai/models", (ctx): AIModels => {
     assertAiInstance();
-    return { data: structuredClone(MODELS), default: DEFAULT_MODEL, fast: FAST_MODEL };
+    return structuredClone(offeredModels(ctx.ws));
   });
+
+  registerAiProvider();
 
   patch("/v1/ai/settings", (ctx) => {
     assertAiInstance();

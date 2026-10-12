@@ -200,7 +200,7 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 		if created {
 			trigger = jobs.TriggerTicketCreated
 		}
-		_, err = domain.AddMessage(ctx, tx, s.d.Jobs, domain.NewMessage{
+		msg, err := domain.AddMessage(ctx, tx, s.d.Jobs, domain.NewMessage{
 			WorkspaceID: wid, TicketID: ticket.ID, Kind: "reply", Direction: "inbound", AuthorType: "contact",
 			AuthorContactID: &contactID, BodyHTML: body.html, BodyText: body.text, FullHTML: body.full,
 			Subject: pm.Subject, FromEmail: sender, FromName: displayname.Clean(senderName, displayname.Person),
@@ -213,6 +213,11 @@ func (s *service) processInbound(ctx context.Context, wid, inboundID uuid.UUID) 
 		if _, err := tx.Exec(ctx, `UPDATE inbound_emails SET status = 'processed', reason = '', processed_at = now()
 			WHERE workspace_id = $1 AND id = $2`, wid, inboundID); err != nil {
 			return err
+		}
+		if !spam {
+			if err := s.queueAIAnswer(ctx, tx, m, ticket.ID, msg.ID, pm, sender); err != nil {
+				return err
+			}
 		}
 		if created && !spam && !suppressAuto {
 			return s.queueAutoReply(ctx, tx, m, ticket, sender, senderName)

@@ -30,6 +30,7 @@ import { useTicketViewers } from "../presence";
 import { applyPatch } from "../useTicketActions";
 import { patchTicketEverywhere } from "@/lib/ticketCache";
 import { ComposerAiMenu, ComposerAiStatus, ComposerSources, useComposerAi } from "@/components/ai/ticket/ComposerAi";
+import { SuggestedReplyCard } from "./SuggestedReply";
 
 type Mode = "reply" | "note";
 type Upload = { key: string; file: File; status: "uploading" | "done" | "error"; attachment?: Attachment; preview?: string };
@@ -272,6 +273,17 @@ export const Composer = forwardRef<ComposerHandle, { ticket: Ticket; disabled?: 
   return (
     <div className="shrink-0 px-5 pb-4">
       <div className="mx-auto w-full max-w-[820px]">
+        {!disabled && (
+          <SuggestedReplyCard
+            ticket={ticket}
+            hasDraft={!!draft.html}
+            onEdit={(html) => {
+              setDraft({ mode: "reply", html });
+              editor.current?.setHtml(html);
+              setTimeout(() => editor.current?.focus(), 0);
+            }}
+          />
+        )}
         <AnimatePresence initial={false}>
           {others.length > 0 && mode === "reply" && (
             <motion.div

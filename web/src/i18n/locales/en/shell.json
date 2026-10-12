@@ -66,7 +66,12 @@
       "handoff": "{{who}} asked for a person",
       "handoffAnon": "A customer asked for a person",
       "other": "Notification",
-      "capReached": "Ollie reached this month's agent credit cap"
+      "capReached": "Ollie reached this month's agent credit cap",
+      "creditsLow": "AI credits are running low",
+      "creditsOut": "AI credits are out: Ollie is paused",
+      "rechargeFailed": "Auto-recharge failed and is now off",
+      "keyRejected": "Your AI provider rejected the workspace's key",
+      "keyNoFunds": "Your AI provider account is out of funds"
     }
   },
   "shortcuts": {

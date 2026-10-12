@@ -71,6 +71,7 @@ var Typical = map[string]Milli{
 	"answer_check": 100,  // the widget agent's relevance check on Jev
 	"draft_reply":  3000,
 	"answer":       3000, // one model turn of a widget agent reply
+	"answer_email": 3000, // one model turn of an agent email answer or suggested reply
 	"playground":   3000, // one model turn of an agent playground reply
 	"kb_draft":     5000, // knowledge base article draft from tickets
 	"copilot":      2000, // free-form question about a ticket
@@ -292,6 +293,9 @@ type Usage struct {
 	// CostUSD is the provider's cost of the call; 0 when unknown, which charges the
 	// feature's typical credits.
 	CostUSD float64
+	// OwnKey marks a call made on the workspace's own provider key: it is recorded
+	// (source own_key) and charges no credits.
+	OwnKey bool
 }
 
 // Charge is what u costs in credits at the service's markup.
@@ -333,10 +337,16 @@ func (s *Service) Reserve(ctx context.Context, q db.Querier, wid uuid.UUID, feat
 // Spend charges a completed AI call on its real cost: the monthly allowance first, then
 // purchased credits. A call that costs more than what is left takes the balance to zero.
 // The row lock makes concurrent spends safe. Usage is always recorded. It returns the
-// credits charged.
+// credits charged. A call on the workspace's own key (u.OwnKey) is recorded and charges 0;
+// callers skip Reserve for it, since no balance is needed.
 func (s *Service) Spend(ctx context.Context, pool db.Querier, wid uuid.UUID, u Usage) (Milli, error) {
 	cost, err := s.Charge(u)
 	if err != nil {
+		return 0, err
+	}
+	if u.OwnKey {
+		_, err := pool.Exec(ctx, `INSERT INTO ai_usage (workspace_id, user_id, feature, millicredits, model, input_tokens, output_tokens, ticket_id, cost_usd, source)
+			VALUES ($1, $2, $3, 0, $4, $5, $6, $7, $8, 'own_key')`, wid, u.UserID, u.Feature, u.Model, u.InputTokens, u.OutputTokens, u.TicketID, u.CostUSD)
 		return 0, err
 	}
 	e, err := s.Entitlements(ctx, pool, wid)

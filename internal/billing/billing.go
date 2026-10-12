@@ -36,6 +36,8 @@ type Billing struct {
 	Usage             UsageCounts  `json:"usage"`
 	Credits           CreditsState `json:"credits"`
 	Prices            Prices       `json:"prices"`
+	// AutoRecharge is null when billing is disabled.
+	AutoRecharge *AutoRecharge `json:"auto_recharge"`
 }
 
 // Limits are the plan limits; zero means unlimited.
@@ -225,6 +227,11 @@ func (s *svc) load(ctx context.Context, q db.Querier, wid uuid.UUID, prices Pric
 			return b, err
 		}
 		b.Credits.Used = used.Credits()
+	}
+	if e.BillingEnabled {
+		if b.AutoRecharge, err = loadAutoRecharge(ctx, q, wid, e.MonthlyCredits); err != nil {
+			return b, err
+		}
 	}
 	return b, nil
 }

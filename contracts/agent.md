@@ -3,7 +3,8 @@
 When `settings.ai.widget_answers` is on, the AI is a conversational agent in the chat widget. It
 answers visitors from the workspace's knowledge, uses the tools the workspace connects (its own MCP
 servers), hands off to the team when it should, and is metered on real usage
-(`contracts/billing.md`). This file is the contract for the agent, its tools (MCP connections),
+(`contracts/billing.md`). Mailboxes can opt in to the same agent for email ("Email" below).
+This file is the contract for the agent, its tools (MCP connections),
 knowledge sources, guardrails, playground and reports, and for opendesk's own MCP server.
 
 Owners: the agent loop, guardrails, actions, ratings, playground and reports live in `internal/ai`
@@ -115,7 +116,7 @@ topic too).
 
 ```ts
 widget_blocked_topics: string[]   // at most 20, each 2..100 chars of plain text: topics the agent declines
-widget_monthly_cap: number        // credits per calendar month (UTC) the agent may use (features answer, answer_check, agent tools); 0 = no cap; 0..1,000,000
+widget_monthly_cap: number        // credits per calendar month (UTC) the agent may use (features answer, answer_email, answer_check, agent tools); 0 = no cap; 0..1,000,000
 widget_collect_email: boolean     // when the visitor has no email, the agent asks for one before handing off, default true
 ```
 
@@ -144,6 +145,31 @@ Rate limited to 30 per user per minute.
 interface Source { kind: "article" | "page" | "file" | "snippet"; id: string; title: string; url: string | null }
 ```
 
+## Setup (admin)
+
+`GET /v1/ai/agent/setup` (admin, or an API key with `settings:read`) is the agent's setup
+checklist, computed from the workspace's data on every call (owner: `internal/ai/agentsetup`,
+served from `internal/ai/setup_api.go`):
+
+```jsonc
+{ "steps": [ { "id": "ai_on", "title": "Turn on AI", "description": "...", "done": true, "optional": false, "href": "/settings/ai" } ],
+  "done_count": 4, "total": 6, "complete": false }  // counts required steps only
+```
+
+| id | done when | optional |
+| --- | --- | --- |
+| `ai_on` | the instance has a provider (or the workspace a working own key) and `settings.ai.enabled` | |
+| `identity` | `widget_instructions` was saved, the widget has a `bot_name`, or a `widget_bot` picture is set | |
+| `knowledge` | a published KB article or an enabled, ready knowledge source | |
+| `tools` | an enabled, connected MCP connection | yes |
+| `playground` | a playground reply was recorded (`ai_usage.feature = 'playground'`) | |
+| `widget` | a widget session was seen (`workspaces.widget_seen_at`) | |
+| `answers_on` | `settings.ai.widget_answers` | |
+| `email_answers` | a mailbox has `ai_answers` on; listed only where that setting exists | yes |
+
+Settings > AI agent > Overview shows it until `complete`, then collapsed. The "Get set up"
+checklist (`GET /v1/onboarding`) has a `setup_ai_agent` step that is done when this is `complete`.
+
 ## Report (admin)
 
 `GET /v1/ai/agent/report?from&to` (admin, `settings:read`; same range rules as `/v1/billing/usage`, default the last
@@ -156,12 +182,220 @@ interface Source { kind: "article" | "page" | "file" | "snippet"; id: string; ti
   resolved: number               // of those, solved or closed with no team member reply
   handoffs: number
   ratings: { up: number; down: number }
-  credits: number                // features answer, answer_check and agent tools
+  credits: number                // features answer, answer_email, answer_check and agent tools
   by_day: { date: string; conversations: number; replies: number; resolved: number; handoffs: number }[]
   tools: { tool: string; calls: number; errors: number }[]
   gaps: { question: string; count: number }[]  // up to 20 recent visitor questions the agent handed off or could not answer, newest first (first 200 chars)
+  channels: { chat: ChannelReport; email: ChannelReport }  // the totals above split by the ticket's channel
+}
+interface ChannelReport { conversations: number; replies: number; resolved: number; handoffs: number;
+  suggested: number       // email only: suggested replies written (draft mode)
+  suggested_sent: number  // email only: of those, sent as written by a teammate
 }
 ```
+
+## Email
+
+The agent can also answer email, per mailbox, **off by default**. A mailbox has (`contracts/api.md`
+`Mailbox`, `PATCH /v1/mailboxes/{id}`, admin, audit-logged):
+
+```ts
+ai_answers: boolean               // Ollie answers emails to this mailbox; turning it on needs AI on (422 ai_off)
+ai_answers_mode: "draft" | "send" // draft: a suggested reply a teammate sends, edits or discards; send: Ollie replies by email
+ai_answers_outside_hours: boolean // only while the workspace's business hours are closed (ignored while business hours are off)
+```
+
+It does not need `widget_answers`; it shares the agent's knowledge, `widget_instructions`,
+`widget_blocked_topics`, `widget_model`, `widget_max_replies`, `widget_monthly_cap`, tone and language
+settings, and the bot name.
+
+When it answers:
+- Inbound (`internal/email`) queues job `ai.email_answer` in the transaction that stores a customer's
+  email (a new ticket or a reply), scheduled 30 s later so automations and assignment run first and a
+  burst of emails gets one answer (a job whose message is no longer the latest does nothing). It never
+  queues for spam (DMARC failure), mail inbound already drops (bounces, `Auto-Submitted`, `Precedence:
+  bulk/junk/auto_reply`, foreign lists, auto-replies, the workspace's own mailboxes), nor for any
+  message with `Precedence: list`, `List-Id`, `List-Unsubscribe`, `List-Post`, `X-Auto-Response-Suppress`,
+  `X-Autoreply`, `X-Autorespond`, `X-Loop`, `Feedback-ID`, a null `Return-Path`, an out-of-office
+  subject, or a no-reply sender (`noreply`, `no-reply`, `donotreply`, `mailer-daemon`, `postmaster`,
+  `bounce`, `notifications`, `alerts`, `newsletter`).
+- The job answers only while: AI is on, the mailbox has `ai_answers` (and is not disabled), the
+  ticket is an open or pending email ticket of that mailbox, unassigned, not spam, not handed off, no
+  team member has replied on it, and the sender is not a member of the workspace or one of its
+  mailboxes. Each customer message is handled at most once (`ai_widget_answers`, as in chat).
+- Loop protection: besides the above, at most 5 agent emails or suggestions per contact per hour
+  over all their tickets (then it stays silent), `widget_max_replies` per ticket (counting sent replies
+  and pending or discarded suggestions, then it hands off), and the agent's emails carry
+  `Auto-Submitted: auto-generated` and `X-Auto-Response-Suppress: All` so autoresponders do not answer.
+- It stays silent (the team handles the email) when credits are out, the monthly cap is reached
+  (`ai_cap_reached` as in chat), or the provider fails after retries.
+
+What it writes: the same loop as chat (knowledge, guardrails, at most 6 model turns) with an email
+prompt: one complete email (a greeting with the customer's first name, the answer, a sign-off with
+the bot name and the workspace name), no chat phrases, `[n]` citations removed and no link list
+(passages may be linked inline). The customer block says the channel is email and the sender is
+**not verified**, so only read-only tools that need no confirmation and are not `verified_only` are
+offered; tool `_meta` carries `verified: false`. Metered as feature `answer_email` (typical 3 credits
+per model turn), plus `answer_check` for Jev.
+
+Handoff: the agent calling `handoff_to_human`, or Jev's `needs_human` at 0.8 or above (checked before
+the model, which is then not called), hands off **without sending anything**: `custom.ai_handoff`,
+activity `ai_handoff` (`actor_type = "ai"`), the `ai_handoff` notification and `ticket.updated`, as in
+chat. The ticket stays unassigned and waits for the team.
+
+**Send mode**: the reply is an outbound email message (`author.type = "system"`, `ai: true`, from name
+= the bot name, `delivery_status: "pending"`) sent by the normal outbound path with the ticket's
+threading headers, under "<bot name> at <mailbox name>". It is added under the ticket lock only if
+nothing changed while the model ran (else discarded). Activity `ai_answered` with `channel: "email"`.
+
+**Draft mode**: the agent leaves a suggested reply on the ticket instead (activity
+`ai_suggested_reply`, event `ai_suggested_reply.created`). A newer one supersedes the pending one.
+
+```ts
+interface SuggestedReply {
+  id: string; ticket_id: string
+  message_id: string             // the customer message it answers
+  body_html: string; sources: Source[]; tools: string[]
+  status: "pending" | "sent" | "discarded" | "superseded"
+  reply_id: string | null        // the sent message
+  created_at: string
+}
+```
+
+| method | path | role | body → response |
+| --- | --- | --- | --- |
+| GET | `/v1/tickets/{id}/ai/suggested-reply` | viewer (`tickets:read`) | → `{suggested_reply: SuggestedReply \| null}`: the pending one while it answers the ticket's latest message |
+| POST | `/v1/tickets/{id}/ai/suggested-reply/{suggestion_id}/send` | agent (`tickets:write`) | → `Message`: sent as written, attributed to the agent like a send-mode reply; activity `ai_suggested_reply_sent` (actor: the teammate); `409 suggestion_not_pending` when it was decided, superseded, or the ticket has a newer message |
+| DELETE | `/v1/tickets/{id}/ai/suggested-reply/{suggestion_id}` | agent (`tickets:write`) | → 204, idempotent; nothing is sent |
+
+Sending or discarding publishes `ai_suggested_reply.updated`. Editing is client side: the composer
+opens with the suggestion's text and the teammate sends it as their own reply (a team member reply,
+so the agent stops answering that ticket).
+
+## Tests (admin)
+
+Saved test conversations check the agent before and after a change of instructions, knowledge or
+tools. A test is one to six messages (the last one the visitor's) and what the answer must do.
+
+```ts
+interface AgentTest {
+  id: string; name: string                 // 1..100, default: the first visitor message
+  messages: { role: "visitor" | "agent"; text: string }[]   // 1..6, the last the visitor's, each 1..4,000 chars
+  expectations: AgentExpectation[]         // 1..10, no duplicates, not both handoff and no_handoff
+  visitor: { name?: string; email?: string; verified?: boolean; user_id?: string } | null   // as in the playground
+  last_result: AgentTestResult | null      // the test's result in the latest run that finished it
+  created_at: string; updated_at: string
+}
+interface AgentExpectation {
+  kind: "mentions"          // the answer conveys `value` (1..1,000 chars), judged by a model
+      | "not_mentions"      // the answer does not convey `value`, judged by a model
+      | "handoff" | "no_handoff"   // the agent called handoff_to_human, or did not
+      | "uses_tool"         // the agent ran (or, for a confirm tool, asked to run) the tool `value`: "<server_slug>__<tool>"
+      | "cites_knowledge"   // the answer cites at least one passage
+  value?: string
+}
+interface AgentTestRun {
+  id: string; status: "queued" | "running" | "done" | "failed" | "cancelled"
+  draft: boolean                           // ran against unsaved settings
+  test_ids: string[]                       // in order
+  total: number; passed: number; failed: number; errored: number
+  credits: number
+  error: string | null                     // why a failed run stopped (a fixed, safe message)
+  results?: AgentTestResult[]              // GET /v1/ai/agent/test-runs/{id} only
+  created_at: string; started_at: string | null; finished_at: string | null
+}
+interface AgentTestResult {
+  run_id: string; test_id: string
+  status: "pending" | "running" | "passed" | "failed" | "error"
+  answer_html: string                      // the agent's answer, sanitized, citation markers removed
+  handoff: boolean; tools: string[] /* display names of tools that ran */; sources: Source[] /* cited */
+  action: { tool: string; title: string; summary: string } | null   // a tool call that needs confirmation (never run)
+  checks: { kind: AgentExpectation["kind"]; value: string; passed: boolean; reason: string }[]   // one per expectation, in order
+  error: string | null                     // the test could not be answered or graded (fixed message)
+  credits: number
+  draft: boolean                           // the run used unsaved settings
+  previous_status: "passed" | "failed" | "error" | null   // the test's final status in the run before, so newly failing tests stand out
+  finished_at: string | null
+}
+```
+
+| method | path | body → response |
+| --- | --- | --- |
+| GET | `/v1/ai/agent/tests` | → `{data: AgentTest[]}` (oldest first) |
+| POST | `/v1/ai/agent/tests` | `{name?, messages, expectations, visitor?}` → `201 AgentTest` |
+| GET | `/v1/ai/agent/tests/{id}` | → `AgentTest` |
+| PATCH | `/v1/ai/agent/tests/{id}` | `{name?, messages?, expectations?, visitor?}` (an empty `visitor` clears it) → `AgentTest` |
+| DELETE | `/v1/ai/agent/tests/{id}` | → `204` (its results go with it) |
+| POST | `/v1/ai/agent/test-runs` | `{test_ids?: string[] /* default: all */, settings?: /* the playground's unsaved drafts */}` → `202 AgentTestRun` |
+| GET | `/v1/ai/agent/test-runs` | → `{data: AgentTestRun[]}` (the 20 latest, newest first) |
+| GET | `/v1/ai/agent/test-runs/{id}` | → `AgentTestRun` with `results` |
+| POST | `/v1/ai/agent/test-runs/{id}/cancel` | → `AgentTestRun` (answered tests keep their results; the rest stay `pending`) |
+
+- Admin only (`settings:read` / `settings:write`); test routes work while AI is off, runs answer
+  `404 ai_disabled` without a provider. At most 200 tests per workspace (`422 limit_reached`).
+  Creating, changing and deleting tests and starting a run are audit-logged
+  (`ai.agent_test_created`, `_updated`, `_deleted`, `ai.agent_test_run_started`).
+- One run at a time per workspace (`409 run_in_progress`; a run still queued or running an hour
+  after it started is failed as stopped). `422 no_tests` without tests; an unknown test id is `404`.
+  At most 60 runs per workspace per hour (`429`).
+- A run is a job (`ai.agent_test_run`, one attempt). It answers each test with the playground
+  engine: the saved settings with the run's drafts on top, the test's visitor, no ticket;
+  read-only tools run, any other tool comes back as `action` and never runs. Up to 3 tests at a
+  time, 2 minutes each.
+- `handoff`, `no_handoff`, `uses_tool` and `cites_knowledge` are checked from what the agent did.
+  `mentions` and `not_mentions` of a test are graded together by one call to the workspace's fast
+  model (short structured output; the conversation, answer and expectations are data blocks). An
+  answer with no text fails `mentions` and passes `not_mentions` without a call. A test passes
+  when every check passes; `error` when it could not be answered or graded.
+- Answers and grading are metered as feature `playground` (not counted toward the agent's monthly
+  cap). Without credits the test errors and the run ends `failed` ("Not enough credits to finish
+  the run.").
+- Progress is live: `ai_agent_test_run.updated` and `ai_agent_test_result.updated`
+  (`contracts/events.md`).
+
+## Improve answer (admin)
+
+On an agent reply (in a chat ticket, the playground or the review queue) an admin writes the better
+answer. It becomes a Q&A snippet knowledge source the agent answers from at once.
+
+`POST /v1/ai/agent/improve` (admin, `settings:write`)
+
+```ts
+// Body
+{ question: string /* the visitor's question, 3..4,000 chars */; answer: string /* markdown, 1..4,000 */;
+  message_id?: string /* the agent reply being improved: it leaves the review queue */;
+  save_test?: boolean /* also save a test: the question, expecting "mentions" the answer's text (first 1,000 chars) */ }
+// 201
+{ source: { id: string; kind: "snippet"; name: string }; test: AgentTest | null }
+```
+
+- The snippet is created exactly like `POST /v1/ai/knowledge` (`ai.knowledge_created`,
+  `ai_knowledge.created`, indexed at once). Its question is the visitor's question cut at 300
+  characters. The improvement is audit-logged (`ai.agent_answer_improved` with the source, test
+  and message ids).
+- `message_id` must be an agent reply of the workspace (`404`). The test limit applies to
+  `save_test` before anything is created.
+
+## Review queue (admin)
+
+`GET /v1/ai/agent/review` (admin, `settings:read`) → `{data: AgentReviewItem[]}`: up to 50 agent
+replies of the last 30 days, newest first, that a visitor rated `down` or after which the agent
+handed off (a visitor asking for a person is not listed), without the ones dismissed or improved.
+
+```ts
+interface AgentReviewItem {
+  id: string                    // the agent reply's message id
+  ticket_id: string; ticket_number: number
+  reason: "rated_down" | "handoff"
+  question: string              // the visitor message before the reply (first 500 chars)
+  answer: string                // the reply as text (first 1,000 chars)
+  contact_name: string
+  created_at: string
+}
+```
+
+`POST /v1/ai/agent/review/{id}/dismiss` (admin, `settings:write`) → `204`; `404` unless `id` is an
+agent reply of the workspace. Dismissing and improving publish `ai_agent_review.updated`.
 
 ## MCP connections (company tools)
 
@@ -309,9 +543,10 @@ embedding failed stays searchable by full text and is retried by the hourly upke
 
 opendesk itself is an MCP server, so AI clients (Claude, Cursor, VS Code, any MCP client) can work
 the helpdesk: `POST {API_URL}/mcp` (Streamable HTTP, stateless, JSON responses; `GET` and `DELETE`
-answer `405`, as the spec allows for a server without sessions). Auth: `Authorization: Bearer <API key>` (`contracts/api.md` API keys); every tool runs
-through the public API in process as that key, so it gets exactly the key's scopes, role checks,
-validation, events, activities and audit entries. Writes are attributed to the key as usual.
+answer `405`, as the spec allows for a server without sessions). Auth: `Authorization: Bearer <API key>` (`contracts/api.md` API keys)
+or an OAuth access token (below); every tool runs through the public API in process as that
+principal, so it gets exactly its scopes, role checks, validation, events, activities and audit
+entries. Writes are attributed to the key, or to the user who connected the client.
 
 Tools (offered only when the key has the scope):
 
@@ -326,10 +561,78 @@ Tools (offered only when the key has the scope):
 | `search_contacts` / `get_contact` | `contacts:read` | |
 | `search_knowledge` | `kb:read` | KB articles and knowledge sources |
 | `create_kb_draft` | `kb:write` | a draft article |
-| `get_report` | `tickets:read` | the overview report for a range |
+| `get_report` | `tickets:read` + `settings:read` | the overview report for a range |
 
 Tool annotations mark read-only and destructive tools. Output is JSON text. No `Mcp-Session-Id` is
 issued. The server checks `Origin` (browser requests must come from
-`CORS_ORIGINS`), is rate limited like the API, and answers `401` with
-`WWW-Authenticate: Bearer` without a valid key. Clients that only speak OAuth (the Claude app's
-connectors) connect through the `mcp-remote` bridge with the key as a header.
+`CORS_ORIGINS`), is rate limited like the API (per key or per grant), and answers `401` with
+`WWW-Authenticate: Bearer realm="opendesk", resource_metadata="{API_URL}/.well-known/oauth-protected-resource/mcp"`
+(plus `error="invalid_token"` when a credential was sent) without a valid one.
+
+### OAuth (connectors without an API key)
+
+opendesk is the authorization server for its MCP server, following the MCP authorization spec, so
+connectors (Claude, ChatGPT) connect with a sign-in instead of a key. Owner: `internal/core/mcpserver`
+(`oauth.go`, `oauth_consent.go`); grant scopes and revocation in `internal/core/oauthgrant`.
+
+| endpoint | does |
+| --- | --- |
+| `GET /.well-known/oauth-protected-resource` and `.../oauth-protected-resource/mcp` | Protected Resource Metadata (RFC 9728): `resource` = `{API_URL}/mcp`, `authorization_servers` = [`{API_URL}`], `scopes_supported` |
+| `GET /.well-known/oauth-authorization-server` | Authorization Server Metadata (RFC 8414); issuer `{API_URL}` |
+| `POST /oauth/register` | Dynamic Client Registration (RFC 7591), JSON |
+| `GET /oauth/authorize` | starts the authorization code flow |
+| `POST /oauth/token` | `authorization_code` and `refresh_token` grants, form-encoded |
+| `POST /oauth/revoke` | revocation (RFC 7009) |
+
+The metadata, registration, token and revocation endpoints allow any origin (no credentials).
+Errors are RFC 6749 JSON (`{error, error_description}`); nothing on these routes logs a code,
+token, secret or verifier.
+
+- **Registration**: anonymous, 20 per address per hour. `redirect_uris` (1 to 10) must be `https`,
+  or `http` on `127.0.0.1`, `localhost` or `[::1]` for native apps (any port at authorize time,
+  RFC 8252); no fragments, credentials or wildcards. `token_endpoint_auth_method` is `none`
+  (public clients), `client_secret_post` or `client_secret_basic` (the default; the secret is
+  shown once and stored hashed). `client_name` goes through `displayname.CleanOr` (a name that
+  reads as a link becomes "MCP client"). Unused clients are deleted after 30 days.
+- **Authorize**: `response_type=code`, `client_id`, `redirect_uri`, `state` (passed through),
+  `code_challenge` with `code_challenge_method=S256` (required; `plain` is refused), `scope`
+  (space-separated; unknown scopes are ignored, none means all of them) and `resource` (RFC 8707;
+  must be `{API_URL}/mcp` when sent). An unknown client or redirect URI is never redirected to: the
+  browser goes to the app's consent page with `?error=`. Other errors redirect to the client with
+  `error`, `error_description`, `state` and `iss`. A valid request is stored for 10 minutes and the
+  browser goes to `{APP_URL}/oauth/consent?request=<id>`.
+- **Consent** (web app, signed-in session required): `GET /v1/oauth/requests/{id}` shows the
+  client's name, its redirect host (and whether it is an app on this computer), the requested
+  scopes and the user's workspaces, each with the scopes their role there allows.
+  `POST /v1/oauth/requests/{id}/approve` `{workspace_id}` creates the **grant** (audit
+  `oauth.grant_created`) and answers `{redirect_to}`: the redirect URI with `code`, `state` and
+  `iss`. `POST /v1/oauth/requests/{id}/deny` answers `{redirect_to}` with `error=access_denied`.
+  A request is decided once (`410 request_expired` after that or after 10 minutes).
+- **Codes**: 32 random bytes, stored hashed, single use, 60 seconds, bound to the client, the
+  redirect URI, the resource and the PKCE challenge. Any attempt spends the code; a code presented
+  after it was used revokes its grant.
+- **Tokens**: the access token is a JWT with purpose `mcp_access` (`contracts/tokens.md`; HS256,
+  1 hour, `aud` the resource, `sub` the user, `wid`, `gid` the grant, `scope`). The refresh token
+  (`od_mcpr_...`, 30 days) rotates on every use and is stored hashed; presenting a rotated one
+  again revokes the grant (audit `oauth.grant_revoked`, reason `refresh_reused`). A refresh may
+  narrow `scope`, never widen it. Connecting the same client to the same workspace again replaces
+  the earlier grant.
+- **Scopes**: `tickets:read`, `tickets:write`, `contacts:read`, `contacts:write`, `kb:read`,
+  `kb:write`, `settings:read` (never `settings:write` or `realtime`). On every MCP request the
+  grant is loaded: the tools offered and the API checks use the user's **current** role and the
+  granted scopes together (viewers read only; agents and up also write tickets, contacts and
+  articles). Account routes and routes API keys may not call refuse a grant.
+- **Revocation**: the user (or an admin) disconnects the client in Settings > AI clients, the client
+  calls `/oauth/revoke` with its refresh or access token, the member is removed from the
+  workspace, or the user's password changes or is reset (every grant of the user ends, like their
+  other sessions). All are audit-logged as `oauth.grant_revoked` with a reason. Revocation takes
+  effect on the next request.
+
+### Settings > AI clients
+
+`GET /v1/ai-clients/server` (members) describes the server for setup screens: `url`,
+`resource_metadata`, `authorization_server`, `scopes` and every tool with its scopes.
+`GET /v1/ai-clients/connections` lists connected clients (your own; admins see every member's):
+client name, redirect host, user, scopes, created and last used. `DELETE
+/v1/ai-clients/connections/{id}` disconnects one. Clients that send a header instead of OAuth
+(Cursor, VS Code, Claude Desktop through `mcp-remote`) use an API key with the scopes they need.

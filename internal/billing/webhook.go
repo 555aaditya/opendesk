@@ -107,6 +107,10 @@ func (s *svc) handleEvent(ctx context.Context, ev *stripe.Event) error {
 	for _, c := range after {
 		s.d.Analytics.Capture(c.wid.String(), c.wid.String(), c.event, c.props)
 	}
+	if in != nil && in.session != nil {
+		// Off-session charges (auto-recharge) and the portal use the customer's default.
+		s.ensureDefaultPM(ctx, in.customerID, in.setupPM)
+	}
 	return nil
 }
 
@@ -118,6 +122,8 @@ type eventInput struct {
 	sub        *stripe.Subscription // fresh from Stripe
 	session    *stripe.CheckoutSession
 	invoice    *stripe.Invoice
+	intent     *stripe.PaymentIntent // auto-recharge PaymentIntents only
+	setupPM    string                // the payment method a setup Checkout saved
 }
 
 func (s *svc) prepare(ctx context.Context, ev *stripe.Event) (*eventInput, error) {
@@ -142,6 +148,29 @@ func (s *svc) prepare(ctx context.Context, ev *stripe.Event) (*eventInput, error
 				return nil, err
 			}
 			in.sub = sub
+		}
+		if cs.Mode == stripe.CheckoutSessionModeSetup && cs.SetupIntent != nil && cs.SetupIntent.ID != "" {
+			si, err := s.sc.V1SetupIntents.Retrieve(ctx, cs.SetupIntent.ID, nil)
+			if err != nil {
+				return nil, fmt.Errorf("retrieve setup intent: %s", stripeErr(err))
+			}
+			if si.PaymentMethod != nil {
+				in.setupPM = si.PaymentMethod.ID
+			}
+		}
+	case "payment_intent.succeeded", "payment_intent.payment_failed":
+		var pi stripe.PaymentIntent
+		if err := json.Unmarshal(ev.Data.Raw, &pi); err != nil {
+			return nil, fmt.Errorf("decode payment intent: %w", err)
+		}
+		if pi.Metadata["kind"] != rechargeKind {
+			// Checkout payments are applied on checkout.session.completed.
+			return nil, nil
+		}
+		in.intent = &pi
+		in.metaWID = pi.Metadata["workspace_id"]
+		if pi.Customer != nil {
+			in.customerID = pi.Customer.ID
 		}
 	case "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted":
 		var sub stripe.Subscription
@@ -286,12 +315,23 @@ func (s *svc) apply(ctx context.Context, tx pgx.Tx, ev *stripe.Event, in *eventI
 		}
 		if granted {
 			changed = true
+			if err := rearmNotices(ctx, tx, wid); err != nil {
+				return nil, err
+			}
 			if err := audit.Log(ctx, tx, nil, wid, "billing.credits_purchased", "workspace", &wid,
 				map[string]any{"packs": packs, "credits": credits}); err != nil {
 				return nil, err
 			}
 			out = append(out, capture{wid, "credits_purchased", map[string]any{"packs": packs, "credits": credits}})
 		}
+	}
+	if in.intent != nil {
+		c, caps, err := s.applyRechargeIntent(ctx, tx, string(ev.Type), wid, in.intent, prices)
+		if err != nil {
+			return nil, err
+		}
+		changed = changed || c
+		out = append(out, caps...)
 	}
 	if ev.Type == "invoice.payment_failed" {
 		if err := s.notifyPaymentFailed(ctx, tx, wid); err != nil {

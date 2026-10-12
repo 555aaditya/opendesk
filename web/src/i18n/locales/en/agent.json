@@ -6,7 +6,8 @@
     "none": "No models available",
     "context": "{{n}} context",
     "price": "{{input}} credits / 1M in · {{output}} out",
-    "unavailable": "No longer offered, uses the default"
+    "unavailable": "No longer offered, uses the default",
+    "search": "Search models"
   },
   "chips": {
     "add": "Add",
@@ -23,6 +24,15 @@
     "title": "The agent is off.",
     "body": "Chats go straight to your team until you turn it on.",
     "action": "Turn it on"
+  },
+  "email": {
+    "title": "Email",
+    "description": "Mailboxes where {{name}} answers customer emails. Turn it on or off in each mailbox's settings.",
+    "none": "{{name}} doesn't answer emails in any mailbox yet.",
+    "openMailboxes": "Open mailboxes",
+    "draft": "Draft for review",
+    "send": "Sends automatically",
+    "outsideHours": "Outside business hours"
   },
   "behaviour": {
     "title": "Behaviour",

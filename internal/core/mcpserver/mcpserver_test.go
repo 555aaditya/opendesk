@@ -47,6 +47,8 @@ func newEnv(t *testing.T) *env {
 	cfg := *base.Cfg
 	cfg.CORSOrigins = []string{appOrigin}
 	d.Cfg = &cfg
+	// Rate limits per test, not per process.
+	d.Limiter = httpx.NewLimiter()
 
 	httpx.Install(d.Log)
 	r := chi.NewRouter()

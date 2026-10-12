@@ -1,4 +1,22 @@
 {
+  "ollie": {
+    "description": "Let {{name}} answer emails to this mailbox from your knowledge.",
+    "toggle": "{{name}} answers emails to this mailbox",
+    "toggleHint": "Off by default. Spam, auto-replies, lists and mail from your team are never answered.",
+    "aiOff": "AI is off for this workspace.",
+    "aiOffLink": "Turn it on in Settings > AI",
+    "mode": "Mode",
+    "draft": "Draft for review",
+    "send": "Send automatically",
+    "draftHint": "{{name}} writes a suggested reply on the ticket. A teammate sends it with one click, edits or discards it.",
+    "sendHint": "{{name}} replies by email right away and hands the email to your team when unsure.",
+    "outsideHours": "Only outside business hours",
+    "outsideHoursHint": "During business hours your team answers as usual.",
+    "hoursOff": "Business hours are off, so this has no effect.",
+    "credits": "Each answer uses about {{n}} credits.",
+    "handoff": "When {{name}} can't help, the ticket waits for your team, unassigned.",
+    "behaviourLink": "Agent behaviour"
+  },
   "kind": {
     "google": "Google",
     "microsoft": "Microsoft 365",

@@ -75,6 +75,8 @@ export type AiUsageRow = {
   input_tokens: number;
   output_tokens: number;
   at: string;
+  /** "own_key": the workspace's own provider key paid (0 credits). Unset: credits. */
+  source?: "credits" | "own_key";
 };
 
 export type WsData = {

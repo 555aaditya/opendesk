@@ -15,6 +15,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { OllieAvatar, useAssistantName } from "../ollie";
 import { AiActionCard, AiRating } from "./AgentReply";
+import { ImproveAnswerButton } from "@/components/agent/quality";
 import { AiAuthorLabel, TranslateButton, TranslatedNote, useMessageTranslation } from "@/components/ai/ticket/MessageAi";
 
 function authorName(m: Message): string {
@@ -189,6 +190,7 @@ export const MessageItem = memo(function MessageItem({ m, onRetry, highlight }: 
             </span>
           )}
         </div>
+        {m.ai && <ImproveAnswerButton m={m} />}
         {m.ai && m.ai_rating && <AiRating rating={m.ai_rating} />}
         <TranslateButton tr={tr} />
         <Delivery m={m} onRetry={onRetry ? () => onRetry(m) : undefined} />

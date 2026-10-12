@@ -7,9 +7,12 @@ import { setSocketFactory } from "@/lib/realtime/transport";
 import { db } from "./db";
 import { paused, publish, socketFactory, sockets } from "./gateway";
 import { registerAi } from "./handlers/ai";
+import { registerAiClients } from "./handlers/aiClients";
 import { registerAiTicket } from "./handlers/aiTicket";
 import { registerAssistant } from "./handlers/assistant";
 import { registerAgent } from "./handlers/agent";
+import { registerAgentQuality } from "./handlers/agentQuality";
+import { registerEmailAnswers } from "./handlers/emailAnswers";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
 import { registerKnowledge } from "./handlers/knowledge";
@@ -59,9 +62,12 @@ export function installMock(): void {
   registerAiTicket();
   registerAssistant();
   registerAgent();
+  registerAgentQuality();
+  registerEmailAnswers();
   registerMcp();
   registerKnowledge();
   registerIntegrations();
+  registerAiClients();
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);

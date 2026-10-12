@@ -24,20 +24,27 @@ import (
 // PlaygroundInput is the body of POST /v1/ai/agent/playground.
 type PlaygroundInput struct {
 	Messages []PlaygroundMessage `json:"messages" minItems:"1" maxItems:"40"`
-	Settings *struct {
-		WidgetModel         *string   `json:"widget_model,omitempty"`
-		WidgetInstructions  *string   `json:"widget_instructions,omitempty"`
-		WidgetBlockedTopics *[]string `json:"widget_blocked_topics,omitempty"`
-		Tone                *string   `json:"tone,omitempty"`
-		ReplyLanguage       *string   `json:"reply_language,omitempty"`
-		Instructions        *string   `json:"instructions,omitempty"`
-	} `json:"settings,omitempty" doc:"Unsaved drafts of these settings"`
-	Visitor *struct {
-		Name     string `json:"name,omitempty" maxLength:"100"`
-		Email    string `json:"email,omitempty" maxLength:"254"`
-		Verified bool   `json:"verified,omitempty"`
-		UserID   string `json:"user_id,omitempty" maxLength:"200"`
-	} `json:"visitor,omitempty"`
+	Settings *AgentDraft         `json:"settings,omitempty" doc:"Unsaved drafts of these settings"`
+	Visitor  *PlaygroundVisitor  `json:"visitor,omitempty"`
+}
+
+// AgentDraft is unsaved agent settings the playground and test runs use instead of the
+// saved ones.
+type AgentDraft struct {
+	WidgetModel         *string   `json:"widget_model,omitempty"`
+	WidgetInstructions  *string   `json:"widget_instructions,omitempty"`
+	WidgetBlockedTopics *[]string `json:"widget_blocked_topics,omitempty"`
+	Tone                *string   `json:"tone,omitempty"`
+	ReplyLanguage       *string   `json:"reply_language,omitempty"`
+	Instructions        *string   `json:"instructions,omitempty"`
+}
+
+// PlaygroundVisitor is who the agent talks to in the playground and in tests.
+type PlaygroundVisitor struct {
+	Name     string `json:"name,omitempty" maxLength:"100"`
+	Email    string `json:"email,omitempty" maxLength:"254"`
+	Verified bool   `json:"verified,omitempty"`
+	UserID   string `json:"user_id,omitempty" maxLength:"200"`
 }
 
 type PlaygroundMessage struct {
@@ -74,6 +81,8 @@ type AgentReport struct {
 	ByDay         []AgentReportDay   `json:"by_day"`
 	Tools         []AgentToolUse     `json:"tools"`
 	Gaps          []AgentQuestionGap `json:"gaps"`
+	// Channels splits the totals by channel (email_agent_report.go).
+	Channels AgentChannels `json:"channels"`
 }
 
 type AgentRatings struct {
@@ -107,6 +116,7 @@ const (
 
 func (s *Service) registerAgent(api huma.API) {
 	tags := []string{"AI"}
+	s.registerAgentQuality(api)
 
 	huma.Register(api, huma.Operation{OperationID: "ai-agent-playground", Method: http.MethodPost, Path: "/v1/ai/agent/playground",
 		Summary: "Test the widget agent", Description: "Runs the widget agent on a made-up conversation, without a visitor or a ticket. " +
@@ -193,50 +203,9 @@ func (s *Service) Playground(ctx context.Context, p *auth.Principal, in Playgrou
 	if !s.d.Limiter.Allow("ai:playground:"+key, playgroundPerMinute, time.Minute) {
 		return nil, httpx.E(http.StatusTooManyRequests, "rate_limited", "Too many playground runs. Try again in a minute.")
 	}
-	st, err := hd.LoadSettings(ctx, s.d.DB.Pool, p.WorkspaceID)
+	ai, err := s.agentTrial(ctx, p.WorkspaceID, in.Messages, in.Settings, in.Visitor)
 	if err != nil {
 		return nil, err
-	}
-	set, err := s.draftSettings(st.AI(), in)
-	if err != nil {
-		return nil, err
-	}
-	var company string
-	if err := s.d.DB.Pool.QueryRow(ctx, `SELECT name FROM workspaces WHERE id = $1`, p.WorkspaceID).Scan(&company); err != nil {
-		return nil, err
-	}
-	botName := st.WidgetOrDefault().BotName
-	if strings.TrimSpace(botName) == "" {
-		botName = AssistantName
-	}
-	var thread strings.Builder
-	texts, burst := []string{}, 0
-	for i, m := range in.Messages {
-		text := strings.TrimSpace(strings.ToValidUTF8(m.Text, ""))
-		if text == "" || utf8.RuneCountInString(text) > 4000 {
-			return nil, httpx.Validation("each message text must be 1 to 4000 characters")
-		}
-		from := "ai_assistant"
-		if m.Role == "visitor" {
-			from = "customer"
-			texts = append(texts, text)
-			burst++
-		} else {
-			burst = 0
-		}
-		thread.WriteString(block("message", []string{"n", strconv.Itoa(i + 1), "from", from}, clip(untrusted(text), perMessageChars)))
-		thread.WriteString("\n")
-	}
-	ai := agentInput{wid: p.WorkspaceID, feature: "playground", set: set, botName: botName, company: company,
-		thread: block("ticket_thread", nil, strings.TrimSpace(thread.String())), query: agentQuery(texts, burst), playground: true}
-	if v := in.Visitor; v != nil {
-		ai.visitor = AgentVisitor{Verified: v.Verified, Name: clip(strings.TrimSpace(v.Name), 100)}
-		if v.Verified {
-			ai.visitor.UserID, ai.visitor.Email = clip(strings.TrimSpace(v.UserID), 200), clip(strings.TrimSpace(v.Email), 254)
-		}
-	}
-	if set.WidgetModel != "" {
-		ai.model = set.WidgetModel
 	}
 	ctx, cancel := context.WithTimeout(ctx, playgroundTimeout)
 	defer cancel()
@@ -252,14 +221,67 @@ func (s *Service) Playground(ctx context.Context, p *auth.Principal, in Playgrou
 	return out, nil
 }
 
-// draftSettings applies the playground's unsaved settings on top of the saved ones.
-func (s *Service) draftSettings(set hd.AISettings, in PlaygroundInput) (hd.AISettings, error) {
-	if in.Settings == nil {
+// agentTrial builds the agent's input for a made-up conversation (the playground and
+// test runs): the saved settings with the drafts on top, no ticket, read-only tools.
+func (s *Service) agentTrial(ctx context.Context, wid uuid.UUID, msgs []PlaygroundMessage, draft *AgentDraft, v *PlaygroundVisitor) (agentInput, error) {
+	if n := len(msgs); n < 1 || n > 40 || msgs[n-1].Role != "visitor" {
+		return agentInput{}, httpx.Validation("messages must be 1 to 40, the last from the visitor")
+	}
+	st, err := hd.LoadSettings(ctx, s.d.DB.Pool, wid)
+	if err != nil {
+		return agentInput{}, err
+	}
+	set, err := s.draftSettings(ctx, wid, st.AI(), draft)
+	if err != nil {
+		return agentInput{}, err
+	}
+	var company string
+	if err := s.d.DB.Pool.QueryRow(ctx, `SELECT name FROM workspaces WHERE id = $1`, wid).Scan(&company); err != nil {
+		return agentInput{}, err
+	}
+	botName := st.WidgetOrDefault().BotName
+	if strings.TrimSpace(botName) == "" {
+		botName = AssistantName
+	}
+	var thread strings.Builder
+	texts, burst := []string{}, 0
+	for i, m := range msgs {
+		text := strings.TrimSpace(strings.ToValidUTF8(m.Text, ""))
+		if text == "" || utf8.RuneCountInString(text) > 4000 {
+			return agentInput{}, httpx.Validation("each message text must be 1 to 4000 characters")
+		}
+		from := "ai_assistant"
+		if m.Role == "visitor" {
+			from = "customer"
+			texts = append(texts, text)
+			burst++
+		} else {
+			burst = 0
+		}
+		thread.WriteString(block("message", []string{"n", strconv.Itoa(i + 1), "from", from}, clip(untrusted(text), perMessageChars)))
+		thread.WriteString("\n")
+	}
+	ai := agentInput{wid: wid, feature: "playground", set: set, botName: botName, company: company,
+		thread: block("ticket_thread", nil, strings.TrimSpace(thread.String())), query: agentQuery(texts, burst), playground: true}
+	if v != nil {
+		ai.visitor = AgentVisitor{Verified: v.Verified, Name: clip(strings.TrimSpace(v.Name), 100)}
+		if v.Verified {
+			ai.visitor.UserID, ai.visitor.Email = clip(strings.TrimSpace(v.UserID), 200), clip(strings.TrimSpace(v.Email), 254)
+		}
+	}
+	if set.WidgetModel != "" {
+		ai.model = set.WidgetModel
+	}
+	return ai, nil
+}
+
+// draftSettings applies unsaved settings on top of the saved ones.
+func (s *Service) draftSettings(ctx context.Context, wid uuid.UUID, set hd.AISettings, d *AgentDraft) (hd.AISettings, error) {
+	if d == nil {
 		return set, nil
 	}
-	d := in.Settings
 	patch, err := hd.ValidateAIPatch(hd.AISettingsPatch{WidgetModel: d.WidgetModel, WidgetInstructions: d.WidgetInstructions,
-		WidgetBlockedTopics: d.WidgetBlockedTopics, Tone: d.Tone, ReplyLanguage: d.ReplyLanguage, Instructions: d.Instructions}, s.allowedModel)
+		WidgetBlockedTopics: d.WidgetBlockedTopics, Tone: d.Tone, ReplyLanguage: d.ReplyLanguage, Instructions: d.Instructions}, s.modelCheck(ctx, wid))
 	if err != nil {
 		return set, err
 	}
@@ -342,6 +364,11 @@ func (s *Service) agentReport(ctx context.Context, wid uuid.UUID, from, to time.
 		return r, err
 	}
 	r.Credits = float64(milli) / 1000
+	channels, err := s.agentReportChannels(ctx, wid, from, to)
+	if err != nil {
+		return r, err
+	}
+	r.Channels = channels
 	rows, err := q.Query(ctx, replies+`,
 		days AS (
 			SELECT date_trunc('day', created_at AT TIME ZONE 'UTC')::date AS d, count(*) AS replies, count(DISTINCT ticket_id) AS convs FROM r GROUP BY 1),

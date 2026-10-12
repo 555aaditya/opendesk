@@ -162,6 +162,20 @@ const inviteRoute = createRoute({
   staticData: { title: "Join workspace" },
 });
 
+// The MCP OAuth consent page: an AI client asks to connect; signing in is required.
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => authLayout,
+  path: "/oauth/consent",
+  validateSearch: (s: Record<string, unknown>): { request?: string; error?: string } => ({ request: str(s.request), error: str(s.error) }),
+  beforeLoad: ({ location }) => requireAuth(location.href),
+  loaderDeps: ({ search }) => ({ request: search.request }),
+  loader: ({ context, deps }) => {
+    if (deps.request && /^[0-9a-f-]{36}$/i.test(deps.request)) void context.queryClient.prefetchQuery(q.oauthRequest(deps.request));
+  },
+  component: page(() => import("./pages/auth/OAuthConsent")),
+  staticData: { title: "Connect an app" },
+});
+
 const onboardingRoute = createRoute({
   getParentRoute: () => authLayout,
   path: "/onboarding",
@@ -425,6 +439,10 @@ const sWidget = settingsPage("/widget", "Chat widget", () => import("./pages/set
   return Promise.all([qc.ensureQueryData(q.widgetSettings()), qc.ensureQueryData(q.workspace())]);
 });
 const sApiKeys = settingsPage("/api-keys", "API keys", () => import("./pages/settings/ApiKeys"), (qc) => qc.ensureQueryData(q.apiKeys()));
+// Connecting AI clients to opendesk's MCP server (contracts/agent.md "opendesk MCP server").
+const sAiClients = settingsPage("/ai-clients", "AI clients", () => import("./pages/settings/AiClients"), (qc) =>
+  Promise.all([qc.ensureQueryData(q.aiClientServer()), qc.ensureQueryData(q.aiClientConnections())]),
+);
 const sWebhooks = settingsPage("/webhooks", "Webhooks", () => import("./pages/settings/Webhooks"), (qc) => qc.ensureQueryData(q.webhooks()));
 const sWebhookDetail = createRoute({
   getParentRoute: () => settingsLayout,
@@ -444,7 +462,11 @@ const sAudit = settingsPage("/audit-log", "Audit log", () => import("./pages/set
 const sBilling = createRoute({
   getParentRoute: () => settingsLayout,
   path: "/billing",
-  validateSearch: (s: Record<string, unknown>): { checkout?: string; credits?: string } => ({ checkout: str(s.checkout), credits: str(s.credits) }),
+  validateSearch: (s: Record<string, unknown>): { checkout?: string; credits?: string; payment_method?: string } => ({
+    checkout: str(s.checkout),
+    credits: str(s.credits),
+    payment_method: str(s.payment_method),
+  }),
   loader: ({ context }) => context.queryClient.ensureQueryData(q.billing()),
   component: page(() => import("./pages/settings/Billing")),
   staticData: { title: "Plan and billing" },
@@ -457,6 +479,8 @@ const sAi = settingsPage("/ai", "AI", () => import("./pages/settings/AiSettings"
 // The widget AI agent (contracts/agent.md).
 const sAgent = settingsPage("/ai/agent", "AI agent", () => import("./pages/settings/agent/AgentOverview"), (qc) => {
   void qc.prefetchQuery(q.aiConfig());
+  void qc.prefetchQuery(q.agentSetup());
+  void qc.prefetchQuery(q.agentReview());
   return qc.ensureQueryData(q.agentReport(defaultRange()));
 });
 const sAgentBehaviour = settingsPage("/ai/behaviour", "Agent behaviour", () => import("./pages/settings/agent/AgentBehaviour"), (qc) => {
@@ -479,6 +503,11 @@ const sAgentPlayground = settingsPage("/ai/playground", "Agent playground", () =
   void qc.prefetchQuery(q.aiModels());
   void qc.prefetchQuery(q.widgetSettings());
   return Promise.all([qc.ensureQueryData(q.aiConfig()), qc.ensureQueryData(q.workspace())]);
+});
+const sAgentTests = settingsPage("/ai/tests", "Agent tests", () => import("./pages/settings/agent/AgentTests"), (qc) => {
+  void qc.prefetchQuery(q.agentTestRuns());
+  void qc.prefetchQuery(q.mcpServers());
+  return Promise.all([qc.ensureQueryData(q.agentTests()), qc.ensureQueryData(q.aiConfig())]);
 });
 const sIntegrations = createRoute({
   getParentRoute: () => settingsLayout,
@@ -503,6 +532,7 @@ const routeTree = rootRoute.addChildren([
     verifyRoute,
     callbackRoute,
     inviteRoute,
+    oauthConsentRoute,
     onboardingRoute,
     onboardingMailboxRoute,
   ]),
@@ -537,6 +567,7 @@ const routeTree = rootRoute.addChildren([
       sAutomationEdit,
       sWidget,
       sApiKeys,
+      sAiClients,
       sWebhooks,
       sWebhookDetail,
       sAudit,
@@ -547,6 +578,7 @@ const routeTree = rootRoute.addChildren([
       sAgentKnowledge,
       sAgentTools,
       sAgentPlayground,
+      sAgentTests,
       sIntegrations,
     ]),
   ]),
