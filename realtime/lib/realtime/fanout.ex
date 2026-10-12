@@ -108,20 +108,24 @@ defmodule Realtime.Fanout do
       )
       when is_binary(event_wid) and is_binary(tid) and is_binary(cid) and type in @live_types and
              is_map(data) do
-    cond do
-      not (Ids.uuid?(event_wid) and Ids.normalize(event_wid) == wid) ->
-        {:error, :workspace_mismatch}
-
-      not (Ids.uuid?(tid) and Ids.uuid?(cid)) ->
-        {:error, :invalid_live}
-
-      true ->
-        topics = ["ticket:#{wid}:#{Ids.normalize(tid)}", "contact:#{wid}:#{Ids.normalize(cid)}"]
-        {:ok, topics, %{"type" => type, "data" => data}}
+    with :ok <- same_workspace(event_wid, wid),
+         :ok <- live_ids(tid, cid) do
+      topics = ["ticket:#{wid}:#{Ids.normalize(tid)}", "contact:#{wid}:#{Ids.normalize(cid)}"]
+      {:ok, topics, %{"type" => type, "data" => data}}
     end
   end
 
   def live(_wid, _event), do: {:error, :invalid_live}
+
+  defp same_workspace(event_wid, wid) do
+    if Ids.uuid?(event_wid) and Ids.normalize(event_wid) == wid,
+      do: :ok,
+      else: {:error, :workspace_mismatch}
+  end
+
+  defp live_ids(tid, cid) do
+    if Ids.uuid?(tid) and Ids.uuid?(cid), do: :ok, else: {:error, :invalid_live}
+  end
 
   @doc "The channel topics an envelope from workspace `wid` fans out to."
   @spec topics(String.t(), map()) :: {:ok, [String.t()]} | {:error, atom()}
