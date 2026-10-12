@@ -1,11 +1,16 @@
 import { useEffect, useState } from "preact/hooks";
-import type { Conversation, UiMessage, WidgetConfig, WidgetSession } from "./types";
+import type { LiveState } from "./live";
+import type { AIActionStatus, Conversation, Rating, UiMessage, WidgetConfig, WidgetSession } from "./types";
 
 export type View = "home" | "thread";
+
+/** Local state of an action card while the visitor's decision is on its way. */
+export type ActionUi = { busy?: "confirm" | "decline"; status?: AIActionStatus; error?: boolean };
 
 export type State = {
   open: boolean;
   view: View;
+  /** Resolved config (every appearance key filled in). */
   config: WidgetConfig | null;
   session: WidgetSession | null;
   conversations: Conversation[] | null;
@@ -23,9 +28,21 @@ export type State = {
   handoff: Record<string, "pending" | "done" | "failed">;
   /** conversation id -> when the visitor's last message was delivered, until a reply arrives. */
   awaiting: Record<string, number>;
+  /** The agent's replies as they stream in (contracts/realtime.md "Live events"). */
+  live: LiveState;
+  /** Messages that took the place of a live preview: shown without an entrance. */
+  swapped: Record<string, true>;
+  /** Ratings sent but not yet confirmed by `message.updated`, by message id (null clears). */
+  ratings: Record<string, Rating | null>;
+  /** Action cards by action id. */
+  actions: Record<string, ActionUi>;
+  /** Rendered as the dashboard preview: contained in its host, no focus moves. */
+  preview: boolean;
+  /** Forced dark (true) or light (false) for config.theme "auto"; null follows the system. */
+  dark: boolean | null;
 };
 
-let state: State = {
+export const initialState = (): State => ({
   open: false,
   view: "home",
   config: null,
@@ -40,27 +57,46 @@ let state: State = {
   lang: "en",
   handoff: {},
   awaiting: {},
-};
+  live: { replies: {}, closed: [] },
+  swapped: {},
+  ratings: {},
+  actions: {},
+  preview: false,
+  dark: null,
+});
 
-const subs = new Set<() => void>();
+export type Patch = Partial<State> | ((s: State) => Partial<State>);
 
-export function get(): State {
-  return state;
-}
+/** One widget's state. Each widget (the page's, or a dashboard preview) owns its own. */
+export class Store {
+  private state: State;
+  private subs = new Set<() => void>();
 
-export function set(patch: Partial<State> | ((s: State) => Partial<State>)) {
-  state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
-  subs.forEach((f) => f());
-}
+  constructor(init: Partial<State> = {}) {
+    this.state = { ...initialState(), ...init };
+  }
 
-export function useStore(): State {
-  const [, force] = useState(0);
-  useEffect(() => {
-    const f = () => force((n) => n + 1);
-    subs.add(f);
+  get(): State {
+    return this.state;
+  }
+
+  set(patch: Patch) {
+    const next = typeof patch === "function" ? patch(this.state) : patch;
+    if (!next || Object.keys(next).length === 0) return;
+    this.state = { ...this.state, ...next };
+    this.subs.forEach((f) => f());
+  }
+
+  subscribe(f: () => void) {
+    this.subs.add(f);
     return () => {
-      subs.delete(f);
+      this.subs.delete(f);
     };
-  }, []);
-  return state;
+  }
+}
+
+export function useStore(store: Store): State {
+  const [, force] = useState(0);
+  useEffect(() => store.subscribe(() => force((n) => n + 1)), [store]);
+  return store.get();
 }

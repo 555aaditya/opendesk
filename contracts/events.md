@@ -36,9 +36,11 @@ fetches them with `GET /v1/events?since=<last_seq>`.
    NATS subject **`od.events.<workspace_id>`** (JSON envelope as payload), sets
    `published_at`, and enqueues webhook deliveries.
 2. The Elixir gateway subscribes to `od.events.>` and pushes to Phoenix channels.
-3. Control messages on **`od.control.disconnect`**: `{"user_id": "...", "session_id": "..."?}`
+3. Live previews (the widget agent's streamed reply) go straight to NATS on **`od.live.<workspace_id>`**,
+   outside the outbox: no `seq`, not stored, not replayed, not sent to webhooks (`contracts/realtime.md`).
+4. Control messages on **`od.control.disconnect`**: `{"user_id": "...", "session_id": "..."?}`
    tells the gateway to close that user's sockets (logout, password change, removal).
-4. Rows are kept 7 days for replay, then pruned.
+5. Rows are kept 7 days for replay, then pruned.
 
 ## Catalog
 
@@ -50,7 +52,7 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 | `ticket.updated`         | agents     | `user:<assignee>` when assignee changes | `{ "ticket": Ticket, "changes": ["status","assignee_id","tags","fields",...] }` |
 | `ticket.deleted`         | agents     | —                                     | `{ "ticket_id": "..." }` |
 | `message.created`        | agents (note) / public (reply on chat ticket) / agents (reply on email ticket) | `contact:<wid>:<cid>` when public | `{ "ticket_id": "...", "message": Message }` |
-| `message.updated`        | agents     | —                                     | `{ "ticket_id": "...", "message": Message }` (delivery status) |
+| `message.updated`        | agents (public on chat tickets) | `contact:<wid>:<cid>` when public | `{ "ticket_id": "...", "message": Message }` (delivery status; the widget agent's action card status and visitor rating, `contracts/agent.md`) |
 | `activity.created`       | agents     | —                                     | `{ "ticket_id": "...", "activity": Activity }` |
 | `contact.created` / `contact.updated` / `contact.deleted` | agents | — | `{ "contact": Contact }` / `{ "contact_id" }`. `contact.updated` also when a picture is uploaded, removed or found automatically |
 | `company.created` / `company.updated` / `company.deleted` | agents | — | `{ "company": Company }` / `{ "company_id" }` |
@@ -62,6 +64,8 @@ fetches them with `GET /v1/events?since=<last_seq>`.
 | `member.added` / `member.updated` / `member.removed` | agents | `user:<uid>` | `{ "member": Member }` / `{ "user_id" }`. `member.updated` also on availability and picture changes (in every workspace of that user) |
 | `workspace.updated`      | agents     | —                                     | `{ "workspace": Workspace }` (name, settings, logo and brand images) |
 | `notification.created`   | agents     | `user:<uid>`                          | `{ "notification": Notification }` |
+| `ai_mcp_server.created` / `ai_mcp_server.updated` / `ai_mcp_server.deleted` | agents | — | `{ "mcp_server": McpServer }` / `{ "mcp_server_id" }` (`contracts/agent.md`). `updated` also when a sync changes the tools or the status |
+| `ai_knowledge.created` / `ai_knowledge.updated` / `ai_knowledge.deleted` | agents | — | `{ "source": KnowledgeSource }` / `{ "source_id" }` (`contracts/agent.md`). `updated` on every status change of a sync |
 | `billing.updated`        | agents     | —                                     | `Billing` (`contracts/billing.md`): plan, status, seats, limits, usage, credits, prices. Sent on subscription changes, seat syncs and credit purchases |
 | `saved_reply.*`, `view.*`, `automation.*`, `sla_policy.*`, `kb_article.*`, `kb_collection.*`, `team.*`, `webhook.*` | agents | — | `{ "<resource>": Obj }` / `{ "<resource>_id" }` |
 | `chat.typing` (not stored; gateway only) | public | `contact:<wid>:<cid>` | `{ "ticket_id": "...", "user": {"id","name"} }` |

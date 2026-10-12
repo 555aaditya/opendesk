@@ -1,6 +1,7 @@
 defmodule RealtimeWeb.TicketChannel do
   @moduledoc """
-  `ticket:<wid>:<ticket_id>`: Presence of agents on a ticket and typing.
+  `ticket:<wid>:<ticket_id>`: Presence of agents on a ticket, typing, and the
+  widget agent's live reply previews (`"live"`, from `Realtime.Fanout`).
   Joined by `ws` tokens with `kind=user` in the same workspace.
 
   Join params:

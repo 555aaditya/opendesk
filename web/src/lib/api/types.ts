@@ -52,7 +52,8 @@ export type Workspace = {
   images: WorkspaceImages;
   created_at: string;
 };
-export type WorkspaceImageSlot = "help_center_logo" | "help_center_favicon" | "widget_avatar" | "widget_launcher";
+/** `widget_bot` is the widget agent's picture; null means the Ollie mark. */
+export type WorkspaceImageSlot = "help_center_logo" | "help_center_favicon" | "widget_avatar" | "widget_launcher" | "widget_bot";
 export type WorkspaceImages = Record<WorkspaceImageSlot, string | null>;
 export type Membership = { workspace: Workspace; role: Role };
 export type Availability = "online" | "away" | "offline";
@@ -230,6 +231,8 @@ export type Ticket = {
   snoozed_until: string | null;
   last_message_at: string;
   last_customer_message_at: string | null;
+  /** The customer's first unanswered message; null once anyone (or the AI agent) replied. */
+  waiting_since: string | null;
   last_message_preview: string;
   message_count: number;
   spam: boolean;
@@ -266,10 +269,17 @@ export type Message = {
   attachments: Attachment[];
   delivery_status: DeliveryStatus;
   delivery_error: string;
-  /** An automatic answer from the widget answer bot (contracts/ai.md). */
+  /** A reply from the widget AI agent (contracts/agent.md). */
   ai: boolean;
+  /** An action the agent asks the visitor to confirm; set only on agent messages that carry one. */
+  ai_action?: AIAction | null;
+  /** The visitor's rating of an agent reply (agents only). */
+  ai_rating?: "up" | "down" | null;
   created_at: string;
 };
+/** contracts/agent.md "Visitor actions". */
+export type AIActionStatus = "pending" | "confirmed" | "declined" | "expired" | "failed";
+export type AIAction = { id: string; title: string; summary: string; status: AIActionStatus; tool: string };
 export type ActivityType =
   | "status_changed"
   | "priority_changed"
@@ -506,7 +516,8 @@ export type AuditLog = {
   ip: string;
   created_at: string;
 };
-export type NotificationType = "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff";
+export type NotificationType = "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached";
+/** `ai_cap_reached`: data `{cap}`, ticket null; the widget agent reached `widget_monthly_cap` (once a month, owners and admins). */
 export type Notification = {
   id: string;
   type: NotificationType;
@@ -587,11 +598,63 @@ export type ReportsOverview = {
 
 export type MailboxTest = { inbound: { ok: boolean; error: string }; outbound: { ok: boolean; error: string } };
 
+// The chat widget (contracts/api.md "Widget").
+export type WidgetTheme = "auto" | "light" | "dark";
+export type WidgetRadius = "square" | "soft" | "round";
 export type WidgetSettings = {
+  enabled: boolean;
+  /** Up to 300 chars, plain text with newlines. */
   greeting: string;
   require_email: boolean;
-  enabled: boolean;
+  /** At most 20. */
   allowed_origins: string[];
+  /** "#rrggbb", or "" for the workspace brand colour. */
+  color: string;
+  theme: WidgetTheme;
+  position: "right" | "left";
+  /** 0..200 px from the side. */
+  offset_x: number;
+  /** 0..200 px from the bottom. */
+  offset_y: number;
+  launcher: "icon" | "label";
+  /** Up to 24 chars; "" is the translated "Chat with us". */
+  launcher_label: string;
+  radius: WidgetRadius;
+  /** Up to 40 chars; "" is the workspace name. */
+  title: string;
+  /** Up to 80 chars; "" is the translated reply-time line. */
+  subtitle: string;
+  show_team: boolean;
+  /** At most 4 prompts of 2..60 chars. */
+  suggestions: string[];
+  sound: boolean;
+  /** The AI agent's name for visitors, up to 30 chars; "" is "Ollie". */
+  bot_name: string;
+};
+/** GET /v1/widget/config: what the widget renders. */
+export type WidgetConfig = {
+  workspace_name: string;
+  brand_color: string | null;
+  greeting: string;
+  help_center_url: string | null;
+  require_email: boolean;
+  locale: string | null;
+  avatar_url: string | null;
+  launcher_icon_url: string | null;
+  theme: WidgetTheme;
+  position: "right" | "left";
+  offset_x: number;
+  offset_y: number;
+  launcher: "icon" | "label";
+  launcher_label: string;
+  radius: WidgetRadius;
+  title: string;
+  subtitle: string;
+  suggestions: string[];
+  sound: boolean;
+  team: { name: string; avatar_url: string | null }[];
+  ai_answers: boolean;
+  bot: { name: string; avatar_url: string | null };
 };
 
 /** GET /v1/public/csat/{token}. `locale` is the workspace default ("" when not set). */
@@ -648,8 +711,12 @@ export type Billing = {
   credits: { unlimited: boolean; monthly: number; used: number; purchased: number; remaining: number; period_end: string };
   prices: { pro_month: Price | null; pro_year: Price | null; credit_pack: Price | null };
 };
-export type AIFeature = "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "kb_draft" | "assistant";
-/** GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive. */
+export type AIFeature =
+  | "summarize" | "rewrite" | "translate" | "triage" | "decide" | "answer_check" | "copilot" | "draft_reply" | "answer" | "playground" | "kb_draft" | "assistant";
+/**
+ * GET /v1/billing/usage (contracts/billing.md). `from`/`to` are RFC 3339; `to` is exclusive.
+ * Every credits value is a number with up to 3 decimals.
+ */
 export type BillingUsage = {
   from: string;
   to: string;
@@ -658,6 +725,8 @@ export type BillingUsage = {
   by_feature: { feature: AIFeature; credits: number; calls: number }[];
   by_day: { date: string; credits: number; calls: number; by_feature?: Partial<Record<AIFeature, number>> }[];
   by_member: { user: UserRef | null; credits: number; calls: number }[];
+  /** Older servers omit it. */
+  by_model?: { model: string; credits: number; calls: number; input_tokens: number; output_tokens: number }[];
 };
 
 // AI (contracts/ai.md).
@@ -672,14 +741,43 @@ export type AISettings = {
   tone: string;
   reply_language: "customer" | "workspace";
   instructions: string;
+  /** Drafts, summaries, copilot, KB drafts, Ollie; "" is the instance default. */
+  model?: string;
+  /** Rewrite, translate, LLM triage and decisions; "" is the instance fast model. */
+  fast_model?: string;
+  /** The widget agent; "" follows `model`. */
+  widget_model?: string;
+  /** What the widget agent should know, up to 4,000 chars. */
+  widget_instructions?: string;
+  /** 1..100, default 20: agent replies in one conversation before it hands off. */
+  widget_max_replies?: number;
+  /** At most 20 topics of 2..100 chars the agent declines. */
+  widget_blocked_topics?: string[];
+  /** Credits per calendar month the agent may use; 0 is no cap. */
+  widget_monthly_cap?: number;
+  /** Ask for an email before handing off when the visitor has none. Default true. */
+  widget_collect_email?: boolean;
 };
+/** A model the instance offers (GET /v1/ai/models). */
+export type AIModel = {
+  id: string;
+  name: string;
+  vendor: string;
+  context_length: number | null;
+  /** Credits per million tokens, markup included; null when the price is unknown. */
+  credits_per_mtok: { input: number; output: number } | null;
+};
+export type AIModels = { data: AIModel[]; default: string; fast: string };
 export type AIConfig = {
   enabled: boolean;
   provider: string;
   models: { default: string; fast: string };
   embeddings: boolean;
   features: AISettings;
+  /** Typical credits per call, also the minimum balance to start one. */
   costs: Partial<Record<AIFeature, number>>;
+  /** Credits follow real usage (model, thread and answer length). */
+  metered?: boolean;
   /** The name AI acts under everywhere ("Ollie"). */
   assistant_name?: string;
   /** The decision engine (Jev by TypeSafe, the LLM fallback, or none). */
@@ -735,3 +833,111 @@ export type Triage = {
 export type RewriteMode = "friendlier" | "more_formal" | "shorter" | "longer" | "fix_grammar" | "simplify";
 export type TranslateResult = { html?: string; text?: string; source_language: string };
 export type KBArticleDraft = { title: string; body_html: string; excerpt: string };
+
+// The widget AI agent (contracts/agent.md).
+
+/** A passage the agent answered from. */
+export type AgentSource = { kind: "article" | "page" | "file" | "snippet"; id: string; title: string; url: string | null };
+
+export type AgentReport = {
+  from: string;
+  to: string;
+  conversations: number;
+  replies: number;
+  resolved: number;
+  handoffs: number;
+  ratings: { up: number; down: number };
+  credits: number;
+  by_day: { date: string; conversations: number; replies: number; resolved: number; handoffs: number }[];
+  tools: { tool: string; calls: number; errors: number }[];
+  gaps: { question: string; count: number }[];
+};
+
+export type PlaygroundMessage = { role: "visitor" | "agent"; text: string };
+export type PlaygroundVisitor = { name?: string; email?: string; verified?: boolean; user_id?: string };
+export type PlaygroundSettings = Partial<Pick<AISettings, "widget_model" | "widget_instructions" | "widget_blocked_topics" | "tone" | "reply_language" | "instructions">>;
+export type PlaygroundBody = { messages: PlaygroundMessage[]; settings?: PlaygroundSettings; visitor?: PlaygroundVisitor };
+export type PlaygroundToolEvent = { name: string; status: "running" | "done" | "error"; summary: string };
+export type PlaygroundDone = {
+  text_html: string;
+  sources: AgentSource[];
+  handoff: boolean;
+  action: { tool: string; title: string; summary: string } | null;
+  credits: number;
+};
+export type PlaygroundEvent =
+  | { event: "delta"; data: { text: string } }
+  | { event: "tool"; data: PlaygroundToolEvent }
+  | { event: "sources"; data: { sources: AgentSource[] } }
+  | { event: "done"; data: PlaygroundDone };
+
+export type McpAuthKind = "none" | "bearer" | "header" | "oauth";
+export type McpTool = {
+  name: string;
+  title: string | null;
+  description: string;
+  input_schema: Record<string, unknown>;
+  read_only: boolean;
+  destructive: boolean;
+  enabled: boolean;
+  policy: "auto" | "confirm";
+  verified_only: boolean;
+};
+export type McpServerStatus = "connected" | "needs_auth" | "error" | "connecting";
+export type McpServer = {
+  id: string;
+  name: string;
+  slug: string;
+  url: string;
+  enabled: boolean;
+  auth: {
+    kind: McpAuthKind;
+    header_name?: string;
+    has_secret: boolean;
+    oauth?: { connected: boolean; scopes: string[]; expires_at: string | null };
+  };
+  status: McpServerStatus;
+  error: string | null;
+  server_info: { name: string; version: string } | null;
+  tools: McpTool[];
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+/** Secrets are write-only: omit them to keep the stored one. */
+export type McpAuthInput = { kind: McpAuthKind; token?: string; header_name?: string; header_value?: string };
+export type McpToolPatch = Partial<Pick<McpTool, "enabled" | "policy" | "verified_only">>;
+export type McpServerPatch = { name?: string; url?: string; enabled?: boolean; auth?: McpAuthInput; tools?: Record<string, McpToolPatch> };
+export type McpToolResult = { content: string; is_error: boolean; ms: number };
+
+export type KnowledgeKind = "website" | "file" | "snippet";
+export type KnowledgeStatus = "pending" | "syncing" | "ready" | "error";
+export type KnowledgeWebsite = { url: string; max_pages: number; include: string[]; exclude: string[]; recrawl: "off" | "weekly" };
+export type KnowledgeSource = {
+  id: string;
+  kind: KnowledgeKind;
+  name: string;
+  status: KnowledgeStatus;
+  error: string | null;
+  enabled: boolean;
+  website?: KnowledgeWebsite;
+  file?: { filename: string; content_type: string; size_bytes: number };
+  snippet?: { question: string; answer: string };
+  doc_count: number;
+  char_count: number;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type KnowledgeDoc = { id: string; title: string; url: string | null; chars: number; updated_at: string };
+export type KnowledgeCreate =
+  | { kind: "website"; name?: string; website: Partial<KnowledgeWebsite> & { url: string } }
+  | { kind: "snippet"; name?: string; snippet: { question: string; answer: string } };
+export type KnowledgePatch = { name?: string; enabled?: boolean; website?: Partial<KnowledgeWebsite>; snippet?: { question: string; answer: string } };
+
+/** "live" pushes on the ticket channel while the widget agent writes (contracts/realtime.md). */
+export type LiveEvent =
+  | { type: "ai.reply.started"; data: { reply_id: string; ticket_id: string; bot: { name: string } } }
+  | { type: "ai.reply.delta"; data: { reply_id: string; ticket_id: string; text: string } }
+  | { type: "ai.reply.tool"; data: { reply_id: string; ticket_id: string; tool: string; status: "running" | "done" | "error" } }
+  | { type: "ai.reply.ended"; data: { reply_id: string; ticket_id: string; message_id: string | null; handoff: boolean; action_id: string | null } };

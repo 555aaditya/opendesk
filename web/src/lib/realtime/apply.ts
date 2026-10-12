@@ -7,6 +7,8 @@ import type {
   Activity,
   Contact,
   Envelope,
+  KnowledgeSource,
+  McpServer,
   Member,
   Message,
   Notification,
@@ -168,6 +170,36 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       ctx.onNotification?.(n);
       return;
     }
+  }
+
+  if (resource === "ai_knowledge") {
+    if (verb === "deleted") {
+      const id = (d.source_id ?? d.knowledge_source_id ?? d.id) as string | undefined;
+      if (id) {
+        removeFromList(qc, qk.knowledge, id);
+        qc.removeQueries({ queryKey: qk.knowledgeDocs(id) });
+      }
+    } else {
+      const src = d.source as KnowledgeSource | undefined;
+      if (!src) return void qc.invalidateQueries({ queryKey: qk.knowledge, exact: true });
+      const before = qc.getQueryData<KnowledgeSource[]>(qk.knowledge)?.find((x) => x.id === src.id);
+      upsertInList(qc, qk.knowledge, src, { prepend: true });
+      // A finished sync changes the documents.
+      if (before && before.status !== src.status && src.status === "ready") void qc.invalidateQueries({ queryKey: qk.knowledgeDocs(src.id) });
+    }
+    return;
+  }
+
+  if (resource === "ai_mcp_server") {
+    if (verb === "deleted") {
+      const id = (d.mcp_server_id ?? d.id) as string | undefined;
+      if (id) removeFromList(qc, qk.mcpServers, id);
+    } else {
+      const srv = d.mcp_server as McpServer | undefined;
+      if (srv) upsertInList(qc, qk.mcpServers, srv);
+      else void qc.invalidateQueries({ queryKey: qk.mcpServers });
+    }
+    return;
   }
 
   if (resource === "contact") {

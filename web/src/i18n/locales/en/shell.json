@@ -12,7 +12,13 @@
     "createView": "Create a view",
     "collapse": "Collapse",
     "expand": "Expand sidebar",
-    "open": "Open navigation"
+    "open": "Open navigation",
+    "waiting_one": "{{count}} customer waiting in live chat, longest {{time}}. Open the conversation.",
+    "waiting_other": "{{count}} customers waiting in live chat, longest {{time}}. Open the longest wait.",
+    "waitingShort_one": "{{count}} waiting in chat",
+    "waitingShort_other": "{{count}} waiting in chat",
+    "waitingCount_one": "{{count}} live chat waiting for a reply",
+    "waitingCount_other": "{{count}} live chats waiting for a reply"
   },
   "workspaces": {
     "title": "Workspaces",
@@ -59,7 +65,8 @@
       "sla": "SLA breached",
       "handoff": "{{who}} asked for a person",
       "handoffAnon": "A customer asked for a person",
-      "other": "Notification"
+      "other": "Notification",
+      "capReached": "Ollie reached this month's agent credit cap"
     }
   },
   "shortcuts": {
@@ -72,6 +79,8 @@
     "notFoundTitle": "Not found",
     "notFoundBody": "It may have been deleted, or you don't have access.",
     "errorTitle": "This page couldn't load",
+    "chunkBody": "Part of the app didn't download, often because a new version was released. Reload to get it.",
+    "reload": "Reload",
     "retry": "Try again",
     "toInbox": "Go to inbox",
     "pageNotFound": "Page not found",

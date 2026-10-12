@@ -69,7 +69,57 @@ type widgetConfig struct {
 		Locale          string        `json:"locale" doc:"Workspace default language (BCP 47), empty when not set"`
 		AvatarURL       domain.Avatar `json:"avatar_url" doc:"The widget brand avatar, else the workspace logo"`
 		LauncherIconURL domain.Avatar `json:"launcher_icon_url"`
+		Theme           string        `json:"theme" enum:"auto,light,dark"`
+		Position        string        `json:"position" enum:"right,left"`
+		OffsetX         int           `json:"offset_x"`
+		OffsetY         int           `json:"offset_y"`
+		Launcher        string        `json:"launcher" enum:"icon,label"`
+		LauncherLabel   string        `json:"launcher_label"`
+		Radius          string        `json:"radius" enum:"square,soft,round"`
+		Title           string        `json:"title"`
+		Subtitle        string        `json:"subtitle"`
+		Suggestions     []string      `json:"suggestions"`
+		Sound           bool          `json:"sound"`
+		Team            []teamFace    `json:"team" doc:"Up to 3 team members, available first; first names only"`
+		AIAnswers       bool          `json:"ai_answers" doc:"The AI agent handles new conversations"`
+		Bot             struct {
+			Name      string        `json:"name"`
+			AvatarURL domain.Avatar `json:"avatar_url" doc:"null = the Ollie mark"`
+		} `json:"bot"`
 	}
+}
+
+type teamFace struct {
+	Name      string        `json:"name"`
+	AvatarURL domain.Avatar `json:"avatar_url"`
+}
+
+// teamFaces returns up to 3 members who can reply, available first: first names and
+// pictures only.
+func teamFaces(ctx context.Context, q db.Querier, wid uuid.UUID) ([]teamFace, error) {
+	rows, err := q.Query(ctx, `SELECT u.name, u.avatar_url FROM members m JOIN users u ON u.id = m.user_id
+		WHERE m.workspace_id = $1 AND m.role <> 'viewer'
+		ORDER BY CASE m.availability WHEN 'online' THEN 0 WHEN 'away' THEN 1 ELSE 2 END, u.avatar_url IS NULL, m.created_at
+		LIMIT 3`, wid)
+	if err != nil {
+		return nil, err
+	}
+	out := []teamFace{}
+	_, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (struct{}, error) {
+		var name string
+		var avatar *string
+		if err := r.Scan(&name, &avatar); err != nil {
+			return struct{}{}, err
+		}
+		first, _, _ := strings.Cut(strings.TrimSpace(name), " ")
+		face := teamFace{Name: first}
+		if avatar != nil {
+			face.AvatarURL = domain.Avatar(*avatar)
+		}
+		out = append(out, face)
+		return struct{}{}, nil
+	})
+	return out, err
 }
 
 type widgetSessionInput struct {
@@ -121,6 +171,25 @@ func (h *handler) registerPublic(api huma.API) {
 				out.Body.AvatarURL = w.Logo
 			}
 			out.Body.LauncherIconURL = domain.Avatar(w.Brand["widget_launcher"])
+			if hexColor.MatchString(ws.Color) {
+				out.Body.BrandColor = ws.Color
+			}
+			out.Body.Theme, out.Body.Position, out.Body.OffsetX, out.Body.OffsetY = ws.Theme, ws.Position, ws.OffsetX, ws.OffsetY
+			out.Body.Launcher, out.Body.LauncherLabel, out.Body.Radius = ws.Launcher, ws.LauncherLabel, ws.Radius
+			out.Body.Title, out.Body.Subtitle, out.Body.Suggestions, out.Body.Sound = ws.Title, ws.Subtitle, ws.Suggestions, ws.Sound
+			out.Body.Team = []teamFace{}
+			if ws.ShowTeam {
+				if out.Body.Team, err = teamFaces(ctx, h.d.DB.Pool, w.ID); err != nil {
+					return nil, httpx.Wrap(err)
+				}
+			}
+			ai := w.Settings.AI()
+			out.Body.AIAnswers = h.d.Cfg.AIEnabled() && ai.Enabled && ai.WidgetAnswers
+			out.Body.Bot.Name = ws.BotName
+			if out.Body.Bot.Name == "" {
+				out.Body.Bot.Name = "Ollie"
+			}
+			out.Body.Bot.AvatarURL = domain.Avatar(w.Brand["widget_bot"])
 			if w.Settings.HelpCenterEnabled {
 				out.Body.HelpCenterURL = h.d.Cfg.AppURL + "/help/" + w.Slug
 			}

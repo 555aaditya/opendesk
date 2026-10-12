@@ -55,6 +55,7 @@ export function ImageUpload({
   className,
   hint = true,
   compact,
+  placeholder,
 }: {
   value?: string | null;
   /** Whose picture: initials, the identity hue and the copy use it. */
@@ -79,6 +80,8 @@ export function ImageUpload({
   hint?: boolean;
   /** Only the picture (drawer headers): a click opens a small menu, errors arrive as toasts. */
   compact?: boolean;
+  /** Shown instead of initials while there is no picture (e.g. the Ollie mark for the agent). */
+  placeholder?: ReactNode;
 }) {
   const { t } = useTranslation("setup");
   const confirm = useConfirm();
@@ -215,6 +218,10 @@ export function ImageUpload({
           // Logos: fitted, not cropped to initials.
           <span style={rounded} className="flex size-full items-center justify-center overflow-hidden border border-line bg-sunken">
             {src ? <img src={src} alt="" className="size-full object-contain p-1.5" /> : <ImageUp className="size-4 text-fg-4" />}
+          </span>
+        ) : !src && placeholder ? (
+          <span style={rounded} className="flex size-full items-center justify-center overflow-hidden border border-line bg-sunken">
+            {placeholder}
           </span>
         ) : (
           <Avatar name={name} src={src} size={z.avatar} square={square} className={cn(z.extra, size === "sm" && "rounded-md")} />

@@ -175,6 +175,34 @@ export function sse(ctx: Ctx, chunks: string[], final: unknown, delayMs = 35): R
   return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
 }
 
+export type Emit = (event: string, data: unknown) => void;
+
+/** True when the caller asked for text/event-stream. */
+export function wantsStream(ctx: Ctx): boolean {
+  return (ctx.headers.get("Accept") ?? "").includes("text/event-stream");
+}
+
+/**
+ * A text/event-stream with any events, in order. A failure after the stream
+ * started is sent as `event: error` with the problem object, then it ends.
+ */
+export function eventStream(run: (emit: Emit, wait: (ms: number) => Promise<unknown>) => Promise<void>): Response {
+  const enc = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit: Emit = (event, data) => controller.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      try {
+        await run(emit, sleep);
+      } catch (e) {
+        const err = e instanceof HttpError ? e : new HttpError(500, "server_error", "Internal error in mock handler");
+        emit("error", { status: err.status, code: err.code, detail: err.detail });
+      }
+      controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+}
+
 /** Split text into word-ish chunks for streaming. */
 export function chunk(text: string, size = 3): string[] {
   const words = text.split(/(\s+)/);

@@ -28,6 +28,8 @@ import { q, qk } from "@/lib/queries";
 import { cn } from "@/lib/cn";
 import { AI_TONE, SERIES, tone, toneFor, toneVar, type Tone } from "@/lib/tones";
 import { IconTile, SummaryStrip } from "@/components/settings2/bits";
+import { modelName, VendorMark } from "@/components/ai/ModelPicker";
+import { useAI } from "@/lib/ai";
 
 export default function BillingPage() {
   const { t } = useTranslation("billing");
@@ -379,7 +381,7 @@ function Credits({ b }: { b: Billing }) {
               <Sparkles strokeWidth={1.75} />
             </IconTile>
             <div className="flex items-baseline gap-2">
-              <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{fmt.num(c.remaining)}</span>
+              <span className="text-[28px] font-semibold leading-none tracking-[-0.03em] tabular-nums">{fmt.credits(c.remaining)}</span>
               <span className="text-[12.5px] text-fg-3">{t("credits.remaining")}</span>
               {c.low && <span className="size-1.5 self-center animate-pulse-soft rounded-full bg-tone-amber-solid motion-reduce:animate-none" aria-hidden />}
             </div>
@@ -387,7 +389,7 @@ function Credits({ b }: { b: Billing }) {
           <div className="mt-4">
             <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[12px]">
               <span className="text-fg-2">{t("credits.monthly")}</span>
-              <span className="mono text-fg-3 tabular-nums">{t("credits.monthlyUsed", { used: fmt.num(c.monthlyUsed), total: fmt.num(c.monthly) })}</span>
+              <span className="mono text-fg-3 tabular-nums">{t("credits.monthlyUsed", { used: fmt.credits(c.monthlyUsed), total: fmt.credits(c.monthly) })}</span>
             </div>
             <Meter value={c.monthlyUsed} max={c.monthly} label={t("credits.meterLabel", { used: c.monthlyUsed, total: c.monthly })} className="h-1.5" />
             <div className="mono mt-1.5 text-[11px] text-fg-4">{t("credits.resets", { date: fmt.date(b.credits.period_end) })}</div>
@@ -395,7 +397,7 @@ function Credits({ b }: { b: Billing }) {
           {c.low && <p className="mt-3 text-[12.5px] text-tone-amber">{t("credits.low")}</p>}
         </div>
         <div className="flex gap-6 sm:flex-col sm:gap-3 sm:border-l sm:border-line-soft sm:pl-6">
-          <Fact label={t("credits.purchased")} value={fmt.num(c.purchased)} hint={t("credits.purchasedHint")} />
+          <Fact label={t("credits.purchased")} value={fmt.credits(c.purchased)} hint={t("credits.purchasedHint")} />
         </div>
       </div>
       {canManage && pack && (
@@ -456,7 +458,7 @@ function SelfHosted({ b }: { b: Billing }) {
           { label: t("selfHosted.usedMembers"), value: fmt.num(b.usage.members), hint: t("selfHosted.noLimit") },
           {
             label: t("selfHosted.usedCredits"),
-            value: fmt.num(b.credits.used),
+            value: fmt.credits(b.credits.used),
             tone: AI_TONE,
             hint: b.credits.period_end ? t("credits.resets", { date: fmt.date(b.credits.period_end) }) : t("selfHosted.noLimit"),
           },
@@ -476,6 +478,8 @@ function Usage() {
   const [asTable, setAsTable] = useState(false);
   const { data, isPending, isError, error, refetch } = useQuery({ ...q.billingUsage(range), enabled: canManage, retry: (n, e) => !isApiError(e, "billing_disabled") && n < 2 });
   const stacked = useMemo(() => (data ? stackDays(data, range) : null), [data, range]);
+  const metered = !!useAI().config?.metered;
+  const { data: models } = useQuery({ ...q.aiModels(), enabled: canManage && metered });
 
   if (!canManage) return null;
   // Usage is served on every instance (self-hosted too); an older server may answer 404 billing_disabled.
@@ -485,7 +489,7 @@ function Usage() {
   return (
     <Section
       title={t("usage.title")}
-      description={t("usage.description")}
+      description={metered ? `${t("usage.description")} ${t("usage.metered")}` : t("usage.description")}
       actions={<RangePicker value={range} onChange={setRange} />}
       flush
     >
@@ -505,7 +509,7 @@ function Usage() {
               <div className="flex items-baseline gap-5">
                 <div>
                   <div className="label-caps mb-1">{t("usage.total")}</div>
-                  <div className="text-[20px] font-semibold leading-6 tracking-[-0.02em] tabular-nums">{fmt.num(total)}</div>
+                  <div className="text-[20px] font-semibold leading-6 tracking-[-0.02em] tabular-nums">{fmt.credits(total)}</div>
                 </div>
                 <div>
                   <div className="label-caps mb-1">{t("usage.calls")}</div>
@@ -553,6 +557,25 @@ function Usage() {
               total={total}
             />
           </div>
+          {data.by_model && data.by_model.length > 0 && (
+            <Breakdown
+              title={t("usage.byModel")}
+              className="border-t border-line-soft"
+              rows={data.by_model.map((m, i) => {
+                const known = models?.data.find((x) => x.id === m.model);
+                const vendor = known?.vendor || (m.model.includes("/") ? m.model.split("/")[0] : "");
+                return {
+                  key: m.model,
+                  label: m.model === "jev" ? t("usage.decisionModel") : modelName(m.model, models?.data),
+                  icon: <VendorMark vendor={m.model === "jev" ? "" : vendor} className="size-4 text-[9px]" />,
+                  color: toneVar(SERIES[i % SERIES.length]),
+                  calls: m.calls,
+                  credits: m.credits,
+                };
+              })}
+              total={total}
+            />
+          )}
         </>
       )}
     </Section>
@@ -602,7 +625,7 @@ function Breakdown({
                 </div>
               </td>
               <td className="mono py-1.5 text-right align-top tabular-nums text-fg-4">{fmt.num(r.calls)}</td>
-              <td className="mono py-1.5 text-right align-top tabular-nums">{fmt.num(r.credits)}</td>
+              <td className="mono py-1.5 text-right align-top tabular-nums">{fmt.credits(r.credits)}</td>
             </tr>
           ))}
         </tbody>

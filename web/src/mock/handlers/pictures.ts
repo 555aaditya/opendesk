@@ -27,7 +27,7 @@ import { memberOut } from "./workspace";
 
 const MAX_BYTES = 5 << 20;
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-const SLOTS: ("logo" | WorkspaceImageSlot)[] = ["logo", "help_center_logo", "help_center_favicon", "widget_avatar", "widget_launcher"];
+const SLOTS: ("logo" | WorkspaceImageSlot)[] = ["logo", "help_center_logo", "help_center_favicon", "widget_avatar", "widget_launcher", "widget_bot"];
 const MODES: AssignMode[] = ["none", "round_robin", "load_balanced"];
 const AVAILABILITY: Availability[] = ["online", "away", "offline"];
 const WEEKDAYS: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -252,7 +252,7 @@ export function registerPictures() {
   put("/v1/workspace/images/:slot", async (ctx) => {
     requireRole(ctx.ws, "admin");
     const slot = ctx.params.slot as (typeof SLOTS)[number];
-    if (!SLOTS.includes(slot)) throw invalid("slot must be logo, help_center_logo, help_center_favicon, widget_avatar or widget_launcher");
+    if (!SLOTS.includes(slot)) throw invalid("slot must be logo, help_center_logo, help_center_favicon, widget_avatar, widget_launcher or widget_bot");
     const url = await readUpload(ctx);
     const w = ctx.ws.workspace;
     if (slot === "logo") {

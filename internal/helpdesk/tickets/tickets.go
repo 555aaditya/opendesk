@@ -676,6 +676,9 @@ func mergeTickets(ctx context.Context, tx pgx.Tx, d *deps.Deps, wid, src, dst uu
 	if _, err := tx.Exec(ctx, `UPDATE tickets t SET
 		message_count = s.n, last_message_at = COALESCE(s.last_at, t.last_message_at),
 		last_customer_message_at = s.last_customer,
+		waiting_since = (SELECT min(m.created_at) FROM messages m WHERE m.workspace_id = $1 AND m.ticket_id = $2
+			AND m.kind = 'reply' AND m.direction = 'inbound' AND m.created_at > COALESCE((SELECT max(o.created_at) FROM messages o
+			WHERE o.workspace_id = $1 AND o.ticket_id = $2 AND o.kind = 'reply' AND o.direction = 'outbound'), '-infinity')),
 		last_message_preview = COALESCE(s.preview, t.last_message_preview),
 		first_responded_at = LEAST(t.first_responded_at, (SELECT first_responded_at FROM tickets WHERE id = $3)),
 		updated_at = now()

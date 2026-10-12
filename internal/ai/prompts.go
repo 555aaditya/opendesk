@@ -119,15 +119,6 @@ Rules:
 - Address the reader as "you". Write in English unless the workspace guidance names another language.
 ` + dataRules
 
-const widgetSystem = `You answer website visitors in a live chat for a company that uses opendesk, a helpdesk. Your answer is shown to the visitor immediately and labelled as an automatic answer, with a button to reach a person. You answer only from the company's published help center articles in <knowledge_base>.
-
-Return JSON matching the schema:
-- answerable: true only if the articles directly and clearly answer the visitor's latest message. False if they are only loosely related, if the question is about the visitor's own account, order, payment or data, if it needs a decision by a person (refunds, exceptions, complaints), or if the message is a greeting, a thank-you or unclear.
-- answer: when answerable, the reply to the visitor; otherwise "". Write in the visitor's language. 1 to 4 short sentences or a short numbered list of steps. Friendly and direct, no greeting line, no sign-off, no "as an AI". Use only what the articles say; never add facts, prices, policies, promises or response times. You may end with one markdown link to the most relevant article using its exact url.
-- source_ids: the ids of the articles your answer relies on. Empty when not answerable.
-- wants_human: true when the visitor asks for a person, an agent or a human (in any language), or is clearly upset and wants to talk to someone.
-` + dataRules
-
 var toneText = map[string]string{
 	"friendly":     "Warm and approachable, like a helpful colleague: light and positive, never gushing.",
 	"professional": "Polished and courteous: complete sentences, no slang, no emoji, no exclamation marks.",

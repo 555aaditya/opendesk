@@ -131,3 +131,47 @@ export function avatarFor(_name: string): string {
   // Empty string: the app renders monochrome initials.
   return "";
 }
+
+/** Control characters other than newline and tab. */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_ALL = /[\u0000-\u001f\u007f]/;
+
+/** True when `s` holds a control character (newline and tab allowed when `multiline`). */
+export function hasControl(s: string, multiline = false): boolean {
+  return (multiline ? CONTROL : CONTROL_ALL).test(s);
+}
+
+/** Strips control characters other than newline and tab. */
+export function stripControl(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+}
+
+/** One line of plain text: trimmed, whitespace runs collapsed. */
+export function oneLine(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+/** A tiny markdown renderer for mock AI output: paragraphs, lists, bold and links. Drops [n] citation markers. */
+export function markdownToHtml(md: string): string {
+  const inline = (s: string) =>
+    escapeHtml(s)
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g, '<a href="$2">$1</a>');
+  return stripCitations(md)
+    .split(/\n{2,}/)
+    .map((block) => {
+      const lines = block.split("\n").filter((l) => l.trim());
+      if (lines.length && lines.every((l) => /^\s*[-*] /.test(l))) return `<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*[-*] /, ""))}</li>`).join("")}</ul>`;
+      if (lines.length && lines.every((l) => /^\s*\d+\. /.test(l))) return `<ol>${lines.map((l) => `<li>${inline(l.replace(/^\s*\d+\. /, ""))}</li>`).join("")}</ol>`;
+      return lines.length ? `<p>${lines.map(inline).join("<br>")}</p>` : "";
+    })
+    .join("");
+}
+
+/** Removes `[n]` citation markers and the space before them. */
+export function stripCitations(s: string): string {
+  return s.replace(/ ?\[\d+\]/g, "");
+}

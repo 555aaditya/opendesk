@@ -31,11 +31,22 @@ type AISettings struct {
 	Tone          string `json:"tone"`
 	ReplyLanguage string `json:"reply_language" enum:"customer,workspace"`
 	Instructions  string `json:"instructions"`
+	// Models (contracts/ai.md "Models"); "" = the instance default.
+	Model       string `json:"model"`
+	FastModel   string `json:"fast_model"`
+	WidgetModel string `json:"widget_model"`
+	// The widget agent (contracts/agent.md).
+	WidgetInstructions  string   `json:"widget_instructions"`
+	WidgetMaxReplies    int      `json:"widget_max_replies"`
+	WidgetBlockedTopics []string `json:"widget_blocked_topics"`
+	WidgetMonthlyCap    int      `json:"widget_monthly_cap" doc:"Credits per month the widget agent may use; 0 = no cap"`
+	WidgetCollectEmail  bool     `json:"widget_collect_email"`
 }
 
 // DefaultAISettings apply to keys a workspace has not set.
 func DefaultAISettings() AISettings {
-	return AISettings{Enabled: true, Assistant: true, Tone: "friendly", ReplyLanguage: "customer"}
+	return AISettings{Enabled: true, Assistant: true, Tone: "friendly", ReplyLanguage: "customer",
+		WidgetMaxReplies: DefaultWidgetMaxReplies, WidgetBlockedTopics: []string{}, WidgetCollectEmail: true}
 }
 
 // AI returns the workspace's AI settings with defaults for unset keys.
@@ -57,8 +68,23 @@ func (s Settings) AI() AISettings {
 			field("tone", &a.Tone)
 			field("reply_language", &a.ReplyLanguage)
 			field("instructions", &a.Instructions)
+			field("model", &a.Model)
+			field("fast_model", &a.FastModel)
+			field("widget_model", &a.WidgetModel)
+			field("widget_instructions", &a.WidgetInstructions)
+			field("widget_max_replies", &a.WidgetMaxReplies)
+			field("widget_blocked_topics", &a.WidgetBlockedTopics)
+			field("widget_monthly_cap", &a.WidgetMonthlyCap)
+			field("widget_collect_email", &a.WidgetCollectEmail)
 		}
 	}
+	if a.WidgetMaxReplies < 1 || a.WidgetMaxReplies > 100 {
+		a.WidgetMaxReplies = DefaultWidgetMaxReplies
+	}
+	if a.WidgetBlockedTopics == nil {
+		a.WidgetBlockedTopics = []string{}
+	}
+	a.WidgetMonthlyCap = max(a.WidgetMonthlyCap, 0)
 	if a.ReplyLanguage != "workspace" {
 		a.ReplyLanguage = "customer"
 	}
@@ -78,13 +104,27 @@ type AISettingsPatch struct {
 	Tone          *string `json:"tone,omitempty" maxLength:"200" doc:"friendly, professional, concise, or free text up to 200 characters"`
 	ReplyLanguage *string `json:"reply_language,omitempty" enum:"customer,workspace"`
 	Instructions  *string `json:"instructions,omitempty" maxLength:"2000"`
+	Model         *string `json:"model,omitempty" maxLength:"200" doc:"\"\" or an id from GET /v1/ai/models"`
+	FastModel     *string `json:"fast_model,omitempty" maxLength:"200"`
+	WidgetModel   *string `json:"widget_model,omitempty" maxLength:"200"`
+
+	WidgetInstructions  *string   `json:"widget_instructions,omitempty" maxLength:"4000"`
+	WidgetMaxReplies    *int      `json:"widget_max_replies,omitempty" minimum:"1" maximum:"100"`
+	WidgetBlockedTopics *[]string `json:"widget_blocked_topics,omitempty" maxItems:"20"`
+	WidgetMonthlyCap    *int      `json:"widget_monthly_cap,omitempty" minimum:"0" maximum:"1000000"`
+	WidgetCollectEmail  *bool     `json:"widget_collect_email,omitempty"`
 }
+
+// DefaultWidgetMaxReplies is how many replies the widget agent gives in one
+// conversation before it hands off, unless the workspace chose otherwise.
+const DefaultWidgetMaxReplies = 20
 
 // AITones are the named tones; any other value is free text.
 var AITones = []string{"friendly", "professional", "concise"}
 
-// ValidateAIPatch checks a settings.ai patch and returns the keys to merge.
-func ValidateAIPatch(p AISettingsPatch) (map[string]any, error) {
+// ValidateAIPatch checks a settings.ai patch and returns the keys to merge. allowedModel
+// reports whether a model id is one the instance offers.
+func ValidateAIPatch(p AISettingsPatch, allowedModel func(string) bool) (map[string]any, error) {
 	out := map[string]any{}
 	if p.Enabled != nil {
 		out["enabled"] = *p.Enabled
@@ -133,7 +173,70 @@ func ValidateAIPatch(p AISettingsPatch) (map[string]any, error) {
 		}
 		out["instructions"] = s
 	}
+	for key, v := range map[string]*string{"model": p.Model, "fast_model": p.FastModel, "widget_model": p.WidgetModel} {
+		if v == nil {
+			continue
+		}
+		m := strings.TrimSpace(*v)
+		if m != "" && (allowedModel == nil || !allowedModel(m)) {
+			return nil, httpx.Validation(key + " must be one of the models in GET /v1/ai/models")
+		}
+		out[key] = m
+	}
+	if p.WidgetInstructions != nil {
+		s := cleanInstructions(*p.WidgetInstructions)
+		if utf8.RuneCountInString(s) > 4000 {
+			return nil, httpx.Validation("widget_instructions must be 4000 characters or less")
+		}
+		out["widget_instructions"] = s
+	}
+	if p.WidgetMaxReplies != nil {
+		if *p.WidgetMaxReplies < 1 || *p.WidgetMaxReplies > 100 {
+			return nil, httpx.Validation("widget_max_replies must be from 1 to 100")
+		}
+		out["widget_max_replies"] = *p.WidgetMaxReplies
+	}
+	if p.WidgetBlockedTopics != nil {
+		topics := []string{}
+		for _, t := range *p.WidgetBlockedTopics {
+			t = strings.Join(strings.Fields(t), " ")
+			if t == "" {
+				continue
+			}
+			if n := utf8.RuneCountInString(t); n < 2 || n > 100 || strings.ContainsAny(t, "<>`") || strings.IndexFunc(t, unicode.IsControl) >= 0 {
+				return nil, httpx.Validation("each widget_blocked_topics entry must be 2 to 100 characters of plain text")
+			}
+			if !slices.ContainsFunc(topics, func(x string) bool { return strings.EqualFold(x, t) }) {
+				topics = append(topics, t)
+			}
+		}
+		if len(topics) > 20 {
+			return nil, httpx.Validation("at most 20 widget_blocked_topics")
+		}
+		out["widget_blocked_topics"] = topics
+	}
+	if p.WidgetMonthlyCap != nil {
+		if *p.WidgetMonthlyCap < 0 || *p.WidgetMonthlyCap > 1_000_000 {
+			return nil, httpx.Validation("widget_monthly_cap must be from 0 to 1000000")
+		}
+		out["widget_monthly_cap"] = *p.WidgetMonthlyCap
+	}
+	if p.WidgetCollectEmail != nil {
+		out["widget_collect_email"] = *p.WidgetCollectEmail
+	}
 	return out, nil
+}
+
+// cleanInstructions trims guidance text and drops control characters other than
+// newline and tab.
+func cleanInstructions(s string) string {
+	s = strings.TrimSpace(strings.ReplaceAll(strings.ToValidUTF8(s, ""), "\r\n", "\n"))
+	return strings.Map(func(r rune) rune {
+		if r != '\n' && r != '\t' && unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // AIHooks are AI features the helpdesk calls without importing internal/ai, which
@@ -180,7 +283,7 @@ func EnqueueAIEmbed(ctx context.Context, tx pgx.Tx, jc domain.Jobs, cfg *config.
 
 // EnqueueAIWidgetAnswer queues the widget answer bot for a visitor message when the
 // workspace turned it on. It only inserts a job; the request never waits for the model.
-func EnqueueAIWidgetAnswer(ctx context.Context, tx pgx.Tx, jc domain.Jobs, cfg *config.Config, wid, tid, mid uuid.UUID) error {
+func EnqueueAIWidgetAnswer(ctx context.Context, tx pgx.Tx, jc domain.Jobs, cfg *config.Config, wid, tid, mid uuid.UUID, pageURL string) error {
 	if jc == nil || cfg == nil || !cfg.AIEnabled() {
 		return nil
 	}
@@ -191,8 +294,11 @@ func EnqueueAIWidgetAnswer(ctx context.Context, tx pgx.Tx, jc domain.Jobs, cfg *
 	if a := s.AI(); !a.Enabled || !a.WidgetAnswers {
 		return nil
 	}
-	_, err = jc.InsertTx(ctx, tx, jobs.AIWidgetAnswerArgs{WorkspaceID: wid, TicketID: tid, MessageID: mid},
-		&river.InsertOpts{MaxAttempts: 2, UniqueOpts: river.UniqueOpts{ByArgs: true}})
+	// A short delay lets a burst of quick messages get one reply about all of them: the
+	// job of an earlier message sees it is no longer the latest and does nothing.
+	_, err = jc.InsertTx(ctx, tx, jobs.AIWidgetAnswerArgs{WorkspaceID: wid, TicketID: tid, MessageID: mid, PageURL: pageURL},
+		&river.InsertOpts{MaxAttempts: 2, ScheduledAt: time.Now().Add(1500 * time.Millisecond),
+			UniqueOpts: river.UniqueOpts{ByArgs: true}})
 	return err
 }
 

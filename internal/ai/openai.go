@@ -13,38 +13,91 @@ import (
 )
 
 // OpenAI calls any OpenAI-compatible /chat/completions endpoint (OpenAI, Azure OpenAI,
-// Ollama, vLLM, LM Studio) over plain HTTP.
+// Ollama, vLLM, LM Studio, OpenRouter) over plain HTTP.
 type OpenAI struct {
+	name    string
 	baseURL string
 	apiKey  string
 	http    *http.Client
 	// jsonMode is the strongest response_format the endpoint accepted: 2 json_schema,
 	// 1 json_object, 0 none. It steps down when a server rejects a mode.
 	jsonMode atomic.Int32
+	// headers are sent with every request (OpenRouter attribution).
+	headers map[string]string
+	// extra is merged into every request body (OpenRouter provider routing).
+	extra map[string]any
+	// cacheParts sends system blocks as content parts with cache_control markers, which
+	// OpenRouter forwards to models that support prompt caching.
+	cacheParts bool
 }
 
 // NewOpenAI returns an OpenAI-compatible provider for baseURL (e.g. https://api.openai.com/v1).
 func NewOpenAI(baseURL, apiKey string) *OpenAI {
-	o := &OpenAI{baseURL: strings.TrimRight(baseURL, "/"), apiKey: apiKey, http: newHTTPClient()}
+	o := &OpenAI{name: "openai", baseURL: strings.TrimRight(baseURL, "/"), apiKey: apiKey, http: newHTTPClient()}
 	o.jsonMode.Store(2)
 	return o
 }
 
-func (o *OpenAI) Name() string { return "openai" }
+// NewOpenRouter returns the OpenRouter provider. base is the API root
+// (https://openrouter.ai/api). Requests are routed only to providers that do not
+// retain or train on prompts, and each response reports its cost.
+func NewOpenRouter(base, apiKey, appURL string) *OpenAI {
+	o := NewOpenAI(strings.TrimRight(base, "/")+"/v1", apiKey)
+	o.name = "openrouter"
+	o.headers = map[string]string{"HTTP-Referer": appURL, "X-Title": "opendesk"}
+	o.extra = map[string]any{"provider": map[string]any{"data_collection": "deny"}}
+	o.cacheParts = true
+	return o
+}
+
+func (o *OpenAI) Name() string { return o.name }
 
 type oaMessage struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type oaPart struct {
+	Type         string         `json:"type"`
+	Text         string         `json:"text"`
+	CacheControl map[string]any `json:"cache_control,omitempty"`
+}
+
+// systemContent is the system message content: one string, or with cacheParts, text
+// parts whose cached prefixes end in a cache_control marker.
+func (o *OpenAI) systemContent(blocks []Block) any {
+	if !o.cacheParts {
+		var parts []string
+		for _, b := range blocks {
+			parts = append(parts, b.Text)
+		}
+		return strings.Join(parts, "\n\n")
+	}
+	parts := make([]oaPart, 0, len(blocks))
+	for _, b := range blocks {
+		p := oaPart{Type: "text", Text: b.Text}
+		if b.Cache {
+			p.CacheControl = map[string]any{"type": "ephemeral"}
+		}
+		parts = append(parts, p)
+	}
+	return parts
+}
+
+// withExtra merges the provider's extra body keys into body.
+func (o *OpenAI) withExtra(body map[string]any) map[string]any {
+	for k, v := range o.extra {
+		if _, set := body[k]; !set {
+			body[k] = v
+		}
+	}
+	return body
 }
 
 func (o *OpenAI) body(req Request, stream bool, mode int32) map[string]any {
 	var msgs []oaMessage
 	if len(req.System) > 0 {
-		var parts []string
-		for _, b := range req.System {
-			parts = append(parts, b.Text)
-		}
-		msgs = append(msgs, oaMessage{Role: "system", Content: strings.Join(parts, "\n\n")})
+		msgs = append(msgs, oaMessage{Role: "system", Content: o.systemContent(req.System)})
 	}
 	for _, m := range req.Messages {
 		var parts []string
@@ -75,7 +128,7 @@ func (o *OpenAI) body(req Request, stream bool, mode int32) map[string]any {
 			body["response_format"] = map[string]any{"type": "json_object"}
 		}
 	}
-	return body
+	return o.withExtra(body)
 }
 
 // do posts with retries on 429 and 5xx. A 400 on a JSON request steps the JSON mode
@@ -101,7 +154,14 @@ func (o *OpenAI) send(ctx context.Context, build func(mode int32) map[string]any
 		}
 		if o.apiKey != "" {
 			hr.Header.Set("Authorization", "Bearer "+o.apiKey)
-			hr.Header.Set("api-key", o.apiKey) // Azure OpenAI
+			if o.name == "openai" {
+				hr.Header.Set("api-key", o.apiKey) // Azure OpenAI
+			}
+		}
+		for k, v := range o.headers {
+			if v != "" {
+				hr.Header.Set(k, v)
+			}
 		}
 		res, err := o.http.Do(hr)
 		if err != nil {
@@ -149,10 +209,14 @@ type oaChoice struct {
 type oaResponse struct {
 	Model   string     `json:"model"`
 	Choices []oaChoice `json:"choices"`
-	Usage   *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-	} `json:"usage"`
+	Usage   *oaUsage   `json:"usage"`
+}
+
+// oaUsage is a response's usage. Cost (USD) is reported by OpenRouter only.
+type oaUsage struct {
+	PromptTokens     int     `json:"prompt_tokens"`
+	CompletionTokens int     `json:"completion_tokens"`
+	Cost             float64 `json:"cost"`
 }
 
 func (o *OpenAI) Complete(ctx context.Context, req Request) (Response, error) {
@@ -173,7 +237,7 @@ func (o *OpenAI) Complete(ctx context.Context, req Request) (Response, error) {
 	}
 	out := Response{Text: c.Message.Content, Model: firstNonEmpty(r.Model, req.Model), StopReason: c.FinishReason}
 	if r.Usage != nil {
-		out.InputTokens, out.OutputTokens = r.Usage.PromptTokens, r.Usage.CompletionTokens
+		out.InputTokens, out.OutputTokens, out.CostUSD = r.Usage.PromptTokens, r.Usage.CompletionTokens, r.Usage.Cost
 	}
 	return out, nil
 }
@@ -207,7 +271,7 @@ func (o *OpenAI) Stream(ctx context.Context, req Request, onDelta func(string)) 
 			out.Model = chunk.Model
 		}
 		if chunk.Usage != nil {
-			out.InputTokens, out.OutputTokens = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens
+			out.InputTokens, out.OutputTokens, out.CostUSD = chunk.Usage.PromptTokens, chunk.Usage.CompletionTokens, chunk.Usage.Cost
 		}
 		for _, c := range chunk.Choices {
 			if c.Delta.Content != "" {

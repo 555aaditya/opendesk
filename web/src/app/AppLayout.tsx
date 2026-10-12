@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useWaitingAlerts } from "@/components/tickets/useWaitingAlerts";
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect } from "react";
 import { Dialog as D } from "radix-ui";
@@ -35,6 +36,8 @@ function notificationText(n: Notification) {
       return `SLA breached ${subject}`;
     case "ai_handoff":
       return `A customer asked for a person ${subject}`;
+    case "ai_cap_reached":
+      return "Ollie reached this month's agent credit cap";
     default:
       return `Notification ${subject}`;
   }
@@ -55,14 +58,16 @@ function useRealtimeConnection() {
       onNotification: (n) => {
         if (n.type === "customer_replied") return;
         toast.info(notificationText(n), {
-          description: n.ticket?.subject,
+          description: n.type === "ai_cap_reached" ? "Chats go to your team until the cap resets or you raise it." : n.ticket?.subject,
           action: n.ticket
             ? {
                 label: "Open",
                 onClick: () =>
                   void navigate({ to: "/inbox/$folder/{-$ticketId}", params: { folder: "mine", ticketId: n.ticket!.id } }),
               }
-            : undefined,
+            : n.type === "ai_cap_reached"
+              ? { label: "Settings", onClick: () => void navigate({ to: "/settings/ai/behaviour" }) }
+              : undefined,
         });
       },
       onSelfMembershipChanged: () => {
@@ -89,6 +94,7 @@ export function AppLayout() {
   // before the router leaves the app; render nothing in between rather than
   // pages that read the signed-in user and the current workspace.
   const authed = useSession((s) => s.status === "authed" && !!s.user && !!s.workspaceId);
+  useWaitingAlerts(authed);
 
   useHotkeys({
     "mod+k": () => shell.palette(!useShell.getState().paletteOpen),

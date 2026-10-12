@@ -1,10 +1,23 @@
 # AI
 
 opendesk's AI runs through one provider interface (`internal/ai`). Providers:
-`anthropic` (default on Cloud: `AI_MODEL=claude-sonnet-5-5`, `AI_FAST_MODEL=claude-haiku-4-5-20251001`),
+`openrouter` (Cloud: one `OPENROUTER_API_KEY` for chat models, Jev and embeddings; defaults
+`AI_MODEL=anthropic/claude-sonnet-5.5`, `AI_FAST_MODEL=anthropic/claude-haiku-5.5`),
+`anthropic` (defaults `AI_MODEL=claude-sonnet-5-5`, `AI_FAST_MODEL=claude-haiku-4-5-20251001`),
 `openai` (any OpenAI-compatible endpoint via `OPENAI_BASE_URL`: OpenAI, Azure, Ollama,
-vLLM, LM Studio, so self-hosters can run fully local), or `none`. Embeddings (semantic
-search, answer retrieval): `voyage`, `openai`, or `none` (falls back to Postgres FTS).
+vLLM, LM Studio, so self-hosters can run fully local), or `none`. Unset, `AI_PROVIDER` is
+`openrouter` when `OPENROUTER_API_KEY` is set, else `anthropic` with `ANTHROPIC_API_KEY`, else
+`openai` with `OPENAI_API_KEY`, else `none`. Embeddings (semantic search, answer retrieval):
+`openrouter` (default with an OpenRouter key, `openai/text-embedding-3-small`), `voyage`, `openai`,
+or `none` (falls back to Postgres FTS).
+
+OpenRouter (`OPENROUTER_BASE_URL`, default `https://openrouter.ai/api`): chat is
+`POST /v1/chat/completions` (OpenAI-compatible, tools supported), embeddings `POST /v1/embeddings`,
+the model list `GET /v1/models`, Jev `POST /alpha/decisions`. Every request sends
+`provider: {data_collection: "deny"}` so it is routed only to providers that do not retain or train on
+prompts, plus the attribution headers `HTTP-Referer: APP_URL` and `X-Title: opendesk`. Prompt caching
+uses `cache_control` content parts (honoured by Anthropic models, ignored by others). Each response's
+`usage.cost` (USD) is what the call is metered on (`contracts/billing.md`).
 
 When the provider is `none`, `GET /v1/ai/config` reports `enabled: false` and the web app
 hides AI controls; every other AI route answers `404 ai_disabled`, except triage, which also runs on
@@ -13,18 +26,22 @@ a decision engine alone (below).
 Decisions (typed answers with calibrated probabilities: triage, the widget relevance check,
 `ai_decide` automation conditions) run through one more interface, `internal/ai/decide`
 (`Decider`: Choice, Score and Noul questions, several per call). `DECISIONS_PROVIDER`:
-`typesafe` (**Jev** by TypeSafe, `TYPESAFE_API_KEY`, `TYPESAFE_API_URL` default
-`https://api.typesafe.ai`, `TYPESAFE_MODEL` default `jev-latest`; the Vercel AI Gateway works with
-`TYPESAFE_API_URL=https://ai-gateway.vercel.sh/typesafe` and `TYPESAFE_MODEL=typesafe-ai/jev`),
-`llm` (the configured AI provider's fast model answers the same questions as structured output, with
-self-reported probabilities and no calibrated confidence) or `none`. Unset, it is `typesafe` when
-`TYPESAFE_API_KEY` is set, else `llm` when an AI provider is configured, else `none`. Jev is the
+`openrouter` (**Jev** through OpenRouter's Decisions API with `OPENROUTER_API_KEY`, `TYPESAFE_MODEL`
+default `~typesafe/jev-latest`), `typesafe` (Jev direct from TypeSafe, `TYPESAFE_API_KEY`,
+`TYPESAFE_API_URL` default `https://api.typesafe.ai`, `TYPESAFE_MODEL` default `jev-latest`; the
+Vercel AI Gateway works with `TYPESAFE_API_URL=https://ai-gateway.vercel.sh/typesafe` and
+`TYPESAFE_MODEL=typesafe-ai/jev`), `llm` (the configured AI provider's fast model answers the same
+questions as structured output, with self-reported probabilities and no calibrated confidence) or
+`none`. Unset, it is `typesafe` when `TYPESAFE_API_KEY` is set, else `openrouter` when
+`OPENROUTER_API_KEY` is set, else `llm` when an AI provider is configured, else `none`. Both Jev
+routes send the same request (below) and are the same engine (`jev`). Jev is the
 model, not a persona: everything it decides is shown as Ollie. Without a TypeSafe key every feature
 keeps working on the LLM path; nothing is gated on Jev.
 
-Every call: `d.Plan.Reserve` → model → `d.Plan.Spend` (see `contracts/billing.md`). Prompts carry
-only the data the feature needs. Customer content is sent to the configured provider only;
-provider responses are not used for training (Anthropic API default). No prompt or completion
+Every call: `d.Plan.Reserve` → model → `d.Plan.Spend` with the call's real cost (see
+`contracts/billing.md`). Prompts carry only the data the feature needs. Customer content is sent to
+the configured provider only; provider responses are not used for training (Anthropic API default;
+on OpenRouter, `data_collection: "deny"`). No prompt or completion
 text is logged; usage rows store counts only. Workspace admins can turn AI features off
 (`settings.ai`).
 
@@ -43,26 +60,59 @@ interface AISettings {
   triage_threshold: number         // 0.5..0.99, default 0.7: decisions below it become suggestions (set through /v1/triage)
   assign_after_triage: boolean     // assign a ticket after auto-triage, attributed to ai (contracts/api.md "Triage"), default false
   auto_summarize: boolean          // keep a summary on tickets with 5+ messages, default false
-  widget_answers: boolean          // answer bot in the chat widget, default false
+  widget_answers: boolean          // the AI agent answers chat widget conversations, default false
   assistant: boolean               // Ollie, the assistant panel, default true
   tone: string                     // "friendly" | "professional" | "concise" | free text up to 200 chars
   reply_language: "customer" | "workspace"  // reply in the customer's language (default) or the workspace's
   instructions: string             // extra guidance for drafts, up to 2,000 chars
+  model: string                    // drafts, summaries, copilot, KB drafts, Ollie; "" = the instance default (AI_MODEL)
+  fast_model: string               // rewrite, translate, LLM triage and decisions; "" = AI_FAST_MODEL
+  widget_model: string             // the widget agent; "" = `model`
+  widget_instructions: string      // what the widget agent should know (products, policies, hours, links), up to 4,000 chars
+  widget_max_replies: number       // 1..100, default 20: AI replies in one conversation before it hands off to the team
 }
 ```
+
+`model`, `fast_model` and `widget_model` must be "" or an `id` from `GET /v1/ai/models`
+(`422 validation_failed` otherwise). A stored model the instance no longer offers falls back to the
+instance default without an error. Choosing a model is never gated on plan: a costlier model simply
+uses more credits.
 
 `PATCH /v1/ai/settings` merges the given keys into `settings.ai` (others are kept), answers
 `422 validation_failed` for an unknown `reply_language`, a `tone` over 200 characters or
 containing `<`, `>` or control characters, or `instructions` over 2,000 characters (control
 characters other than newline and tab are stripped), and writes the audit entry
 `ai.settings_updated` with the changed keys (not their values). `reply_language: "workspace"`
-means English unless `instructions` name another language.
+means English unless `instructions` name another language. `widget_instructions` follows the
+`instructions` rules with a 4,000 character limit; `widget_max_replies` outside 1..100 is `422`.
+
+## Models
+
+The instance offers a list of models a workspace may choose from: `AI_MODELS` (comma-separated
+model ids), else, on OpenRouter, a curated default list (`anthropic/claude-sonnet-5.5`,
+`anthropic/claude-haiku-5.5`, `anthropic/claude-opus-5.5`, `openai/gpt-5.6-sol`,
+`openai/gpt-5.6-luna`, `google/gemini-3.8-flash`, `deepseek/deepseek-v4.1-flash`), else just
+`AI_MODEL` and `AI_FAST_MODEL`. `AI_MODEL` and `AI_FAST_MODEL` are always in the list. On OpenRouter,
+names, context lengths and per-token prices are read from `GET /v1/models` (cached for an hour;
+an id OpenRouter does not list is dropped, except the two defaults). Other providers list ids only.
+
+```ts
+// GET /v1/ai/models (viewer, settings:read) → { data: AIModel[]; default: string; fast: string }
+interface AIModel {
+  id: string                        // e.g. "anthropic/claude-sonnet-5.5"
+  name: string                      // e.g. "Claude Sonnet 5.5" (the id when unknown)
+  vendor: string                    // e.g. "Anthropic" ("" when unknown)
+  context_length: number | null
+  credits_per_mtok: { input: number; output: number } | null  // credits per million tokens, markup included; null when the price is unknown
+}
+```
 
 ## Endpoints (owner area: ai)
 
-| method | path | min role | credits | body → response |
+| method | path | min role | credits (typical) | body → response |
 | --- | --- | --- | --- | --- |
-| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast}, embeddings: boolean, features: AISettings, costs: Record<string, number>, assistant_name: "Ollie", decisions: DecisionEngine /* contracts/api.md */}` |
+| GET | `/v1/ai/config` | viewer | 0 | `{enabled, provider, models: {default, fast} /* the workspace's effective choices */, embeddings: boolean, features: AISettings, costs: Record<string, number> /* typical credits per call, the minimum balance to start one (contracts/billing.md) */, metered: boolean /* credits follow real usage */, assistant_name: "Ollie", decisions: DecisionEngine /* contracts/api.md */}` |
+| GET | `/v1/ai/models` | viewer | 0 | → `{data: AIModel[], default, fast}` ("Models" above) |
 | PATCH | `/v1/ai/settings` | admin | 0 | `Partial<AISettings>` → `AISettings` |
 | POST | `/v1/tickets/{id}/ai/draft` | agent | 3 | `{instructions?: string, tone?: string}` → `{body_html, body_text, sources: KBSource[]}`; uses the thread, contact, saved replies and the top KB matches |
 | POST | `/v1/tickets/{id}/ai/summary` | viewer | 1 | `{}` → `{summary: string, key_points: string[], sentiment: Sentiment, updated_at}`; stored on the ticket (`custom.ai_summary`) and published as `ticket.updated` |
@@ -184,8 +234,9 @@ decisions are attributed to `ai` with data `{via, model: "jev", confidence}` (LL
 rendered "Ollie set severity to Sev 2". A suggestion goes away when anyone sets that field, or on
 `DELETE /v1/tickets/{id}/ai/suggestions/{field}`; a new triage run replaces them.
 
-Jev API (TypeSafe, documented at docs.typesafe.ai): `POST {TYPESAFE_API_URL}/v1/systemone` with
-`Authorization: Bearer <key>` and `{state, model, questions: {<id>: {type: "choice" | "score" | "noul",
+Jev API (TypeSafe, documented at docs.typesafe.ai): `POST {TYPESAFE_API_URL}/v1/systemone`, or on
+OpenRouter `POST {OPENROUTER_BASE_URL}/alpha/decisions` (same body, plus `provider: {data_collection:
+"deny"}`; the response adds `usage.cost` in USD), with `Authorization: Bearer <key>` and `{state, model, questions: {<id>: {type: "choice" | "score" | "noul",
 instructions, criteria}}}` → `{model, answers: {<id>: {type, choice? | score? | noul?, probabilities?,
 legend?, confidence?}}, usage: {input_tokens, output_tokens}}`. Choice criteria is a map of option to
 rubric (at most 255; options are sent in a fixed order); Score criteria an ordered array of 2..10
@@ -300,32 +351,10 @@ off, credits ran out or the provider fails, auto-triage and the `ai_triage` acti
 skipped (logged) and the rest of the automation runs. The action calls the fast model inside
 the trigger's transaction.
 
-## Widget answer bot
+## Widget agent
 
-When `settings.ai.widget_answers` is on and the KB has published articles:
-- A visitor's new chat message gets an AI answer built only from published KB articles
-  (retrieval by embeddings, FTS fallback). The answer is posted as a reply with
-  `author.type = "system"` and `ai: true` (a new `Message` field, `false` for every other
-  message), ends with a list of links to the cited articles, and the widget shows a
-  "Talk to a person" action under it. If no article is relevant enough, or the model says
-  the articles do not answer the question, or it cites no valid article, it does not answer
-  and the ticket stays with the team.
-- The bot only answers while the conversation is unassigned, open, not spam, not handed
-  off, and no team member has replied; it answers each visitor message at most once and at
-  most 3 times per conversation. It runs as a job (`ai.widget_answer`), never in the request.
-- A visitor asking for a person ("talk to a human", and the same in a few languages), or the
-  model judging that a person is needed, hands the conversation off.
-- Visitor `POST /v1/widget/conversations/{id}/handoff` (visitor auth, `204`, idempotent)
-  marks the ticket for a human: `custom.ai_handoff = true`, `custom.ai_handoff_at`, activity
-  `ai_handoff`, notification type `ai_handoff` to the assignee, else the ticket's team,
-  else every non-viewer member, and `ticket.updated` with `["custom"]`.
-- 3 credits per posted answer (declines and handoffs are free); when credits run out, the
-  bot silently stops. Activity `ai_answered` (`actor_type = "ai"`) records each answer.
-- With Jev (`DECISIONS_PROVIDER=typesafe`), retrieval uses the looser draft threshold and one decision
-  call asks, per retrieved article, a Noul "does this article answer the visitor's latest message?"
-  (kept at 0.6 or above, replacing the similarity threshold) and `needs_human` (hand off at 0.8 or
-  above). No relevant article declines without calling the answer model. The check costs no credits
-  (feature `answer_check`, 0 credits, usage recorded with model `jev`).
+The conversational AI agent in the chat widget, its tools (company MCP servers), knowledge
+sources, guardrails, playground and reports are specified in `contracts/agent.md`.
 
 ## Events
 
@@ -360,8 +389,9 @@ similarity threshold.
 
 ## Models and prompts
 
-Drafts, summaries, copilot, KB drafts and widget answers use `AI_MODEL`; triage, rewrite
-and translate use `AI_FAST_MODEL`. JSON features use structured outputs on Anthropic and
+Drafts, summaries, copilot, KB drafts and Ollie use the workspace's `model` (default `AI_MODEL`);
+the widget agent uses `widget_model` (default `model`); LLM triage, decisions, rewrite and translate
+use `fast_model` (default `AI_FAST_MODEL`). JSON features use structured outputs on Anthropic and
 `json_schema` (falling back to `json_object`, then plain) on OpenAI-compatible endpoints.
 System prompts are fixed text and cached (Anthropic prompt caching); workspace guidance
 (tone, language, instructions) is a second cached system block; ticket data is the user

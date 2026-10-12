@@ -31,7 +31,7 @@ import {
 } from "@/components/settings2/pickers";
 import { rowSpring } from "@/components/settings2/motion";
 import { actionLabel, actionNeedsValue, aiActions, aiFields, fieldLabel, offered, opLabel, opsFor, validProbability, validQuestion } from "@/components/settings2/automation";
-import { AiIcon } from "@/components/ai/bits";
+import { AiIcon, useCreditsText } from "@/components/ai/bits";
 import { useAI } from "@/lib/ai";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api/endpoints";
@@ -92,7 +92,7 @@ function useFieldItems(current: string) {
 }
 function useActionItems(current: ActionType) {
   const { enabled, cost } = useAI();
-  const { t } = useTranslation();
+  const creditsText = useCreditsText();
   const { all } = useAutomationFields();
   const hasTicketFields = all.some((f) => f.entity === "ticket" && !f.archived);
   return offered(allActions, aiActions, enabled, current)
@@ -103,7 +103,7 @@ function useActionItems(current: ActionType) {
         value: a,
         label: actionLabel[a],
         icon: aiActions.has(a) ? <AiIcon /> : undefined,
-        hint: n !== null ? t("credits", { count: n }) : undefined,
+        hint: n !== null ? creditsText(n) : undefined,
       };
     });
 }

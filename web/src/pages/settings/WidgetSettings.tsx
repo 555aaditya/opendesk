@@ -1,10 +1,14 @@
+// Settings > Chat widget: an editor on the left (appearance, header, home
+// screen, behaviour, install) and the real widget on the right, live, following
+// every unsaved change. Pictures upload straight away; everything else saves
+// together from the save bar.
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Moon, Sun, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { ArrowRight, KeyRound, LayoutPanelLeft, MessageCircle, MessagesSquare, Monitor, Moon, PanelRight, Sun } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { StatePill } from "@/components/settings2/bits";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { springs } from "@/lib/motion";
 import { NoAccess, Row, Section, SettingsPage } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -14,17 +18,27 @@ import { Segmented } from "@/components/ui/tabs";
 import { CopyField } from "@/components/ui/copy-button";
 import { useConfirm } from "@/components/ui/confirm";
 import { toast } from "@/components/ui/toast";
-import { WidgetPreview } from "@/components/settings2/WidgetPreview";
 import { ImageUpload } from "@/components/ui/image-upload";
+import { Stepper } from "@/components/settings2/Stepper";
+import { SaveBar } from "@/components/settings/SaveBar";
+import { UnsavedGuard } from "@/components/settings2/UnsavedGuard";
+import { OllieMark } from "@/components/assistant/OllieMark";
+import { ChipEditor } from "@/components/agent/ChipEditor";
+import { Counter } from "@/components/agent/bits";
+import { agentSettings } from "@/components/agent/settings";
+import { LivePreview, type PreviewScene } from "@/components/widget/LivePreview";
+import { ColorField, hasMarkup, HEX, LIMITS, suggestionProblem, SuggestionsEditor, tidy, toWidgetConfig } from "@/components/widget/fields";
 import { useWorkspaceImage } from "@/lib/pictures";
 import type { WorkspaceImageSlot } from "@/lib/api/types";
-import { UnsavedGuard } from "@/components/settings2/UnsavedGuard";
 import { api } from "@/lib/api/endpoints";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { WidgetSettings as WS } from "@/lib/api/types";
+import { useAI } from "@/lib/ai";
 import { config } from "@/lib/config";
 import { q, qk } from "@/lib/queries";
 import { atLeast, useRole, useWorkspace } from "@/lib/session";
+import { AI_TONE, tone } from "@/lib/tones";
+import { cn } from "@/lib/cn";
 
 const HOSTED = "https://app.opendesk.sh";
 
@@ -56,52 +70,105 @@ function normalizeOrigin(v: string): string | null {
   }
 }
 
+/** Defaults for keys an older server leaves out (contracts/api.md). */
+function withDefaults(s: WS): WS {
+  return {
+    ...s,
+    color: s.color ?? "",
+    theme: s.theme ?? "auto",
+    position: s.position ?? "right",
+    offset_x: s.offset_x ?? 20,
+    offset_y: s.offset_y ?? 20,
+    launcher: s.launcher ?? "icon",
+    launcher_label: s.launcher_label ?? "",
+    radius: s.radius ?? "soft",
+    title: s.title ?? "",
+    subtitle: s.subtitle ?? "",
+    show_team: s.show_team ?? true,
+    suggestions: s.suggestions ?? [],
+    sound: s.sound ?? false,
+    bot_name: s.bot_name ?? "",
+  };
+}
+
+type TextKey = "greeting" | "launcher_label" | "title" | "subtitle";
+
 export default function WidgetSettings() {
   const { t } = useTranslation("settingsDev");
-  const reduce = useReducedMotion();
   const role = useRole();
   const admin = atLeast(role, "admin");
   const ws = useWorkspace();
-  const { data: settings, isLoading } = useQuery({ ...q.widgetSettings(), enabled: admin });
+  const ai = useAI();
+  const { data: raw, isLoading } = useQuery({ ...q.widgetSettings(), enabled: admin });
+  const { data: members } = useQuery({ ...q.members(), enabled: admin });
+  const settings = useMemo(() => (raw ? withDefaults(raw) : undefined), [raw]);
   const qc = useQueryClient();
   const [draft, setDraft] = useState<WS | null>(null);
-  const [originInput, setOriginInput] = useState("");
-  const [originError, setOriginError] = useState<string | null>(null);
-  const [previewDark, setPreviewDark] = useState(false);
+  const [scene, setScene] = useState<PreviewScene>("home");
+  const [dark, setDark] = useState(false);
 
   useEffect(() => {
     if (settings && !draft) setDraft(settings);
   }, [settings, draft]);
+  // A fixed theme decides the preview's; "auto" leaves the toggle to you.
+  useEffect(() => {
+    if (draft?.theme === "light") setDark(false);
+    else if (draft?.theme === "dark") setDark(true);
+  }, [draft?.theme]);
 
   const dirty = !!draft && !!settings && JSON.stringify(draft) !== JSON.stringify(settings);
+  const agentOn = ai.enabled && agentSettings(ai.features).widget_answers;
+  const preview = useMemo(() => (draft ? toWidgetConfig(draft, ws, members, agentOn) : null), [draft, ws, members, agentOn]);
+
+  const textError = (k: TextKey): string | null => {
+    if (!draft) return null;
+    const v = draft[k];
+    if (tidy(v).length > LIMITS[k]) return t("widget.tooLong", { max: LIMITS[k] });
+    if (hasMarkup(v)) return t("widget.noMarkup");
+    return null;
+  };
+  const invalid =
+    !!draft &&
+    ((["greeting", "launcher_label", "title", "subtitle"] as TextKey[]).some((k) => textError(k)) ||
+      draft.suggestions.some((s) => suggestionProblem(s)) ||
+      (draft.color !== "" && !HEX.test(draft.color)));
 
   const save = useMutation({
-    mutationFn: (d: WS) => api.widgetSettings.update(d),
+    mutationFn: (d: WS) => {
+      // PATCH merges, so only what changed goes up.
+      const patch: Partial<WS> = {};
+      for (const k of Object.keys(d) as (keyof WS)[]) {
+        if (JSON.stringify(d[k]) !== JSON.stringify(settings?.[k])) (patch as Record<string, unknown>)[k] = d[k];
+      }
+      if (patch.suggestions) patch.suggestions = patch.suggestions.map(tidy);
+      for (const k of ["launcher_label", "title", "subtitle"] as const) if (patch[k] !== undefined) patch[k] = tidy(patch[k]!);
+      return api.widgetSettings.update(patch);
+    },
+    onMutate: async (d) => {
+      await qc.cancelQueries({ queryKey: qk.widgetSettings });
+      const prev = qc.getQueryData<WS>(qk.widgetSettings);
+      qc.setQueryData(qk.widgetSettings, d);
+      return { prev };
+    },
     onSuccess: (s) => {
       qc.setQueryData(qk.widgetSettings, s);
-      setDraft(s);
+      setDraft(withDefaults(s));
       toast.success(t("widget.saved"));
     },
-    onError: (e) => toast.error(e, t("widget.saveError")),
+    onError: (e, _d, ctx) => {
+      if (ctx?.prev) qc.setQueryData(qk.widgetSettings, ctx.prev);
+      toast.error(e, t("widget.saveError"));
+    },
   });
 
   if (!admin)
     return (
       <SettingsPage title={t("widget.title")}>
-        <NoAccess what="the chat widget" />
+        <NoAccess what={t("widget.what")} />
       </SettingsPage>
     );
 
   const set = (p: Partial<WS>) => setDraft((d) => (d ? { ...d, ...p } : d));
-  const addOrigin = () => {
-    if (!draft || !originInput.trim()) return;
-    const o = normalizeOrigin(originInput);
-    if (!o) return setOriginError(t("widget.originInvalid"));
-    setOriginError(null);
-    if (!draft.allowed_origins.includes(o)) set({ allowed_origins: [...draft.allowed_origins, o] });
-    setOriginInput("");
-  };
-
   const origin = widgetOrigin();
   const apiAttr = widgetApi(origin);
   const snippet = `<script src="${origin}/widget/v1.js" data-key="${ws?.widget_key ?? "wk_..."}"${apiAttr ? ` data-api="${apiAttr}"` : ""} async></script>`;
@@ -112,138 +179,168 @@ export default function WidgetSettings() {
   name: "Ada Lovelace",
 });`;
 
+  const text = (k: TextKey, placeholder: string, opts: { area?: boolean; className?: string } = {}) => {
+    if (!draft) return null;
+    const err = textError(k);
+    const common = { id: `widget-${k}`, value: draft[k], invalid: !!err, placeholder, "aria-describedby": err ? `widget-${k}-err` : undefined };
+    return (
+      <div className={cn("flex flex-col gap-1", opts.className)}>
+        {opts.area ? (
+          <Textarea {...common} rows={3} maxLength={LIMITS[k] + 20} onChange={(e) => set({ [k]: e.target.value })} />
+        ) : (
+          <TextInput {...common} maxLength={LIMITS[k] + 10} onChange={(e) => set({ [k]: e.target.value })} />
+        )}
+        <div className="flex items-start justify-between gap-3">
+          {err ? (
+            <span id={`widget-${k}-err`} role="alert" className="text-xs text-danger-fg">
+              {err}
+            </span>
+          ) : (
+            <span />
+          )}
+          <Counter n={tidy(draft[k]).length} max={LIMITS[k]} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <SettingsPage
       wide
       title={t("widget.title")}
       description={t("widget.description")}
-      actions={
-        draft && (
-          <StatePill state={draft.enabled ? "active" : "disabled"}>{draft.enabled ? t("widget.live") : t("widget.hidden")}</StatePill>
-        )
-      }
+      actions={draft && <StatePill state={draft.enabled ? "active" : "disabled"}>{draft.enabled ? t("widget.live") : t("widget.hidden")}</StatePill>}
     >
       <UnsavedGuard when={dirty && !save.isPending} />
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_360px]">
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="flex min-w-0 flex-col gap-8">
-          <Section title={t("widget.settings")} description={t("widget.settingsHint")}>
-            {isLoading || !draft ? (
-              <div className="flex flex-col gap-3 py-3">
-                <div className="skeleton h-4 w-1/2" />
-                <div className="skeleton h-16" />
-                <div className="skeleton h-4 w-2/3" />
+          {isLoading || !draft ? (
+            <div className="flex flex-col gap-3">
+              <div className="skeleton h-40 rounded-lg" />
+              <div className="skeleton h-28 rounded-lg" />
+            </div>
+          ) : (
+            <>
+              <div onFocusCapture={() => setScene((s) => (s === "chat" ? s : "launcher"))}>
+                <Section title={t("widget.appearance")} description={t("widget.appearanceHint")}>
+                  <Row label={t("widget.color")} description={t("widget.colorHint")} stack>
+                    <ColorField value={draft.color} onChange={(color) => set({ color })} brand={ws?.settings.brand_color} />
+                  </Row>
+                  <Row label={t("widget.theme")} description={t("widget.themeHint")}>
+                    <Segmented
+                      size="xs"
+                      value={draft.theme}
+                      onChange={(theme) => set({ theme })}
+                      options={[
+                        { value: "auto", label: t("widget.themeAuto"), icon: <Monitor /> },
+                        { value: "light", label: t("widget.light"), icon: <Sun /> },
+                        { value: "dark", label: t("widget.dark"), icon: <Moon /> },
+                      ]}
+                    />
+                  </Row>
+                  <Row label={t("widget.position")} description={t("widget.positionHint")}>
+                    <Segmented
+                      size="xs"
+                      value={draft.position}
+                      onChange={(position) => set({ position })}
+                      options={[
+                        { value: "left", label: t("widget.left"), icon: <LayoutPanelLeft /> },
+                        { value: "right", label: t("widget.right"), icon: <PanelRight /> },
+                      ]}
+                    />
+                  </Row>
+                  <Row label={t("widget.offset")} description={t("widget.offsetHint")} stack>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Stepper value={draft.offset_x} onChange={(offset_x) => set({ offset_x })} min={0} max={200} step={4} suffix="px" aria-label={t("widget.offsetX")} className="w-[124px]" />
+                      <span className="text-xs text-fg-3">{t("widget.offsetXShort")}</span>
+                      <Stepper value={draft.offset_y} onChange={(offset_y) => set({ offset_y })} min={0} max={200} step={4} suffix="px" aria-label={t("widget.offsetY")} className="ml-2 w-[124px]" />
+                      <span className="text-xs text-fg-3">{t("widget.offsetYShort")}</span>
+                    </div>
+                  </Row>
+                  <Row label={t("widget.radius")} description={t("widget.radiusHint")}>
+                    <Segmented
+                      size="xs"
+                      value={draft.radius}
+                      onChange={(radius) => set({ radius })}
+                      options={(["square", "soft", "round"] as const).map((r) => ({
+                        value: r,
+                        label: t(`widget.radius_${r}`),
+                        icon: <span className={cn("block size-3 border-[1.5px] border-current", r === "square" ? "rounded-[1px]" : r === "soft" ? "rounded-[4px]" : "rounded-full")} />,
+                      }))}
+                    />
+                  </Row>
+                  <Row label={t("widget.launcherStyle")} description={t("widget.launcherStyleHint")} stack={draft.launcher === "label"}>
+                    <div className="flex flex-col gap-2">
+                      <Segmented
+                        size="xs"
+                        className="self-start"
+                        value={draft.launcher}
+                        onChange={(launcher) => set({ launcher })}
+                        options={[
+                          { value: "icon", label: t("widget.launcherIcon") },
+                          { value: "label", label: t("widget.launcherLabel") },
+                        ]}
+                      />
+                      {draft.launcher === "label" && text("launcher_label", t("widget.launcherLabelPlaceholder"), { className: "max-w-[320px]" })}
+                    </div>
+                  </Row>
+                  {ws && <ImageRow slot="widget_launcher" label={t("widget.launcher")} hint={t("widget.launcherHint")} />}
+                </Section>
               </div>
-            ) : (
-              <>
+
+              <div onFocusCapture={() => setScene("home")}>
+                <Section title={t("widget.header")} description={t("widget.headerHint")}>
+                  <Row label={t("widget.titleField")} description={t("widget.titleHint")} htmlFor="widget-title" stack>
+                    {text("title", ws?.name ?? "", { className: "max-w-[420px]" })}
+                  </Row>
+                  <Row label={t("widget.subtitle")} description={t("widget.subtitleHint")} htmlFor="widget-subtitle" stack>
+                    {text("subtitle", t("widget.subtitlePlaceholder"), { className: "max-w-[420px]" })}
+                  </Row>
+                  <Row label={t("widget.showTeam")} description={t("widget.showTeamHint")}>
+                    <Switch checked={draft.show_team} onCheckedChange={(show_team) => set({ show_team })} aria-label={t("widget.showTeam")} />
+                  </Row>
+                  {ws && <ImageRow slot="widget_avatar" label={t("widget.avatar")} hint={t("widget.avatarHint")} />}
+                </Section>
+              </div>
+
+              <div onFocusCapture={() => setScene("home")}>
+                <Section title={t("widget.home")} description={t("widget.homeHint")}>
+                  <Row label={t("widget.greeting")} description={t("widget.greetingHint")} stack htmlFor="widget-greeting">
+                    {text("greeting", t("widget.greetingPlaceholder"), { area: true })}
+                  </Row>
+                  <Row label={t("widget.suggestions")} description={t("widget.suggestionsHint")} stack>
+                    <SuggestionsEditor value={draft.suggestions} onChange={(suggestions) => set({ suggestions })} />
+                  </Row>
+                </Section>
+              </div>
+
+              <Section title={t("widget.settings")} description={t("widget.settingsHint")}>
                 <Row label={t("widget.show")} description={t("widget.showHint")}>
-                  <Switch checked={draft.enabled} onCheckedChange={(enabled) => set({ enabled })} aria-label="Show the widget" />
-                </Row>
-                <Row label={t("widget.greeting")} description={t("widget.greetingHint")} stack htmlFor="widget-greeting">
-                  <Textarea
-                    id="widget-greeting"
-                    value={draft.greeting}
-                    maxLength={280}
-                    rows={2}
-                    placeholder={t("widget.greetingPlaceholder")}
-                    onChange={(e) => set({ greeting: e.target.value })}
-                  />
+                  <Switch checked={draft.enabled} onCheckedChange={(enabled) => set({ enabled })} aria-label={t("widget.show")} />
                 </Row>
                 <Row label={t("widget.requireEmail")} description={t("widget.requireEmailHint")}>
-                  <Switch checked={draft.require_email} onCheckedChange={(require_email) => set({ require_email })} aria-label="Ask for an email first" />
+                  <Switch checked={draft.require_email} onCheckedChange={(require_email) => set({ require_email })} aria-label={t("widget.requireEmail")} />
                 </Row>
-                <Row
-                  label={t("widget.origins")}
-                  description={t("widget.originsHint")}
-                  stack
-                  htmlFor="widget-origin"
-                >
-                  <div className="flex flex-col gap-2">
-                    {draft.allowed_origins.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        <AnimatePresence initial={false} mode="popLayout">
-                        {draft.allowed_origins.map((o) => (
-                          <motion.span
-                            key={o}
-                            layout={reduce ? false : "position"}
-                            initial={reduce ? false : { opacity: 0, scale: 0.92 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.92 }}
-                            transition={springs.snap}
-                            className="mono inline-flex h-6 items-center gap-1.5 rounded-sm border border-line bg-sunken pl-2 pr-0.5 text-[11.5px] text-fg-2"
-                          >
-                            <span className="size-1.5 rounded-full bg-tone-green-solid" aria-hidden />
-                            {o}
-                            <button
-                              type="button"
-                              aria-label={`Remove ${o}`}
-                              onClick={() => set({ allowed_origins: draft.allowed_origins.filter((x) => x !== o) })}
-                              className="flex size-5 items-center justify-center rounded-xs text-fg-4 transition-colors hover:bg-hover hover:text-fg"
-                            >
-                              <X className="size-3" />
-                            </button>
-                          </motion.span>
-                        ))}
-                        </AnimatePresence>
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <TextInput
-                        id="widget-origin"
-                        inputSize="sm"
-                        value={originInput}
-                        invalid={!!originError}
-                        placeholder="https://www.example.com"
-                        className="mono"
-                        onChange={(e) => {
-                          setOriginInput(e.target.value);
-                          setOriginError(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === ",") {
-                            e.preventDefault();
-                            addOrigin();
-                          }
-                        }}
-                      />
-                      <Button size="sm" onClick={addOrigin} disabled={!originInput.trim()}>
-                        Add
-                      </Button>
-                    </div>
-                    {originError && (
-                      <p role="alert" className="text-xs text-danger-fg">
-                        {originError}
-                      </p>
-                    )}
-                    {!draft.allowed_origins.length && !originError && <p className="text-[12px] text-fg-4">{t("widget.anySite")}</p>}
-                  </div>
+                <Row label={t("widget.sound")} description={t("widget.soundHint")}>
+                  <Switch checked={draft.sound} onCheckedChange={(sound) => set({ sound })} aria-label={t("widget.sound")} />
                 </Row>
-              </>
-            )}
-          </Section>
-
-          {ws && <WidgetBranding />}
-
-          <AnimatePresence initial={false}>
-            {dirty && draft && (
-              <motion.div
-                key="savebar"
-                initial={reduce ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={reduce ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, y: 8, transition: { duration: 0.14 } }}
-                transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                className="sticky bottom-4 z-10 -mt-4 flex items-center gap-3 rounded-lg border border-line bg-raised px-4 py-2.5 shadow-pop"
-              >
-                <span className="size-1.5 rounded-full bg-tone-amber-solid" aria-hidden />
-                <span className="flex-1 text-[12.5px] text-fg-2">{t("widget.unsaved")}</span>
-                <Button size="sm" variant="ghost" onClick={() => settings && setDraft(settings)}>
-                  {t("widget.revert")}
-                </Button>
-                <Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate(draft)}>
-                  Save changes
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                <Row label={t("widget.origins")} description={t("widget.originsHint")} stack>
+                  <ChipEditor
+                    mono
+                    values={draft.allowed_origins}
+                    onChange={(allowed_origins) => set({ allowed_origins })}
+                    max={LIMITS.origins}
+                    normalize={normalizeOrigin}
+                    placeholder="https://www.example.com"
+                    aria-label={t("widget.origins")}
+                    dot="bg-tone-green-solid"
+                    empty={t("widget.anySite")}
+                  />
+                </Row>
+                {ai.enabled && <AgentLink on={agentOn} />}
+              </Section>
+            </>
+          )}
 
           <Section title={t("widget.install")} description={t("widget.installHint")}>
             <div className="flex flex-col gap-3 py-3">
@@ -257,49 +354,63 @@ export default function WidgetSettings() {
           <Section title={t("widget.identify")} description={t("widget.identifyHint")}>
             <div className="flex flex-col gap-3 py-3">
               <CopyField value={identify} multiline />
-              <p className="text-[12.5px] leading-5 text-fg-3">
-                Compute <span className="mono text-fg-2">user_hash</span> on your server as the hex HMAC-SHA256 of the <span className="mono text-fg-2">user_id</span>, keyed with your widget secret. Never put the secret in browser code. Sessions without a valid hash still work, but are marked unverified.
-              </p>
-              {atLeast(role, "admin") && <RotateSecret />}
+              <p className="text-[12.5px] leading-5 text-fg-3">{t("widget.identifyBody")}</p>
+              <RotateSecret />
             </div>
           </Section>
         </div>
 
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <div className="mb-2.5 flex items-center justify-between">
+        <div className="xl:sticky xl:top-6 xl:self-start">
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-[13px] font-semibold tracking-[-0.01em]">{t("widget.preview")}</h2>
-            <Segmented
-              size="xs"
-              value={previewDark ? "dark" : "light"}
-              onChange={(v) => setPreviewDark(v === "dark")}
-              options={[
-                { value: "light", label: t("widget.light"), icon: <Sun /> },
-                { value: "dark", label: t("widget.dark"), icon: <Moon /> },
-              ]}
-            />
+            <div className="flex items-center gap-1.5">
+              <Segmented<PreviewScene>
+                size="xs"
+                value={scene}
+                onChange={setScene}
+                options={[
+                  { value: "launcher", label: t("widget.sceneLauncher"), icon: <MessageCircle /> },
+                  { value: "home", label: t("widget.sceneHome") },
+                  { value: "chat", label: t("widget.sceneChat"), icon: <MessagesSquare /> },
+                ]}
+              />
+              <Segmented
+                size="xs"
+                value={dark ? "dark" : "light"}
+                onChange={(v) => setDark(v === "dark")}
+                options={[
+                  { value: "light", label: <span className="sr-only">{t("widget.light")}</span>, icon: <Sun /> },
+                  { value: "dark", label: <span className="sr-only">{t("widget.dark")}</span>, icon: <Moon /> },
+                ]}
+              />
+            </div>
           </div>
-          <WidgetPreview
-            workspaceName={ws?.name ?? "Your workspace"}
-            greeting={draft?.greeting ?? ""}
-            brandColor={ws?.settings.brand_color}
-            requireEmail={draft?.require_email ?? false}
-            enabled={draft?.enabled ?? true}
-            dark={previewDark}
-            avatarUrl={ws?.images?.widget_avatar}
-          />
-          <p className="mt-2 text-[12px] text-fg-3">
-            {ws?.settings.brand_color ? (
-              <>
-                <span className="mr-1 inline-block size-2.5 rounded-xs align-[-1px]" style={{ background: ws.settings.brand_color }} aria-hidden />
-                {t("widget.accent")} <span className="mono text-fg-2">{ws.settings.brand_color}</span> {t("widget.accentSuffix")}
-              </>
-            ) : (
-              t("widget.noAccent")
-            )}
-          </p>
+          {preview ? <LivePreview config={preview} scene={scene} dark={dark} className="h-[min(680px,calc(100vh-140px))] min-h-[560px]" /> : <div className="skeleton h-[600px] rounded-xl" />}
+          <p className="mt-2 text-[12px] leading-[18px] text-fg-3">{draft && !draft.enabled ? t("widget.previewHidden") : t("widget.previewHint")}</p>
         </div>
       </div>
+      <SaveBar dirty={dirty} saving={save.isPending} disabled={invalid} onSave={() => draft && save.mutate(draft)} onDiscard={() => settings && setDraft(settings)} />
     </SettingsPage>
+  );
+}
+
+/** Where the AI agent is set up, and whether it answers in this widget. */
+function AgentLink({ on }: { on: boolean }) {
+  const { t } = useTranslation("settingsDev");
+  return (
+    <div className="py-3.5">
+      <Link
+        to="/settings/ai/behaviour"
+        className={cn("group flex items-center gap-3 rounded-lg border px-3.5 py-3 transition-colors", on ? cn(tone[AI_TONE].soft, tone[AI_TONE].line) : "border-line bg-sunken hover:bg-hover")}
+      >
+        <OllieMark size={22} tone={on ? "color" : "muted"} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-[12.5px] font-medium text-fg">{on ? t("widget.agentOn") : t("widget.agentOff")}</span>
+          <span className="block text-[12px] text-fg-3">{t("widget.agentHint")}</span>
+        </span>
+        <ArrowRight className="size-3.5 text-fg-3 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+      </Link>
+    </div>
   );
 }
 
@@ -315,15 +426,9 @@ function RotateSecret() {
       const r = await api.workspaces.rotateWidgetSecret();
       setSecret(r.secret);
     } catch (e) {
-      if (e instanceof ApiError && e.code === "mfa_required") {
-        setBlocked("Rotating the secret needs two-factor authentication. Turn on 2FA in Security, then sign in again.");
-        return;
-      }
-      if (e instanceof ApiError && e.code === "reauth_required") {
-        setBlocked("For safety, sign out and sign back in, then try again. This needs a login from the last 12 hours.");
-        return;
-      }
-      throw new Error(errorMessage(e, "Couldn't rotate the secret"), { cause: e });
+      if (e instanceof ApiError && e.code === "mfa_required") return setBlocked(t("widget.rotateMfa"));
+      if (e instanceof ApiError && e.code === "reauth_required") return setBlocked(t("widget.rotateReauth"));
+      throw new Error(errorMessage(e, t("widget.rotateError")), { cause: e });
     }
   };
 
@@ -337,15 +442,9 @@ function RotateSecret() {
         <Button
           size="sm"
           icon={<KeyRound className="size-3.5" />}
-          onClick={() =>
-            confirm.show("Identified sessions stop verifying until you deploy the new secret. Existing chats keep working.", rotate, {
-              title: "Rotate the widget secret?",
-              confirmLabel: "Rotate secret",
-              danger: true,
-            })
-          }
+          onClick={() => confirm.show(t("widget.rotateBody"), rotate, { title: t("widget.rotateTitle"), confirmLabel: t("widget.rotate"), danger: true })}
         >
-          Rotate secret
+          {t("widget.rotate")}
         </Button>
       </div>
       {blocked && (
@@ -357,11 +456,11 @@ function RotateSecret() {
       <Dialog
         open={!!secret}
         onOpenChange={(o) => !o && setSecret(null)}
-        title="New widget secret"
-        description="Copy it now and store it on your server. You won't see it again."
+        title={t("widget.newSecret")}
+        description={t("widget.newSecretHint")}
         footer={
           <Button variant="primary" onClick={() => setSecret(null)}>
-            I've saved it
+            {t("widget.savedIt")}
           </Button>
         }
       >
@@ -369,7 +468,7 @@ function RotateSecret() {
           <CopyField value={secret ?? ""} />
           <p className="flex items-start gap-2 text-[12px] text-fg-3">
             <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-warn" />
-            Treat it like a password. Anyone with it can impersonate your users in chat.
+            {t("widget.secretWarning")}
           </p>
         </div>
       </Dialog>
@@ -377,44 +476,34 @@ function RotateSecret() {
   );
 }
 
-/** The widget's header avatar and launcher icon, uploaded straight away (not part of the draft). */
-function WidgetBranding() {
-  const { t } = useTranslation("settingsDev");
+/** A widget picture, uploaded straight away (not part of the draft). */
+function ImageRow({ slot, label, hint }: { slot: WorkspaceImageSlot; label: string; hint: string }) {
   const ws = useWorkspace();
   const images = useWorkspaceImage();
   if (!ws) return null;
-  const upload = async (slot: WorkspaceImageSlot, file: Blob) => {
-    await images.upload.mutateAsync({ slot, file });
-  };
-  const remove = async (slot: WorkspaceImageSlot) => {
-    try {
-      await images.remove.mutateAsync(slot);
-    } catch (e) {
-      toast.error(e);
-    }
-  };
+  const src = ws.images?.[slot] ?? null;
   return (
-    <Section title={t("widget.branding")} description={t("widget.brandingHint")}>
-      <Row label={t("widget.avatar")} description={t("widget.avatarHint")}>
-        <ImageUpload
-          name={ws.name}
-          shape="round"
-          size="md"
-          value={ws.images?.widget_avatar}
-          onChange={(f) => upload("widget_avatar", f)}
-          onRemove={ws.images?.widget_avatar ? () => remove("widget_avatar") : undefined}
-        />
-      </Row>
-      <Row label={t("widget.launcher")} description={t("widget.launcherHint")}>
-        <ImageUpload
-          name={ws.name}
-          shape="round"
-          size="md"
-          value={ws.images?.widget_launcher}
-          onChange={(f) => upload("widget_launcher", f)}
-          onRemove={ws.images?.widget_launcher ? () => remove("widget_launcher") : undefined}
-        />
-      </Row>
-    </Section>
+    <Row label={label} description={hint}>
+      <ImageUpload
+        name={ws.name}
+        shape="round"
+        size="md"
+        value={src}
+        onChange={async (f) => {
+          await images.upload.mutateAsync({ slot, file: f });
+        }}
+        onRemove={
+          src
+            ? async () => {
+                try {
+                  await images.remove.mutateAsync(slot);
+                } catch (e) {
+                  toast.error(e);
+                }
+              }
+            : undefined
+        }
+      />
+    </Row>
   );
 }

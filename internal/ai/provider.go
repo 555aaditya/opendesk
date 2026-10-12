@@ -45,13 +45,15 @@ type Request struct {
 	Effort string
 }
 
-// Response is a completed call. Token counts are for usage records only.
+// Response is a completed call. Token counts and cost are for usage records only.
 type Response struct {
 	Text         string
 	Model        string
 	InputTokens  int
 	OutputTokens int
-	StopReason   string
+	// CostUSD is the provider's reported cost of the call; 0 when it reports none.
+	CostUSD    float64
+	StopReason string
 }
 
 // Provider is a chat model backend.

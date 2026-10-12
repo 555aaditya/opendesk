@@ -22,6 +22,7 @@ import { BulkBar } from "@/components/tickets/BulkBar";
 import { ListToolbar, type InboxLayout } from "@/components/tickets/ListToolbar";
 import { TicketPreview } from "@/components/tickets/TicketPreview";
 import { SummaryStrip } from "@/components/tickets/SummaryStrip";
+import { WaitingBanner } from "@/components/tickets/waiting";
 import { useUpdateTicket } from "@/components/tickets/useTicketActions";
 import { intent } from "@/components/tickets/motion";
 import { focusField, missingForSolve, useTicketFields } from "@/components/tickets/fields";
@@ -406,6 +407,7 @@ export default function InboxPage() {
           layout={wide && !openId ? layout : undefined}
           onLayout={setLayout}
         />
+        {tickets.length > 0 && <WaitingBanner tickets={tickets} onOpen={open} />}
         {!openId && tickets.length > 0 && <SummaryStrip {...summary} total={tickets.length} search={search} onSearch={setSearch} />}
         <div ref={listRef} role="listbox" aria-label={tr("list.label")} aria-multiselectable className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {list.isPending ? (

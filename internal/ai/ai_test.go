@@ -125,9 +125,9 @@ func TestDraftJSONAndSSE(t *testing.T) {
 		!strings.Contains(user, "<agent_request>") || !strings.Contains(user, "Offer a refund") || !strings.Contains(user, "Refund policy") {
 		t.Fatalf("user turn %s", user)
 	}
-	var credits int
-	e.Scalar(`SELECT included_used FROM ai_credits WHERE workspace_id = $1`, &credits, e.WS.ID)
-	if credits != 3 {
+	var credits int64
+	e.Scalar(`SELECT included_used_milli FROM ai_credits WHERE workspace_id = $1`, &credits, e.WS.ID)
+	if credits != 3000 {
 		t.Fatalf("credits %d", credits)
 	}
 	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'draft_reply' AND ticket_id = $2 AND user_id = $3
@@ -158,8 +158,8 @@ func TestDraftJSONAndSSE(t *testing.T) {
 	if stream, _ := e.F.last()["stream"].(bool); !stream {
 		t.Fatal("not streamed upstream")
 	}
-	e.Scalar(`SELECT included_used FROM ai_credits WHERE workspace_id = $1`, &credits, e.WS.ID)
-	if credits != 6 {
+	e.Scalar(`SELECT included_used_milli FROM ai_credits WHERE workspace_id = $1`, &credits, e.WS.ID)
+	if credits != 6000 {
 		t.Fatalf("credits %d", credits)
 	}
 }
@@ -170,7 +170,7 @@ func TestNoCredits(t *testing.T) {
 	if err := plan.Ensure(e.Ctx, e.D.DB.Pool, e.WS.ID); err != nil {
 		t.Fatal(err)
 	}
-	e.Exec(`UPDATE ai_credits SET included_used = $2 WHERE workspace_id = $1`, e.WS.ID, plan.FreeMonthlyCredits-2)
+	e.Exec(`UPDATE ai_credits SET included_used_milli = $2 WHERE workspace_id = $1`, e.WS.ID, (plan.FreeMonthlyCredits-2)*1000)
 	path := "/v1/tickets/" + tk.ID.String() + "/ai/draft"
 	r := e.Do("POST", path, e.agent(), map[string]any{}).Want(t, 402)
 	if problemCode(t, r) != "no_credits" {
@@ -345,7 +345,7 @@ func TestAutoTriageAndSentimentAutomation(t *testing.T) {
 	}
 
 	// Without credits auto-triage skips silently and the trigger still runs.
-	e.Exec(`UPDATE ai_credits SET included_used = 1000 WHERE workspace_id = $1`, e.WS.ID)
+	e.Exec(`UPDATE ai_credits SET included_used_milli = 1000000 WHERE workspace_id = $1`, e.WS.ID)
 	calls := e.F.calls()
 	tk2 := e.ticket("Another", "Another question")
 	e.runTriggers()
@@ -532,117 +532,6 @@ func publicMessages(e *env, tid uuid.UUID) []domain.Message {
 		e.T.Fatal(err)
 	}
 	return ms
-}
-
-func TestWidgetAnswerBot(t *testing.T) {
-	e := newEnv(t, opts{billing: true})
-	art := e.article("Reset your password", "<p>To reset your password, open the sign-in page and choose Forgot password. We email you a reset link.</p>", "published")
-	e.article("Draft secret", "<p>Internal password reset override procedure.</p>", "draft")
-	if err := e.S.Index(e.Ctx, e.WS.ID, "article", art); err != nil {
-		t.Fatal(err)
-	}
-
-	// Off by default: no job.
-	_, tid0, _ := widgetConversation(e, "How do I reset my password?")
-	if n := len(e.Jobs(jobs.AIWidgetAnswerArgs{}.Kind(), e.WS.ID)); n != 0 {
-		t.Fatalf("jobs %d", n)
-	}
-	_ = tid0
-
-	e.settings(map[string]any{"widget_answers": true})
-	va, tid, mid := widgetConversation(e, "How do I reset my password?")
-	e.runWidgetJobs()
-	ms := publicMessages(e, tid)
-	if len(ms) != 2 || !ms[1].AI || ms[1].Author.Type != "system" || ms[1].Direction != "outbound" ||
-		!strings.Contains(ms[1].BodyHTML, "sign-in page") || !strings.Contains(ms[1].BodyHTML, "/articles/") {
-		t.Fatalf("%+v", ms)
-	}
-	if strings.Contains(userText(e.F.last()), "override procedure") {
-		t.Fatal("draft article reached the model")
-	}
-	var answered bool
-	e.Scalar(`SELECT answered FROM ai_widget_answers WHERE message_id = $1`, &answered, mid)
-	if !answered {
-		t.Fatal("marker")
-	}
-	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'answer'`, e.WS.ID); n != 1 {
-		t.Fatalf("usage %d", n)
-	}
-	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_answered' AND actor_type = 'ai'`, tid); n != 1 {
-		t.Fatalf("activity %d", n)
-	}
-	// The visitor sees the ai flag through the widget API.
-	r := e.Do("GET", "/v1/widget/conversations/"+tid.String()+"/messages", va, nil)
-	if r.Status == 200 && !strings.Contains(string(r.Body), `"ai":true`) {
-		t.Fatalf("widget messages %s", r.Body)
-	}
-	// Running the same job again does nothing.
-	if err := e.S.WidgetAnswer(e.Ctx, jobs.AIWidgetAnswerArgs{WorkspaceID: e.WS.ID, TicketID: tid, MessageID: mid}); err != nil {
-		t.Fatal(err)
-	}
-	if len(publicMessages(e, tid)) != 2 {
-		t.Fatal("answered twice")
-	}
-
-	// Ungrounded: nothing relevant in the KB, no model call, no answer, no charge.
-	calls := e.F.calls()
-	_, tid2, mid2 := widgetConversation(e, "Do you ship pianos to Antarctica by submarine?")
-	e.runWidgetJobs()
-	if e.F.calls() != calls || len(publicMessages(e, tid2)) != 1 {
-		t.Fatal("answered without sources")
-	}
-	e.Scalar(`SELECT answered FROM ai_widget_answers WHERE message_id = $1`, &answered, mid2)
-	if answered {
-		t.Fatal("declined marked answered")
-	}
-
-	// The model says it cannot answer from the sources.
-	e.F.set("widget", `{"answerable":false,"answer":"","source_ids":[],"wants_human":false}`)
-	_, tid3, _ := widgetConversation(e, "How do I reset my password on the mobile app?")
-	e.runWidgetJobs()
-	if len(publicMessages(e, tid3)) != 1 {
-		t.Fatal("answered unanswerable")
-	}
-	// An answer citing no valid source is not posted either.
-	e.F.set("widget", `{"answerable":true,"answer":"Sure, we refund everything.","source_ids":[7],"wants_human":false}`)
-	_, tid4, _ := widgetConversation(e, "How do I reset my password today?")
-	e.runWidgetJobs()
-	if len(publicMessages(e, tid4)) != 1 {
-		t.Fatal("answered with invented source")
-	}
-	if n := e.count(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'answer'`, e.WS.ID); n != 1 {
-		t.Fatalf("declines must not be charged: %d", n)
-	}
-
-	// Assigned conversations are left to the assignee.
-	e.F.set("widget", defaultReplies["widget"])
-	_, tid5, mid5 := widgetConversation(e, "How do I reset my password?")
-	e.Exec(`UPDATE tickets SET assignee_id = $2 WHERE id = $1`, tid5, e.WS.Agent.ID)
-	e.runWidgetJobs()
-	if len(publicMessages(e, tid5)) != 1 {
-		t.Fatal("answered an assigned ticket")
-	}
-	_ = mid5
-
-	// Asking for a person hands off without a model call and notifies the team.
-	e.Exec(`UPDATE tickets SET assignee_id = $2 WHERE id = $1`, tid5, nil)
-	calls = e.F.calls()
-	_, tid6, _ := widgetConversation(e, "I want to talk to a real person please")
-	e.runWidgetJobs()
-	got := e.loadTicket(tid6)
-	if e.F.calls() != calls || got.Custom["ai_handoff"] != true || got.Custom["ai_handoff_at"] == nil {
-		t.Fatalf("%+v", got.Custom)
-	}
-	if n := e.count(`SELECT count(*) FROM activities WHERE ticket_id = $1 AND type = 'ai_handoff'`, tid6); n != 1 {
-		t.Fatalf("handoff activity %d", n)
-	}
-	// The model can ask for a handoff too.
-	e.F.set("widget", `{"answerable":false,"answer":"","source_ids":[],"wants_human":true}`)
-	_, tid7, _ := widgetConversation(e, "How do I reset my password? It keeps failing")
-	e.runWidgetJobs()
-	if e.loadTicket(tid7).Custom["ai_handoff"] != true {
-		t.Fatal("model handoff")
-	}
 }
 
 func TestWidgetHandoffEndpoint(t *testing.T) {

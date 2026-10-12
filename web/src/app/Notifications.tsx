@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { AtSign, Bell, CornerDownLeft, Hand, TimerOff, UserPlus } from "lucide-react";
+import { AtSign, Bell, CornerDownLeft, Gauge, Hand, TimerOff, UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -24,6 +24,7 @@ const kind: Record<Notification["type"], { icon: React.ReactNode; tone: Tone }> 
   customer_replied: { icon: <CornerDownLeft />, tone: "teal" },
   sla_breached: { icon: <TimerOff />, tone: "red" },
   ai_handoff: { icon: <Hand />, tone: AI_TONE },
+  ai_cap_reached: { icon: <Gauge />, tone: AI_TONE },
 };
 
 function describe(n: Notification, t: TFunction<"shell">): string {
@@ -42,6 +43,8 @@ function describe(n: Notification, t: TFunction<"shell">): string {
       return t("notifications.type.sla");
     case "ai_handoff":
       return contact ? t("notifications.type.handoff", { who: contact }) : t("notifications.type.handoffAnon");
+    case "ai_cap_reached":
+      return t("notifications.type.capReached");
     default:
       return t("notifications.type.other");
   }
@@ -81,7 +84,8 @@ export function NotificationsButton() {
   const openTicket = (n: Notification) => {
     if (!n.read_at) markRead.mutate({ ids: [n.id] });
     setOpen(false);
-    if (n.ticket)
+    if (n.type === "ai_cap_reached") void navigate({ to: "/settings/ai/behaviour" });
+    else if (n.ticket)
       void navigate({
         to: "/inbox/$folder/{-$ticketId}",
         params: { folder: n.type === "assigned" || n.type === "mentioned" ? "mine" : "open", ticketId: n.ticket.id },

@@ -298,7 +298,8 @@ const kbRoute = createRoute({
 const kbArticleRoute = createRoute({
   getParentRoute: () => appLayout,
   path: "/kb/articles/$articleId",
-  validateSearch: (s: Record<string, unknown>): { collection?: string } => ({ collection: str(s.collection) }),
+  // `title` prefills a new article (the agent report's "Write an article").
+  validateSearch: (s: Record<string, unknown>): { collection?: string; title?: string } => ({ collection: str(s.collection), title: str(s.title)?.slice(0, 200) }),
   loader: ({ context, params }) => {
     void context.queryClient.prefetchQuery(q.kbCollections());
     if (params.articleId !== "new") return context.queryClient.ensureQueryData(q.kbArticle(params.articleId));
@@ -418,9 +419,11 @@ const sAutomationEdit = createRoute({
   component: page(() => import("./pages/settings/AutomationEdit")),
   staticData: { title: "Automation" },
 });
-const sWidget = settingsPage("/widget", "Chat widget", () => import("./pages/settings/WidgetSettings"), (qc) =>
-  Promise.all([qc.ensureQueryData(q.widgetSettings()), qc.ensureQueryData(q.workspace())]),
-);
+const sWidget = settingsPage("/widget", "Chat widget", () => import("./pages/settings/WidgetSettings"), (qc) => {
+  void qc.prefetchQuery(q.members());
+  void qc.prefetchQuery(q.aiConfig());
+  return Promise.all([qc.ensureQueryData(q.widgetSettings()), qc.ensureQueryData(q.workspace())]);
+});
 const sApiKeys = settingsPage("/api-keys", "API keys", () => import("./pages/settings/ApiKeys"), (qc) => qc.ensureQueryData(q.apiKeys()));
 const sWebhooks = settingsPage("/webhooks", "Webhooks", () => import("./pages/settings/Webhooks"), (qc) => qc.ensureQueryData(q.webhooks()));
 const sWebhookDetail = createRoute({
@@ -446,7 +449,37 @@ const sBilling = createRoute({
   component: page(() => import("./pages/settings/Billing")),
   staticData: { title: "Plan and billing" },
 });
-const sAi = settingsPage("/ai", "AI", () => import("./pages/settings/AiSettings"), (qc) => qc.ensureQueryData(q.aiConfig()));
+const sAi = settingsPage("/ai", "AI", () => import("./pages/settings/AiSettings"), (qc) => {
+  void qc.prefetchQuery(q.aiModels());
+  return qc.ensureQueryData(q.aiConfig());
+});
+
+// The widget AI agent (contracts/agent.md).
+const sAgent = settingsPage("/ai/agent", "AI agent", () => import("./pages/settings/agent/AgentOverview"), (qc) => {
+  void qc.prefetchQuery(q.aiConfig());
+  return qc.ensureQueryData(q.agentReport(defaultRange()));
+});
+const sAgentBehaviour = settingsPage("/ai/behaviour", "Agent behaviour", () => import("./pages/settings/agent/AgentBehaviour"), (qc) => {
+  void qc.prefetchQuery(q.aiModels());
+  void qc.prefetchQuery(q.widgetSettings());
+  return Promise.all([qc.ensureQueryData(q.aiConfig()), qc.ensureQueryData(q.workspace())]);
+});
+const sAgentKnowledge = settingsPage("/ai/knowledge", "Knowledge", () => import("./pages/settings/agent/AgentKnowledge"), (qc) =>
+  qc.ensureQueryData(q.knowledge()),
+);
+const sAgentTools = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/ai/tools",
+  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string } => ({ connected: str(s.connected), error: str(s.error) }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(q.mcpServers()),
+  component: page(() => import("./pages/settings/agent/AgentTools")),
+  staticData: { title: "Agent tools" },
+});
+const sAgentPlayground = settingsPage("/ai/playground", "Agent playground", () => import("./pages/settings/agent/AgentPlayground"), (qc) => {
+  void qc.prefetchQuery(q.aiModels());
+  void qc.prefetchQuery(q.widgetSettings());
+  return Promise.all([qc.ensureQueryData(q.aiConfig()), qc.ensureQueryData(q.workspace())]);
+});
 
 const routeTree = rootRoute.addChildren([
   helpRoute.addChildren([helpHomeRoute, helpCollectionRoute, helpArticleRoute, helpSearchRoute]),
@@ -498,6 +531,11 @@ const routeTree = rootRoute.addChildren([
       sAudit,
       sBilling,
       sAi,
+      sAgent,
+      sAgentBehaviour,
+      sAgentKnowledge,
+      sAgentTools,
+      sAgentPlayground,
     ]),
   ]),
 ]);

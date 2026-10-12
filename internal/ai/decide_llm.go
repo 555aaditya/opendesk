@@ -87,7 +87,7 @@ func (l *llmDecider) Decide(ctx context.Context, req decide.Request) (decide.Res
 	if err := parseJSON(resp.Text, &raw); err != nil {
 		return decide.Result{}, err
 	}
-	out := decide.Result{Model: resp.Model, Answers: map[string]decide.Answer{}, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens}
+	out := decide.Result{Model: resp.Model, Answers: map[string]decide.Answer{}, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUSD: resp.CostUSD}
 	if out.Model == "" {
 		out.Model = l.s.models.Fast
 	}

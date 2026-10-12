@@ -3,9 +3,11 @@ package widget
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -24,6 +26,37 @@ type widgetSettingsPatch struct {
 	RequireEmail   *bool     `json:"require_email,omitempty"`
 	Enabled        *bool     `json:"enabled,omitempty"`
 	AllowedOrigins *[]string `json:"allowed_origins,omitempty" maxItems:"50"`
+	Color          *string   `json:"color,omitempty" maxLength:"7" doc:"#rrggbb, or empty for the workspace brand colour"`
+	Theme          *string   `json:"theme,omitempty" enum:"auto,light,dark"`
+	Position       *string   `json:"position,omitempty" enum:"right,left"`
+	OffsetX        *int      `json:"offset_x,omitempty" minimum:"0" maximum:"200"`
+	OffsetY        *int      `json:"offset_y,omitempty" minimum:"0" maximum:"200"`
+	Launcher       *string   `json:"launcher,omitempty" enum:"icon,label"`
+	LauncherLabel  *string   `json:"launcher_label,omitempty" maxLength:"200"`
+	Radius         *string   `json:"radius,omitempty" enum:"square,soft,round"`
+	Title          *string   `json:"title,omitempty" maxLength:"200"`
+	Subtitle       *string   `json:"subtitle,omitempty" maxLength:"400"`
+	ShowTeam       *bool     `json:"show_team,omitempty"`
+	Suggestions    *[]string `json:"suggestions,omitempty" maxItems:"10"`
+	Sound          *bool     `json:"sound,omitempty"`
+	BotName        *string   `json:"bot_name,omitempty" maxLength:"200"`
+}
+
+var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// cleanLabel collapses whitespace in a short visitor-facing text and refuses markup and
+// control characters.
+func cleanLabel(field, s string, minLen, maxLen int) (string, error) {
+	s = strings.Join(strings.Fields(s), " ")
+	n := utf8.RuneCountInString(s)
+	if s == "" && minLen == 0 {
+		return "", nil
+	}
+	if n < max(minLen, 1) || n > maxLen || strings.ContainsAny(s, "<>") ||
+		strings.IndexFunc(s, func(r rune) bool { return unicode.IsControl(r) || unicode.In(r, unicode.Cf) }) >= 0 {
+		return "", httpx.Validation(fmt.Sprintf("%s must be up to %d characters of plain text", field, maxLen))
+	}
+	return s, nil
 }
 
 func cleanGreeting(s string) (string, error) {
@@ -114,6 +147,72 @@ func (h *handler) registerSettings(api huma.API) {
 				if b.Enabled != nil {
 					w.Enabled = *b.Enabled
 					fields = append(fields, "enabled")
+				}
+				if b.Color != nil {
+					c := strings.TrimSpace(*b.Color)
+					if c != "" && !hexColor.MatchString(c) {
+						return httpx.Validation("color must look like #1a2b3c")
+					}
+					w.Color = strings.ToLower(c)
+					fields = append(fields, "color")
+				}
+				for name, pair := range map[string]struct {
+					in  *string
+					out *string
+				}{"theme": {b.Theme, &w.Theme}, "position": {b.Position, &w.Position}, "launcher": {b.Launcher, &w.Launcher}, "radius": {b.Radius, &w.Radius}} {
+					if pair.in != nil {
+						*pair.out = *pair.in // huma checked the enum
+						fields = append(fields, name)
+					}
+				}
+				if b.OffsetX != nil {
+					w.OffsetX = *b.OffsetX
+					fields = append(fields, "offset_x")
+				}
+				if b.OffsetY != nil {
+					w.OffsetY = *b.OffsetY
+					fields = append(fields, "offset_y")
+				}
+				for name, t := range map[string]struct {
+					in  *string
+					out *string
+					max int
+				}{"launcher_label": {b.LauncherLabel, &w.LauncherLabel, 24}, "title": {b.Title, &w.Title, 40},
+					"subtitle": {b.Subtitle, &w.Subtitle, 80}, "bot_name": {b.BotName, &w.BotName, 30}} {
+					if t.in == nil {
+						continue
+					}
+					v, err := cleanLabel(name, *t.in, 0, t.max)
+					if err != nil {
+						return err
+					}
+					*t.out = v
+					fields = append(fields, name)
+				}
+				if b.ShowTeam != nil {
+					w.ShowTeam = *b.ShowTeam
+					fields = append(fields, "show_team")
+				}
+				if b.Sound != nil {
+					w.Sound = *b.Sound
+					fields = append(fields, "sound")
+				}
+				if b.Suggestions != nil {
+					out := []string{}
+					for _, sg := range *b.Suggestions {
+						v, err := cleanLabel("each suggestion", sg, 2, 60)
+						if err != nil {
+							return err
+						}
+						if !contains(out, v) {
+							out = append(out, v)
+						}
+					}
+					if len(out) > 4 {
+						return httpx.Validation("at most 4 suggestions")
+					}
+					w.Suggestions = out
+					fields = append(fields, "suggestions")
 				}
 				if b.AllowedOrigins != nil {
 					if len(*b.AllowedOrigins) > 20 {

@@ -118,13 +118,26 @@ type CancelSubscriptionArgs struct {
 
 func (CancelSubscriptionArgs) Kind() string { return "billing.cancel_subscription" }
 
-// AIWidgetAnswerArgs lets the widget answer bot reply to one visitor chat message from
-// the knowledge base. Owner: ai.
+// AIWidgetAnswerArgs lets the widget AI agent reply to one visitor chat message.
+// Owner: ai.
 type AIWidgetAnswerArgs struct {
 	WorkspaceID uuid.UUID `json:"workspace_id"`
 	TicketID    uuid.UUID `json:"ticket_id"`
 	MessageID   uuid.UUID `json:"message_id"`
+	// PageURL is the host page the visitor wrote from, when the widget reported it.
+	PageURL string `json:"page_url,omitempty"`
 }
+
+// AIWidgetActionArgs runs an action the visitor confirmed (or records a decline) and
+// lets the widget agent continue. Owner: ai.
+type AIWidgetActionArgs struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TicketID    uuid.UUID `json:"ticket_id"`
+	ActionID    uuid.UUID `json:"action_id"`
+	Confirmed   bool      `json:"confirmed"`
+}
+
+func (AIWidgetActionArgs) Kind() string { return "ai.widget_action" }
 
 func (AIWidgetAnswerArgs) Kind() string { return "ai.widget_answer" }
 

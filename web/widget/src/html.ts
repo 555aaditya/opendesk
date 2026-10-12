@@ -69,3 +69,40 @@ export function initials(name: string): string {
   if (!p.length) return "?";
   return (p.length === 1 ? p[0].slice(0, 2) : p[0][0] + p[p.length - 1][0]).toUpperCase();
 }
+
+export type SourceLink = { href: string; title: string };
+
+/**
+ * Agent replies list their cited sources as a trailing `<ul>` of links
+ * (contracts/agent.md "Output and posting"). Split them off so they show as
+ * chips under the reply. Takes and returns sanitized HTML.
+ */
+export function splitSources(html: string): { html: string; sources: SourceLink[] } {
+  if (!html || !/<ul/i.test(html)) return { html, sources: [] };
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, "text/html");
+  const body = doc.body;
+  const last = body.lastElementChild;
+  while (body.lastChild && body.lastChild !== last && !(body.lastChild.textContent ?? "").trim()) body.lastChild.remove();
+  if (!last || last.tagName !== "UL" || body.lastChild !== last) return { html, sources: [] };
+  const items = Array.from(last.children);
+  const sources: SourceLink[] = [];
+  for (const li of items) {
+    const a = li.tagName === "LI" && li.children.length === 1 ? li.firstElementChild : null;
+    const href = a?.tagName === "A" ? (a.getAttribute("href") ?? "") : "";
+    if (!a || !/^https?:/i.test(href) || (li.textContent ?? "").trim() !== (a.textContent ?? "").trim()) return { html, sources: [] };
+    sources.push({ href, title: (a.textContent ?? "").trim() || href });
+  }
+  last.remove();
+  // Nothing but the list: keep it as the body.
+  if (!(body.textContent ?? "").trim() || !sources.length) return { html, sources: [] };
+  return { html: body.innerHTML, sources };
+}
+
+/** The host of a URL, for a source chip's hint. */
+export function hostOf(href: string): string {
+  try {
+    return new URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}

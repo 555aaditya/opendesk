@@ -19,7 +19,11 @@
   <body>
     <main>
       <h1>Fieldnote</h1>
-      <p>A host page for testing the opendesk chat widget. Add <code>?od_open=1</code> to open it, <code>?key=wk_brand</code> for a brand colour, <code>?key=wk_email</code> for email capture, <code>?od_lang=ar</code> for a language, <code>?od_demo=send</code> or <code>?od_demo=handoff</code> for the AI answer bot.</p>
+      <p>A host page for testing the opendesk chat widget against an in-memory backend that simulates the AI agent (live streaming, tools, an action card, ratings and a handoff).</p>
+      <div class="card">
+        <p style="margin:0 0 8px"><b>Appearance</b>: <code>?key=</code> <code>wk_brand</code> (brand colour), <code>wk_left</code> (left, offsets), <code>wk_label</code> (label launcher), <code>wk_round</code> (round corners), <code>wk_square</code>, <code>wk_dark</code> / <code>wk_light</code> (forced theme), <code>wk_email</code> (email capture), <code>wk_human</code> (no AI agent). <code>?od_lang=ar</code> for a language, <code>?od_open=1</code> to open it.</p>
+        <p style="margin:0"><b>The agent</b>: tap a suggestion, or ask about an order with a number and street (<em>"Send order #4821 to 22 Baker Street"</em>) for a tool step and an action card, SSO for an answer with sources, or a person for a handoff. Hover a reply to rate it. Helpers: <code>?od_demo=thread</code>, <code>send</code>, <code>order</code>, <code>handoff</code>.</p>
+      </div>
       <div class="card"><div class="bar" style="width:60%"></div><div class="bar" style="width:85%"></div><div class="bar" style="width:40%"></div></div>
       <div class="card"><div class="bar" style="width:70%"></div><div class="bar" style="width:55%"></div></div>
     </main>
@@ -36,7 +40,9 @@
       if (params.get("od_lang")) s.dataset.lang = params.get("od_lang");
       document.body.appendChild(s);
       // Screenshot helpers: ?od_demo=thread opens the past conversation, ?od_demo=send sends a message,
+      // ?od_demo=order asks the agent to change an order (tool step and action card),
       // ?od_demo=handoff sends one and then asks for a person.
+      var order = "Can you send order #4821 to my new address? It's 22 Baker Street, London.";
       var texts = {
         en: "Hi! Our team can't log in with SSO since this morning. Is something down?",
         ja: "こんにちは。今朝からチーム全員がSSOでログインできません。障害でしょうか？",
@@ -52,14 +58,14 @@
           if (demo === "thread") {
             var c = root.querySelector(".conv");
             if (c) { c.click(); clearInterval(t); }
-          } else if (demo === "send" || demo === "handoff") {
+          } else if (demo === "send" || demo === "handoff" || demo === "order") {
             var p = root.querySelector(".primary");
             if (!p) return;
             p.click();
             clearInterval(t);
             setTimeout(function () {
               var ta = root.querySelector("textarea");
-              ta.value = texts[params.get("od_lang")] || texts.en;
+              ta.value = demo === "order" ? order : texts[params.get("od_lang")] || texts.en;
               ta.dispatchEvent(new Event("input", { bubbles: true }));
               setTimeout(function () { root.querySelector(".send").click(); }, 100);
               if (demo === "handoff") {

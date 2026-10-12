@@ -65,6 +65,7 @@ type ChatResponse struct {
 	Model        string
 	InputTokens  int
 	OutputTokens int
+	CostUSD      float64
 	StopReason   string
 }
 
@@ -103,13 +104,11 @@ func (s *Service) AssistantTurn(ctx context.Context, wid uuid.UUID, userID *uuid
 	if !ok {
 		return ChatResponse{}, ErrNoTools
 	}
-	if req.Model == "" {
-		req.Model = s.models.Default
-	}
 	c := s.newCall(wid, userID, nil, "assistant")
 	if err := c.reserve(ctx); err != nil {
 		return ChatResponse{}, err
 	}
+	req.Model = c.resolveModel(ctx, req.Model)
 	start := time.Now()
 	resp, err := tp.Chat(ctx, req, onDelta)
 	if resp.Model == "" {
@@ -120,7 +119,7 @@ func (s *Service) AssistantTurn(ctx context.Context, wid uuid.UUID, userID *uuid
 	if err != nil {
 		return ChatResponse{}, err
 	}
-	c.resp = Response{Model: resp.Model, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens}
+	c.resp = Response{Model: resp.Model, InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUSD: resp.CostUSD}
 	c.charge(ctx)
 	return resp, nil
 }

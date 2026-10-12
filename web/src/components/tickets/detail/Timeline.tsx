@@ -15,6 +15,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PriorityIcon, priorityLabel, SeverityChip, severityLabel, StatusIcon, statusLabel } from "../bits";
 import { isSeverity, pct } from "@/lib/decisions";
 import { MessageItem } from "./MessageItem";
+import { LiveAgentReply } from "./AgentReply";
 import { isAIActor, OllieAvatar, useAssistantName } from "../ollie";
 import { fieldText, useDisplay, useTicketFields, type CustomField } from "../fields";
 
@@ -265,10 +266,14 @@ export function Timeline({
   });
 
   // Open at the latest message; follow new ones only if already at the bottom.
+  const liveLen = useRealtime((s) => {
+    const l = s.live[ticketId];
+    return l ? l.text.length + l.tools.length : 0;
+  });
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [count, loading]);
+  }, [count, loading, liveLen]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -329,6 +334,7 @@ export function Timeline({
             );
           })
         )}
+        {!loading && <LiveAgentReply ticketId={ticketId} messages={messages} />}
         <TypingIndicator ticketId={ticketId} contactName={contactName} />
       </div>
     </div>

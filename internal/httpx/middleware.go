@@ -100,11 +100,11 @@ func CORS(origins []string) func(http.Handler) http.Handler {
 				case public:
 					h.Set("Access-Control-Allow-Origin", "*")
 				}
-				h.Set("Access-Control-Expose-Headers", "X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Idempotent-Replayed")
+				h.Set("Access-Control-Expose-Headers", "X-Request-Id, RateLimit-Limit, RateLimit-Remaining, RateLimit-Reset, Idempotent-Replayed, Mcp-Session-Id")
 			}
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, OD-Workspace, Idempotency-Key")
+				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, OD-Workspace, Idempotency-Key, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID")
 				h.Set("Access-Control-Max-Age", "600")
 				w.WriteHeader(http.StatusNoContent)
 				return

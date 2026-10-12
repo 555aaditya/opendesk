@@ -14,13 +14,21 @@ export function AiIcon({ className }: { className?: string }) {
   return <Sparkles aria-hidden className={cn("size-3.5 shrink-0", tone[AI_TONE].text, className)} strokeWidth={1.75} />;
 }
 
-/** "3 credits", for tooltips and menus. Empty when the cost is unknown or AI is unlimited. */
-export function useCreditLabel() {
+/** "3 credits", or "about 3 credits" when credits follow real usage (the cost is then typical). */
+export function useCreditsText() {
   const { t } = useTranslation();
+  const { t: tai } = useTranslation("ai");
+  const { config } = useAI();
+  return (n: number) => (config?.metered ? tai("settings.about_credits", { count: n }) : t("credits", { count: n }));
+}
+
+/** "about 3 credits", for tooltips and menus. Empty when the cost is unknown or AI is unlimited. */
+export function useCreditLabel() {
   const { cost } = useAI();
+  const text = useCreditsText();
   return (feature: AIFeature) => {
     const n = cost(feature);
-    return n === null ? "" : t("credits", { count: n });
+    return n === null ? "" : text(n);
   };
 }
 

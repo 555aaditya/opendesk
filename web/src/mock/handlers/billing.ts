@@ -9,7 +9,7 @@ import type { AIFeature, Billing, BillingUsage, UserRef } from "@/lib/api/types"
 import { db, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { HttpError, forbidden, get, post, type Ctx } from "../router";
-import { COSTS } from "../credits";
+import { FAST_MODEL, DEFAULT_MODEL, JEV, meter, round3 } from "../credits";
 import { DAY, NOW, int, pick, rand } from "../util";
 
 type MockPlan = "free" | "pro" | "past_due" | "cancel" | "self_hosted";
@@ -108,10 +108,11 @@ export function billingOut(ws: WsData): Billing {
   ensure(ws);
   const b = ws.billing;
   const c = b.credits;
+  c.used = round3(c.used);
   const overflow = Math.max(0, c.used - c.monthly);
-  const purchased = Math.max(0, (purchasedTotal.get(ws) ?? 0) - overflow);
+  const purchased = round3(Math.max(0, (purchasedTotal.get(ws) ?? 0) - overflow));
   c.purchased = purchased;
-  c.remaining = c.unlimited ? 0 : Math.max(0, c.monthly - c.used) + purchased;
+  c.remaining = c.unlimited ? 0 : round3(Math.max(0, c.monthly - c.used) + purchased);
   const members = ws.members.length + (b.plan === "free" ? ws.invitations.length : 0);
   return structuredClone({
     ...b,
@@ -144,9 +145,28 @@ const WEIGHTS: [AIFeature, number][] = [
   ["copilot", 10],
   ["translate", 9],
   ["triage", 8],
-  ["answer", 4],
+  ["answer_check", 8],
+  ["answer", 6],
+  ["assistant", 5],
+  ["decide", 2],
+  ["playground", 1],
   ["kb_draft", 1],
 ];
+
+/** The model each feature ran on in the seeded history. */
+function seedModel(f: AIFeature): string {
+  if (f === "triage" || f === "decide" || f === "answer_check") return JEV;
+  if (f === "rewrite" || f === "translate" || f === "summarize") return FAST_MODEL;
+  return DEFAULT_MODEL;
+}
+
+/** A seeded usage row: metered like a real call, deterministic. */
+function seedRow(f: AIFeature, user_id: string | null, at: number): WsData["aiUsage"][number] {
+  return { ...meter(f, seedModel(f), rand), user_id, at: new Date(at).toISOString() };
+}
+
+/** The widget agent and automations act for nobody in particular. */
+const unattended = (f: AIFeature) => f === "answer" || f === "answer_check" || f === "decide";
 function feature(): AIFeature {
   let r = rand() * WEIGHTS.reduce((s, [, w]) => s + w, 0);
   for (const [f, w] of WEIGHTS) if ((r -= w) < 0) return f;
@@ -164,7 +184,7 @@ function seedUsage(ws: WsData, perDay: number) {
       const f = feature();
       const at = dayStart - int(0, 20) * 3_600_000;
       if (at > NOW) continue;
-      ws.aiUsage.push({ feature: f, user_id: f === "answer" ? null : pick(users), credits: COSTS[f], at: new Date(at).toISOString() });
+      ws.aiUsage.push(seedRow(f, unattended(f) ? null : pick(users), at));
     }
   }
 }
@@ -175,7 +195,7 @@ function periodUsed(ws: WsData) {
   return ws.aiUsage.filter((u) => {
     const t = Date.parse(u.at);
     return t >= start && t < end;
-  }).reduce((s, u) => s + u.credits, 0);
+  }).reduce((s, u) => round3(s + u.credits), 0);
 }
 
 function seedWorkspace(ws: WsData, plan: MockPlan) {
@@ -189,11 +209,12 @@ function seedWorkspace(ws: WsData, plan: MockPlan) {
     ws.aiUsage = ws.aiUsage.filter((u) => Date.parse(u.at) < start);
     const users = ws.members.map((m) => m.user_id);
     let left = 38;
-    while (left > 0) {
-      const f = left >= 3 && rand() < 0.3 ? "draft_reply" : pick<AIFeature>(["summarize", "rewrite", "translate"]);
+    while (left > 0.5) {
+      const f = left >= 3 && rand() < 0.3 ? "draft_reply" : pick<AIFeature>(["summarize", "rewrite", "translate", "copilot"]);
       const at = start + rand() * (NOW - start);
-      ws.aiUsage.push({ feature: f, user_id: pick(users), credits: COSTS[f], at: new Date(at).toISOString() });
-      left -= COSTS[f];
+      const row = seedRow(f, pick(users), at);
+      ws.aiUsage.push(row);
+      left -= row.credits;
     }
   } else {
     c.period_end = new Date(NOW + 18 * DAY).toISOString();
@@ -226,6 +247,7 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
   const days = new Map<string, { credits: number; calls: number; by_feature: Partial<Record<AIFeature, number>> }>();
   const feats = new Map<AIFeature, { credits: number; calls: number }>();
   const members = new Map<string, { credits: number; calls: number }>();
+  const models = new Map<string, { credits: number; calls: number; input_tokens: number; output_tokens: number }>();
   for (const r of inRange) {
     const dayKey = r.at.slice(0, 10);
     const day = days.get(dayKey) ?? { credits: 0, calls: 0, by_feature: {} };
@@ -242,15 +264,29 @@ export function aggregateUsage(rows: WsData["aiUsage"], from: string, to: string
     m.credits += r.credits;
     m.calls += 1;
     members.set(key, m);
+    const mo = models.get(r.model) ?? { credits: 0, calls: 0, input_tokens: 0, output_tokens: 0 };
+    mo.credits += r.credits;
+    mo.calls += 1;
+    mo.input_tokens += r.input_tokens;
+    mo.output_tokens += r.output_tokens;
+    models.set(r.model, mo);
   }
+  const rounded = <T extends { credits: number }>(v: T): T => ({ ...v, credits: round3(v.credits) });
   return {
     from: new Date(start).toISOString(),
     to: new Date(end).toISOString(),
-    total_credits: inRange.reduce((s, r) => s + r.credits, 0),
+    total_credits: round3(inRange.reduce((s, r) => s + r.credits, 0)),
     total_calls: inRange.length,
-    by_feature: [...feats].map(([feature, v]) => ({ feature, ...v })).sort((a, b) => b.credits - a.credits),
-    by_day: [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ date, ...v })),
-    by_member: [...members].map(([id, v]) => ({ user: id ? ref(id) : null, ...v })).sort((a, b) => b.credits - a.credits),
+    by_feature: [...feats].map(([feature, v]) => rounded({ feature, ...v })).sort((a, b) => b.credits - a.credits),
+    by_day: [...days]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, v]) => ({
+        date,
+        ...rounded(v),
+        by_feature: Object.fromEntries(Object.entries(v.by_feature).map(([k, n]) => [k, round3(n)])) as Partial<Record<AIFeature, number>>,
+      })),
+    by_member: [...members].map(([id, v]) => rounded({ user: id ? ref(id) : null, ...v })).sort((a, b) => b.credits - a.credits),
+    by_model: [...models].map(([model, v]) => rounded({ model, ...v })).sort((a, b) => b.credits - a.credits),
   };
 }
 

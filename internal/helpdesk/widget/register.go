@@ -15,6 +15,7 @@ func Register(d *deps.Deps, api huma.API, r chi.Router) {
 	h.registerAttachments(api, r)
 	h.registerPublic(api)
 	h.registerConversations(api)
+	h.registerAgentRoutes(api)
 	h.registerSettings(api)
 }
 

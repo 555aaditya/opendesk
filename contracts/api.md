@@ -36,7 +36,7 @@ type AvatarSource = "upload" | "oauth" | "gravatar" | "domain" | "widget";
 type User = { id: string; email: string; name: string; avatar_url: string | null; avatar_source: AvatarSource | null; email_verified: boolean; totp_enabled: boolean; created_at: string };
 type UserRef = { id: string; name: string; email: string; avatar_url: string | null };
 type Workspace = { id: string; name: string; slug: string; widget_key: string; settings: WorkspaceSettings; avatar_url: string | null /* workspace logo */; avatar_source: "upload" | null;
-  images: { help_center_logo: string | null; help_center_favicon: string | null; widget_avatar: string | null; widget_launcher: string | null }; created_at: string };
+  images: { help_center_logo: string | null; help_center_favicon: string | null; widget_avatar: string | null; widget_launcher: string | null; widget_bot: string | null /* the widget agent's picture; null = the Ollie mark */ }; created_at: string };
 type WorkspaceSettings = { brand_color?: string; timezone?: string; help_center_enabled?: boolean; help_center_title?: string; csat_enabled?: boolean;
   auto_assign?: AssignMode /* the workspace default; see "Assignment" */; locale?: string /* BCP 47 default for customer-facing pages (help center, CSAT, widget); "" = the visitor's browser */;
   gravatar?: boolean /* default false: look up contact pictures on Gravatar (sends a hash of the contact's email to Gravatar) */;
@@ -68,7 +68,7 @@ type Ticket = {
   mailbox_id: string | null; contact: ContactRef | null; assignee: UserRef | null; team_id: string | null;
   tags: TagRef[]; fields: FieldValues; sla: { policy_id: string; first_response_due_at: string | null; resolution_due_at: string | null; breached: boolean } | null;
   first_responded_at: string | null; solved_at: string | null; snoozed_until: string | null;
-  last_message_at: string; last_customer_message_at: string | null; last_message_preview: string; message_count: number;
+  last_message_at: string; last_customer_message_at: string | null; waiting_since: string | null /* the customer's first unanswered public message; null once anyone (or the AI agent) replied */; last_message_preview: string; message_count: number;
   spam: boolean; csat: { score: number; comment: string } | null; custom: Record<string, unknown>;
   created_at: string; updated_at: string;
 };
@@ -78,14 +78,16 @@ type Message = {
   body_html: string; body_text: string; has_quoted: boolean; subject: string;
   from_email: string; from_name: string; to: string[]; cc: string[]; bcc: string[];
   attachments: Attachment[]; delivery_status: "none" | "pending" | "sent" | "failed" | "bounced"; delivery_error: string;
-  ai: boolean; // an automatic answer from the widget answer bot (contracts/ai.md)
+  ai: boolean; // a reply from the widget AI agent (contracts/agent.md)
+  ai_action: AIAction | null; // an action the agent asks the visitor to confirm (contracts/agent.md "Visitor actions"); public
+  ai_rating: "up" | "down" | null; // the visitor's rating of an agent reply (contracts/agent.md "Ratings")
   created_at: string;
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
 // activity types: status_changed{from,to} priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
-// AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,severity,via,model?,engine?}; AI changes carry {via, model?: "jev", confidence?: number} ai_answered{message_id,article_ids} ai_handoff (actor "ai" or "contact")
+// AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,severity,via,model?,engine?}; AI changes carry {via, model?: "jev", confidence?: number} ai_answered{message_id,sources,tools} ai_action{action_id,tool,status} ai_handoff (actor "ai" or "contact")
 
 // Labels ("tags" in the API). See "Labels and custom fields" below.
 type LabelColor = "gray" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "teal" | "cyan" | "blue" | "indigo" | "violet" | "purple" | "pink" | "rose";
@@ -122,7 +124,7 @@ type AssignMode = "none" | "round_robin" | "load_balanced";
 type AssignmentRule = { target_type: "mailbox" | "team"; target_id: string; mode: AssignMode };
 type Assignment = { mode: AssignMode /* = settings.auto_assign */; rules: AssignmentRule[]; auto_away_minutes: number /* 0 = off */ };
 type TriageField = "priority" | "severity" | "labels" | "team";
-type DecisionEngine = { provider: "typesafe" | "llm" | "none"; model: string /* "jev-latest", or the LLM fast model */; connected: boolean };
+type DecisionEngine = { provider: "typesafe" /* Jev, direct or through OpenRouter */ | "llm" | "none"; model: string /* "jev-latest", "~typesafe/jev-latest", or the LLM fast model */; connected: boolean };
 type TriageSettings = { auto_triage: boolean; fields: TriageField[]; assign_after_triage: boolean;
   threshold: number /* 0.5..0.99, default 0.7: confidence at or above it applies a decision, below it leaves a suggestion */;
   engine: DecisionEngine; available: boolean /* triage can run: AI or a decision engine is configured and AI is on for the workspace */ };
@@ -152,9 +154,9 @@ type ApiKey = { id: string; name: string; prefix: string; scopes: string[]; last
 type Webhook = { id: string; url: string; description: string; events: string[]; enabled: boolean; created_at: string };
 type WebhookDelivery = { id: string; event_id: string; event_type: string; status: "pending" | "succeeded" | "failed"; attempts: number; response_code: number | null; duration_ms: number | null; created_at: string };
 type AuditLog = { id: string; actor: { type: "user" | "api_key" | "system"; user: UserRef | null; api_key_id: string | null }; action: string; entity_type: string; entity_id: string | null; data: Record<string, unknown>; ip: string; created_at: string };
-type Notification = { id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff"; ticket: { id: string; number: number; subject: string } | null; data: Record<string, unknown>; read_at: string | null; created_at: string };
+type Notification = { id: string; type: "assigned" | "mentioned" | "customer_replied" | "sla_breached" | "ai_handoff" | "ai_cap_reached"; ticket: { id: string; number: number; subject: string } | null; data: Record<string, unknown>; read_at: string | null; created_at: string };
 // Notification.data: assigned {by, actor_type, actor?: {id, name}}; mentioned {message_id, by, actor?: {id, name}, preview};
-// customer_replied {message_id?, preview?, contact?: {id, name}}; sla_breached {kind}; ai_handoff {via: "ai" | "contact", contact?: {id, name}}.
+// customer_replied {message_id?, preview?, contact?: {id, name}}; sla_breached {kind}; ai_handoff {via: "ai" | "contact", contact?: {id, name}}; ai_cap_reached {cap} (ticket null; the widget agent reached `widget_monthly_cap`, once a month to owners and admins).
 // Mentions in note HTML: <span data-type="mention" data-id="<user_id>">@Name</span> (also data-mention="<user_id>"), or "@<full name or email>" in text.
 ```
 
@@ -206,7 +208,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | POST | `/v1/workspace/widget-secret/rotate` | admin → `{secret}` (shown once) |
 | GET | `/v1/members` · PATCH/DELETE `/v1/members/{user_id}` | `{role}` |
 | PATCH | `/v1/members/{user_id}/availability` | `{availability?: Availability, max_open_tickets?: number \| null /* 1..1000, null clears */}` → `Member`. `user_id` may be `me`. Members set their own `availability`; admins set anyone's and `max_open_tickets` (viewers cannot be assigned, so theirs is refused). Publishes `member.updated` |
-| PUT/DELETE | `/v1/workspace/images/{slot}` | admin. `slot`: `logo` (the workspace `avatar_url`), `help_center_logo`, `help_center_favicon`, `widget_avatar`, `widget_launcher`. PUT multipart `file` (image, 5 MB) → `Workspace`; DELETE → `Workspace`. Audit `workspace.image_updated` / `workspace.image_removed`; publishes `workspace.updated` |
+| PUT/DELETE | `/v1/workspace/images/{slot}` | admin. `slot`: `logo` (the workspace `avatar_url`), `help_center_logo`, `help_center_favicon`, `widget_avatar`, `widget_launcher`, `widget_bot`. PUT multipart `file` (image, 5 MB) → `Workspace`; DELETE → `Workspace`. Audit `workspace.image_updated` / `workspace.image_removed`; publishes `workspace.updated` |
 | GET | `/v1/images/{id}?s=256\|64` | public. The processed PNG behind every `avatar_url` (`s` defaults to 256). Ids are unguessable and immutable: `Cache-Control: public, max-age=31536000, immutable`, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` |
 | GET | `/v1/onboarding` | members → `Onboarding`, computed from the workspace's real state (below) |
 | POST | `/v1/onboarding/dismiss` | → 204. Hides the checklist for this member; `GET` still answers, with `dismissed: true` |
@@ -221,7 +223,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | GET | `/v1/audit-logs` | admin, list, optional `?action=&entity_type=` |
 | GET | `/v1/events?since=<seq>&limit=` | `limit` default 500, max 1000 → `{data: Envelope[], latest_seq, resync: bool}`. Members, and API keys with `realtime` or `tickets:read` |
 | POST | `/v1/realtime/token` | → `{token, url, expires_at}` (users and keys with `realtime`) |
-| GET | `/v1/notifications?unread=` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` → 204. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached, ai_handoff) with a `notification.created` event to `user:<uid>` |
+| GET | `/v1/notifications?unread=` · POST `/v1/notifications/read` | `{ids?: string[], all?: bool}` → 204. Rows are created by helpdesk (assigned, mentioned, customer_replied, sla_breached, ai_handoff) and the AI area (ai_cap_reached) with a `notification.created` event to `user:<uid>` |
 
 Core notes:
 - App links in system email: `/verify?token=`, `/reset?token=`, `/invite?token=` on `APP_URL`.
@@ -409,15 +411,60 @@ than the seeded ones; `try_ollie` any Ollie feature was used in the workspace. T
 ### Widget (owner: backend-helpdesk; `Authorization: Visitor <token>` except session)
 | method | path | notes |
 | --- | --- | --- |
-| GET | `/v1/widget/config?key=<widget_key>` | `{workspace_name, brand_color, greeting, help_center_url, require_email, locale, avatar_url: string \| null /* widget_avatar, else the workspace logo */, launcher_icon_url: string \| null}` |
+| GET | `/v1/widget/config?key=<widget_key>` | `WidgetConfig` below |
 | POST | `/v1/widget/session` | `{key, visitor_token?, email?, name?, user_id?, user_hash?, avatar_url?}` → `{visitor_token, contact: ContactRef, ws_token, gateway_url}`; `user_hash` = hex HMAC-SHA256(widget_secret, user_id) marks the session verified. `avatar_url` (https) is used only on a verified session: it is fetched server-side as the contact's picture (`avatar_source: "widget"`) unless an agent uploaded one |
 | GET | `/v1/widget/conversations` | visitor's chat tickets `{id, subject, status, last_message_preview, last_message_at, ai_handoff}` (`ai_handoff`: the visitor asked for a person, contracts/ai.md) |
-| POST | `/v1/widget/conversations` | `{body}` → conversation + first message |
+| POST | `/v1/widget/conversations` | `{body, page_url?}` → conversation + first message (`page_url`: the host page, https, for the AI agent) |
 | GET | `/v1/widget/conversations/{id}/messages` | public messages only (no notes) |
-| POST | `/v1/widget/conversations/{id}/messages` | `{body, attachment_ids?}` |
-| POST | `/v1/widget/conversations/{id}/handoff` | → 204; ask for a person after an AI answer (contracts/ai.md) |
+| POST | `/v1/widget/conversations/{id}/messages` | `{body, attachment_ids?, page_url?}` (`page_url`: the host page, https, up to 500 chars, given to the AI agent) |
+| POST | `/v1/widget/conversations/{id}/handoff` | → 204; ask for a person while the AI agent handles the conversation (contracts/agent.md) |
+| POST | `/v1/widget/conversations/{id}/actions/{action_id}` | `{decision: "confirm" \| "decline"}` → 204 (contracts/agent.md "Visitor actions") |
+| POST | `/v1/widget/conversations/{id}/messages/{message_id}/rating` | `{rating: "up" \| "down" \| null}` → 204 (contracts/agent.md "Ratings") |
 | POST | `/v1/widget/attachments` | multipart |
-| GET/PATCH | `/v1/widget/settings` | admin, agent-side: `{greeting, require_email, enabled, allowed_origins}` (stored in workspace settings.widget) |
+| GET/PATCH | `/v1/widget/settings` | admin, agent-side: `WidgetSettings` below (stored in workspace `settings.widget`); PATCH merges the given keys, audit `widget.settings_updated` with the changed keys |
+
+```ts
+interface WidgetSettings {
+  enabled: boolean
+  greeting: string                      // up to 300 chars, plain text with newlines
+  require_email: boolean
+  allowed_origins: string[]             // at most 20
+  // Appearance. Every key has a default, so a stored settings.widget without it reads the same.
+  color: string                         // "#rrggbb" launcher and accent colour; "" = the workspace brand_color
+  theme: "auto" | "light" | "dark"      // default "auto": follows the visitor's system
+  position: "right" | "left"            // default "right"
+  offset_x: number                      // 0..200 px from the side, default 20
+  offset_y: number                      // 0..200 px from the bottom, default 20
+  launcher: "icon" | "label"            // default "icon"; "label" shows the icon and launcher_label
+  launcher_label: string                // up to 24 chars; "" = the translated "Chat with us"
+  radius: "square" | "soft" | "round"   // corner style of the panel, bubbles and launcher, default "soft"
+  title: string                         // header title, up to 40 chars; "" = the workspace name
+  subtitle: string                      // under the title, up to 80 chars; "" = the translated reply-time line
+  show_team: boolean                    // up to 3 team avatars in the header, default true
+  suggestions: string[]                 // at most 4 prompts of 2..60 chars on the home screen; a tap starts a conversation with it
+  sound: boolean                        // a soft sound for a new reply while the page is hidden, default false
+  bot_name: string                      // the AI agent's name for visitors, up to 30 chars; "" = "Ollie"
+}
+
+// GET /v1/widget/config. Public; Origin checked against allowed_origins.
+interface WidgetConfig {
+  workspace_name: string
+  brand_color: string | null            // settings.widget.color, else the workspace brand_color
+  greeting: string; help_center_url: string | null; require_email: boolean; locale: string | null
+  avatar_url: string | null             // widget_avatar, else the workspace logo
+  launcher_icon_url: string | null
+  theme: "auto" | "light" | "dark"; position: "right" | "left"; offset_x: number; offset_y: number
+  launcher: "icon" | "label"; launcher_label: string; radius: "square" | "soft" | "round"
+  title: string; subtitle: string; suggestions: string[]; sound: boolean
+  team: { name: string /* first name */; avatar_url: string | null }[]  // up to 3 non-viewer members, available first; [] when show_team is off
+  ai_answers: boolean                   // the AI agent handles new conversations (contracts/agent.md)
+  bot: { name: string; avatar_url: string | null /* widget_bot; null = the Ollie mark */ }
+}
+```
+
+Text settings (`launcher_label`, `title`, `subtitle`, `suggestions`, `bot_name`) are trimmed, have
+runs of whitespace collapsed, and refuse `<`, `>` and control characters (`422 validation_failed`).
+`color` must be `#rrggbb` or "". Names in `team` are first names only; no email or id is exposed.
 
 ### Email (owner: backend-email)
 | method | path | notes |

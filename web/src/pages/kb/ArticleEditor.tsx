@@ -107,7 +107,8 @@ function EditorScreen({ article }: { article: KbArticle | null }) {
     [],
   );
   const [saved, setSaved] = useState<Draft>(initial);
-  const [draft, setDraft] = useState<Draft>(initial);
+  // A new article may arrive with a title (a knowledge gap from the agent report); it counts as an unsaved edit.
+  const [draft, setDraft] = useState<Draft>(() => (!article && search.title ? { ...initial, title: search.title, slug: slugify(search.title) } : initial));
   const [status, setStatus] = useState<KbArticle["status"]>(article?.status ?? "draft");
   const [current, setCurrent] = useState<KbArticle | null>(article);
   const [slugTouched, setSlugTouched] = useState(!!article);

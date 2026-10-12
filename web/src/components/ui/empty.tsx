@@ -86,11 +86,26 @@ export function EmptyArt({ kind = "generic", size = 72, className }: { kind?: Ar
             className={cn(
               "flex items-center justify-center",
               round ? "rounded-full" : "rounded-md",
-              lit ? tone[a.hue].chip : "border border-line bg-hover",
+              lit
+                ? tone[a.hue].soft
+                : "flex-col gap-[3px] border border-line-strong bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.06)]",
             )}
-            style={{ width: cell, height: cell }}
+            style={{
+              width: cell,
+              height: cell,
+              boxShadow: lit ? `inset 0 0 0 1px color-mix(in oklab, ${toneVar(a.hue)} 34%, transparent), 0 1px 2px rgb(0 0 0 / 0.06)` : undefined,
+            }}
           >
-            {lit && <Icon style={{ width: cell * 0.46, height: cell * 0.46, color: toneVar(a.hue) }} strokeWidth={1.75} />}
+            {lit ? (
+              <Icon style={{ width: cell * 0.46, height: cell * 0.46, color: toneVar(a.hue) }} strokeWidth={2} />
+            ) : round ? (
+              <span className="rounded-full bg-line-strong" style={{ width: cell * 0.3, height: cell * 0.3 }} />
+            ) : (
+              <>
+                <span className="h-[3px] rounded-full bg-line-strong" style={{ width: cell * 0.5 }} />
+                <span className="h-[3px] rounded-full bg-line" style={{ width: cell * 0.34 }} />
+              </>
+            )}
           </motion.span>
         );
       })}

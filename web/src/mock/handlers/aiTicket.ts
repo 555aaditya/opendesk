@@ -7,7 +7,7 @@ import { contactRef, db, me, userRef, type WsData } from "../db";
 import { publish } from "../gateway";
 import { reserve, spend } from "../credits";
 import { chunk, HttpError, invalid, notFound, post, sse, type Ctx } from "../router";
-import { addMessage, applyPatch, findTicket, newTicket, publishTicketUpdated } from "../tickets";
+import { addMessage, applyPatch, computeSla, findTicket, newTicket, publishTicketUpdated } from "../tickets";
 import { ago, escapeHtml, MIN, nowIso, uuid } from "../util";
 import { applyDecisions, severityFor } from "../decisions";
 import { decisionEngine } from "./ai";
@@ -664,7 +664,8 @@ function foreignTicket(ws: WsData, opts: { contact: Contact; subject: string; ht
 
 function seedAiTicketData() {
   const ws = db.workspaces[0];
-  if (!ws || ws.tickets.some((t) => t.custom.language)) return;
+  // Once per workspace (seeded triage also sets custom.language, so look for the seeded contact).
+  if (!ws || ws.contacts.some((c) => c.email === "lucia@estudiomarbella.es")) return;
 
   const lucia = contact(ws, "Lucía Fernández", "lucia@estudiomarbella.es", "es", "Architect, Marbella studio. Prefers Spanish.");
   foreignTicket(ws, {
@@ -709,14 +710,15 @@ function seedAiTicketData() {
     };
   }
 
-  // A widget bot answer on a chat ticket, labelled as AI in the timeline.
+  // A widget agent answer on a chat ticket, rated up by the visitor.
   const chat = ws.tickets.find((t) => t.channel === "chat" && !t.spam && t.status === "open");
+  const bot = botName(ws);
   if (chat) {
     const firstIn = ws.messages.find((m) => m.ticket_id === chat.id && m.direction === "inbound");
     const article = ws.articles.find((a) => a.status === "published");
     if (firstIn) {
       const keep = { last_message_at: chat.last_message_at, last_message_preview: chat.last_message_preview, first_responded_at: chat.first_responded_at, sla: chat.sla, status: chat.status, message_count: chat.message_count };
-      const bot = addMessage(
+      addMessage(
         ws,
         chat,
         {
@@ -724,13 +726,139 @@ function seedAiTicketData() {
           direction: "outbound",
           html: `<p>Here's what I found in the help center${article ? `: <a href="/help/${ws.workspace.slug}/a/${article.slug}">${escapeHtml(article.title)}</a>` : ""}. If that doesn't answer it, choose Talk to a person and the team will pick this up.</p>`,
           at: new Date(Date.parse(firstIn.created_at) + 20_000).toISOString(),
+          bot,
+          ai_rating: "up",
         },
         { publish: false },
       );
-      bot.author = { type: "system", user: null, contact: null };
-      bot.from_name = "Fieldnote assistant";
-      bot.ai = true;
       Object.assign(chat, keep, { message_count: keep.message_count + 1 });
     }
   }
+
+  seedAgentChat(ws, bot);
+  seedWaitingChats(ws, bot);
+}
+
+export function botName(ws: WsData): string {
+  return ws.widget.bot_name || "Ollie";
+}
+
+/**
+ * A chat the widget agent handled: it cancelled an order after the visitor
+ * confirmed, then handed off a delivery question (rated down).
+ */
+function seedAgentChat(ws: WsData, bot: string) {
+  const c = ws.contacts.find((x) => x.name === "Freya Nilsen") ?? ws.contacts[0];
+  if (!c) return;
+  const start = 38;
+  const t = newTicket(ws, {
+    subject: "Cancel order #4821",
+    contact: contactRef(c),
+    channel: "chat",
+    priority: "normal",
+    team_id: ws.teams.find((x) => x.name === "Support")?.id ?? null,
+    created_at: ago(start * MIN),
+  });
+  t.number = Math.max(...ws.tickets.map((x) => x.number)) + 1;
+  const first = c.name.split(" ")[0];
+  const at = (min: number) => ago(min * MIN);
+  const thread: Parameters<typeof addMessage>[2][] = [
+    { kind: "reply", direction: "inbound", html: "<p>Hi, I ordered the paper notebook bundle twice by mistake. Can you cancel order #4821?</p>", at: at(start) },
+    {
+      kind: "reply",
+      direction: "outbound",
+      html: `<p>Hi ${escapeHtml(first)}, I found order #4821: the paper notebook bundle for $48.00, not shipped yet. I can cancel it and refund the card ending 4242. Please confirm below.</p>`,
+      at: at(start - 0.4),
+      bot,
+      ai_action: { id: uuid(), title: "Cancel order", summary: "Cancel order #4821 and refund $48.00 to the card ending 4242", status: "confirmed", tool: "Shop" },
+    },
+    {
+      kind: "reply",
+      direction: "outbound",
+      html: "<p>Done. Order #4821 is cancelled and $48.00 is on its way back to the card ending 4242. Refunds usually show within 5 to 10 business days.</p>",
+      at: at(start - 1.5),
+      bot,
+    },
+    { kind: "reply", direction: "inbound", html: "<p>Thanks! And will my other order arrive before Friday? I need it for a workshop.</p>", at: at(start - 3) },
+    {
+      kind: "reply",
+      direction: "outbound",
+      html: "<p>Orders usually ship within 2 business days, but I can't promise a delivery date. I've asked the team to check order #4822 for you, and they'll reply here.</p>",
+      at: at(start - 3.4),
+      bot,
+      ai_rating: "down",
+    },
+  ];
+  for (const m of thread) addMessage(ws, t, m, { publish: false });
+  // The agent's replies don't count as the team's first response.
+  t.first_responded_at = null;
+  t.status = "open";
+  t.sla = computeSla(ws, t, false);
+  t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at(start - 3.4), language: "en" };
+  ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: {}, created_at: at(start - 3.4) });
+  c.ticket_count++;
+}
+
+/**
+ * Live chats waiting for the team right now, so the inbox shows its urgent state: two
+ * visitors Ollie handed off a moment ago, and one Ollie is still answering (it turns
+ * urgent after a minute without a reply).
+ */
+function seedWaitingChats(ws: WsData, bot: string) {
+  const people = ["Hugo Moreau", "Aisha Bello", "Julia Novak"].map((n) => ws.contacts.find((c) => c.name === n));
+  const pick = (i: number) => people[i] ?? ws.contacts[(i * 7 + 3) % ws.contacts.length];
+  const team = ws.teams.find((x) => x.name === "Support")?.id ?? null;
+  const chats: { subject: string; thread: { who: "visitor" | "bot"; text: string; sec: number }[]; handoffSec?: number }[] = [
+    {
+      subject: "Charged twice for my upgrade",
+      thread: [
+        { who: "visitor", text: "Hi, I upgraded to Business this morning and my card was charged twice.", sec: 260 },
+        { who: "bot", text: "Sorry about that. Refunds need a person on the billing team, so I've asked them to look at your account. They'll reply here.", sec: 250 },
+      ],
+      handoffSec: 250,
+    },
+    {
+      subject: "Can't get into my workspace",
+      thread: [
+        { who: "visitor", text: "My login link keeps expiring before I can click it", sec: 140 },
+        { who: "bot", text: "Login links last 15 minutes. If they expire sooner, your email may be opening them first. Try copying the code instead of clicking the link.", sec: 130 },
+        { who: "visitor", text: "Tried that. Can I talk to a real person please?", sec: 75 },
+      ],
+      handoffSec: 74,
+    },
+    {
+      subject: "Do you have an education discount?",
+      thread: [{ who: "visitor", text: "Hello! I teach at a university. Do you have an education discount for my class?", sec: 12 }],
+    },
+  ];
+  chats.forEach((c, i) => {
+    const contact = pick(i);
+    if (!contact) return;
+    const startSec = c.thread[0].sec;
+    const t = newTicket(ws, {
+      subject: c.subject,
+      contact: contactRef(contact),
+      channel: "chat",
+      priority: i === 0 ? "high" : "normal",
+      team_id: team,
+      created_at: ago(startSec * 1000),
+    });
+    t.number = Math.max(...ws.tickets.map((x) => x.number)) + 1;
+    for (const m of c.thread) {
+      addMessage(
+        ws,
+        t,
+        { kind: "reply", direction: m.who === "visitor" ? "inbound" : "outbound", html: `<p>${escapeHtml(m.text)}</p>`, at: ago(m.sec * 1000), bot: m.who === "bot" ? bot : undefined },
+        { publish: false },
+      );
+    }
+    t.status = "open";
+    t.sla = computeSla(ws, t, false);
+    if (c.handoffSec !== undefined) {
+      const at = ago(c.handoffSec * 1000);
+      t.custom = { ...t.custom, ai_handoff: true, ai_handoff_at: at, language: "en" };
+      ws.activities.push({ id: uuid(), ticket_id: t.id, actor: { type: "ai", user: null }, type: "ai_handoff", data: {}, created_at: at });
+    }
+    contact.ticket_count++;
+  });
 }

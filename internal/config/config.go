@@ -100,18 +100,24 @@ type Config struct {
 	StripeTax           bool   // Stripe Tax automatic tax on Checkout
 	StripeAPIURL        string // development only: a local Stripe fake or stripe-mock instead of api.stripe.com
 
-	// AI. AIProvider: anthropic | openai (any OpenAI-compatible endpoint, e.g. Ollama) | none.
-	AIProvider       string
-	AnthropicAPIKey  string
-	OpenAIAPIKey     string
-	OpenAIBaseURL    string
-	AIModel          string // drafting, summaries, answers
-	AIFastModel      string // triage, classification, short rewrites
-	EmbeddingsDriver string // voyage | openai | none
+	// AI. AIProvider: openrouter | anthropic | openai (any OpenAI-compatible endpoint, e.g. Ollama) | none.
+	AIProvider        string
+	AnthropicAPIKey   string
+	OpenAIAPIKey      string
+	OpenAIBaseURL     string
+	OpenRouterAPIKey  string
+	OpenRouterBaseURL string // API root; chat is {base}/v1/chat/completions, Jev {base}/alpha/decisions
+	AIModel           string // drafting, summaries, answers
+	AIFastModel       string // triage, classification, short rewrites
+	// AIModels are the models a workspace may choose (contracts/ai.md "Models"); empty = the defaults.
+	AIModels         []string
+	EmbeddingsDriver string // openrouter | voyage | openai | none
 	VoyageAPIKey     string
 	EmbeddingsModel  string
+	// AICreditMarkup turns a call's provider cost into credits when billing is on (contracts/billing.md).
+	AICreditMarkup float64
 
-	// Decisions (contracts/ai.md "Decisions"). DecisionsProvider: typesafe (Jev) | llm | none.
+	// Decisions (contracts/ai.md "Decisions"). DecisionsProvider: typesafe (Jev) | openrouter (Jev) | llm | none.
 	DecisionsProvider string
 	TypesafeAPIKey    string
 	TypesafeAPIURL    string // base URL; the API path is /v1/systemone
@@ -120,7 +126,7 @@ type Config struct {
 
 // DecisionsEnabled reports whether a decision engine is configured.
 func (c *Config) DecisionsEnabled() bool {
-	return c.DecisionsProvider == "typesafe" || (c.DecisionsProvider == "llm" && c.AIEnabled())
+	return c.DecisionsProvider == "typesafe" || c.DecisionsProvider == "openrouter" || (c.DecisionsProvider == "llm" && c.AIEnabled())
 }
 
 // BillingEnabled reports whether plans, limits and credits are enforced.
@@ -197,29 +203,50 @@ func Load() (*Config, error) {
 		StripeTax:           envBool("STRIPE_TAX", true),
 		StripeAPIURL:        env("STRIPE_API_URL", ""),
 
-		AIProvider:       env("AI_PROVIDER", ""),
-		AnthropicAPIKey:  env("ANTHROPIC_API_KEY", ""),
-		OpenAIAPIKey:     env("OPENAI_API_KEY", ""),
-		OpenAIBaseURL:    strings.TrimRight(env("OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
-		AIModel:          env("AI_MODEL", ""),
-		AIFastModel:      env("AI_FAST_MODEL", ""),
-		EmbeddingsDriver: env("EMBEDDINGS_DRIVER", ""),
-		VoyageAPIKey:     env("VOYAGE_API_KEY", ""),
-		EmbeddingsModel:  env("EMBEDDINGS_MODEL", ""),
+		AIProvider:        env("AI_PROVIDER", ""),
+		AnthropicAPIKey:   env("ANTHROPIC_API_KEY", ""),
+		OpenAIAPIKey:      env("OPENAI_API_KEY", ""),
+		OpenAIBaseURL:     strings.TrimRight(env("OPENAI_BASE_URL", "https://api.openai.com/v1"), "/"),
+		OpenRouterAPIKey:  env("OPENROUTER_API_KEY", ""),
+		OpenRouterBaseURL: strings.TrimRight(env("OPENROUTER_BASE_URL", "https://openrouter.ai/api"), "/"),
+		AIModel:           env("AI_MODEL", ""),
+		AIFastModel:       env("AI_FAST_MODEL", ""),
+		AIModels:          envList("AI_MODELS"),
+		EmbeddingsDriver:  env("EMBEDDINGS_DRIVER", ""),
+		VoyageAPIKey:      env("VOYAGE_API_KEY", ""),
+		EmbeddingsModel:   env("EMBEDDINGS_MODEL", ""),
 
 		DecisionsProvider: strings.ToLower(env("DECISIONS_PROVIDER", "")),
 		TypesafeAPIKey:    env("TYPESAFE_API_KEY", ""),
 		TypesafeAPIURL:    strings.TrimRight(env("TYPESAFE_API_URL", "https://api.typesafe.ai"), "/"),
-		TypesafeModel:     env("TYPESAFE_MODEL", "jev-latest"),
+		TypesafeModel:     env("TYPESAFE_MODEL", ""),
 	}
+	markup, err := strconv.ParseFloat(env("AI_CREDIT_MARKUP", "1.5"), 64)
+	if err != nil || markup < 1 || markup > 100 {
+		return nil, fmt.Errorf("AI_CREDIT_MARKUP must be a number from 1 to 100")
+	}
+	c.AICreditMarkup = markup
 	if c.AIProvider == "" {
 		switch {
+		case c.OpenRouterAPIKey != "":
+			c.AIProvider = "openrouter"
 		case c.AnthropicAPIKey != "":
 			c.AIProvider = "anthropic"
 		case c.OpenAIAPIKey != "":
 			c.AIProvider = "openai"
 		default:
 			c.AIProvider = "none"
+		}
+	}
+	if c.AIProvider == "openrouter" {
+		if c.OpenRouterAPIKey == "" {
+			return nil, fmt.Errorf("AI_PROVIDER=openrouter needs OPENROUTER_API_KEY")
+		}
+		if c.AIModel == "" {
+			c.AIModel = "anthropic/claude-sonnet-5.5"
+		}
+		if c.AIFastModel == "" {
+			c.AIFastModel = "anthropic/claude-haiku-5.5"
 		}
 	}
 	if c.AIModel == "" && c.AIProvider == "anthropic" {
@@ -236,6 +263,8 @@ func Load() (*Config, error) {
 		switch {
 		case c.TypesafeAPIKey != "":
 			c.DecisionsProvider = "typesafe"
+		case c.OpenRouterAPIKey != "":
+			c.DecisionsProvider = "openrouter"
 		case c.AIEnabled():
 			c.DecisionsProvider = "llm"
 		default:
@@ -249,14 +278,26 @@ func Load() (*Config, error) {
 				c.DecisionsProvider = "none"
 			}
 		}
+	case "openrouter":
+		if c.OpenRouterAPIKey == "" {
+			return nil, fmt.Errorf("DECISIONS_PROVIDER=openrouter needs OPENROUTER_API_KEY")
+		}
 	case "llm", "none":
 	default:
-		return nil, fmt.Errorf("DECISIONS_PROVIDER must be typesafe, llm or none")
+		return nil, fmt.Errorf("DECISIONS_PROVIDER must be typesafe, openrouter, llm or none")
+	}
+	if c.TypesafeModel == "" {
+		c.TypesafeModel = "jev-latest"
+		if c.DecisionsProvider == "openrouter" {
+			c.TypesafeModel = "~typesafe/jev-latest"
+		}
 	}
 	if c.EmbeddingsDriver == "" {
 		switch {
 		case c.VoyageAPIKey != "":
 			c.EmbeddingsDriver = "voyage"
+		case c.AIProvider == "openrouter":
+			c.EmbeddingsDriver = "openrouter"
 		case c.AIProvider == "openai":
 			c.EmbeddingsDriver = "openai"
 		default:
@@ -355,4 +396,15 @@ func envDuration(k string, def time.Duration) time.Duration {
 		return def
 	}
 	return v
+}
+
+// envList reads a comma-separated list, dropping blanks.
+func envList(k string) []string {
+	var out []string
+	for _, v := range strings.Split(os.Getenv(k), ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

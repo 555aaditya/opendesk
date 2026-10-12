@@ -1,4 +1,4 @@
-import type { Attachment, Conversation, Message, SessionIdentity, WidgetConfig, WidgetSession } from "./types";
+import type { Attachment, Conversation, Message, Rating, SessionIdentity, WidgetConfig, WidgetSession } from "./types";
 
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -11,6 +11,8 @@ export class WidgetError extends Error {
     super(message);
   }
 }
+
+const enc = encodeURIComponent;
 
 function rows<T>(v: T[] | { data: T[] } | null | undefined): T[] {
   if (!v) return [];
@@ -77,27 +79,37 @@ export class WidgetApi {
   }
 
   /** "conversation + first message": accept `{conversation, message}` or a bare conversation. */
-  async start(body: string, attachment_ids?: string[]) {
+  async start(body: string, attachment_ids?: string[], page_url?: string) {
     const r = await this.req<{ conversation?: Conversation; message?: Message } & Partial<Conversation>>(
       "POST",
       "/v1/widget/conversations",
-      { body, attachment_ids },
+      { body, attachment_ids, page_url },
     );
     const conversation = (r.conversation ?? r) as Conversation;
     return { conversation, message: r.message ?? null };
   }
 
   async messages(id: string) {
-    return rows(await this.req<Message[] | { data: Message[] }>("GET", `/v1/widget/conversations/${id}/messages`));
+    return rows(await this.req<Message[] | { data: Message[] }>("GET", `/v1/widget/conversations/${enc(id)}/messages`));
   }
 
-  send(id: string, body: string, attachment_ids?: string[]) {
-    return this.req<Message>("POST", `/v1/widget/conversations/${id}/messages`, { body, attachment_ids });
+  send(id: string, body: string, attachment_ids?: string[], page_url?: string) {
+    return this.req<Message>("POST", `/v1/widget/conversations/${enc(id)}/messages`, { body, attachment_ids, page_url });
   }
 
-  /** The visitor wants a person instead of the AI answer bot. */
+  /** The visitor wants a person instead of the AI agent. */
   handoff(id: string) {
-    return this.req<unknown>("POST", `/v1/widget/conversations/${id}/handoff`, {});
+    return this.req<unknown>("POST", `/v1/widget/conversations/${enc(id)}/handoff`, {});
+  }
+
+  /** Confirm or decline an action the agent asked for (contracts/agent.md "Visitor actions"). */
+  decide(id: string, actionId: string, decision: "confirm" | "decline") {
+    return this.req<unknown>("POST", `/v1/widget/conversations/${enc(id)}/actions/${enc(actionId)}`, { decision });
+  }
+
+  /** Rate an agent reply; null clears the rating. */
+  rate(id: string, messageId: string, rating: Rating | null) {
+    return this.req<unknown>("POST", `/v1/widget/conversations/${enc(id)}/messages/${enc(messageId)}/rating`, { rating });
   }
 
   upload(file: File) {

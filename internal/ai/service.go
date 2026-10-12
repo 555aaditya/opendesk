@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,13 @@ type Service struct {
 	vectors bool
 	// decider answers typed decisions (Jev, or the LLM adapter); nil without one.
 	decider decide.Decider
+	// knowledge retrieves from knowledge sources (internal/ai/knowledge); nil until installed.
+	knowledgeMu sync.RWMutex
+	knowledge   KnowledgeRetriever
+	// toolbox lists and runs workspace tools (internal/ai/mcp); nil until installed.
+	toolbox AgentToolbox
+	// catalog caches the provider's model names and prices.
+	catalog catalog
 }
 
 // New builds the service from configuration. It never fails: a missing provider turns
@@ -43,6 +51,10 @@ func New(ctx context.Context, d *deps.Deps) *Service {
 		s.models.Fast = s.models.Default
 	}
 	switch cfg.AIProvider {
+	case "openrouter":
+		if cfg.OpenRouterAPIKey != "" {
+			s.provider = NewOpenRouter(cfg.OpenRouterBaseURL, cfg.OpenRouterAPIKey, cfg.AppURL)
+		}
 	case "anthropic":
 		if cfg.AnthropicAPIKey != "" {
 			s.provider = NewAnthropic(cfg.AnthropicAPIKey, os.Getenv("ANTHROPIC_BASE_URL"))
@@ -62,6 +74,14 @@ func New(ctx context.Context, d *deps.Deps) *Service {
 			}
 		case "openai":
 			s.embedder = NewOpenAIEmbedder(cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.EmbeddingsModel)
+		case "openrouter":
+			if cfg.OpenRouterAPIKey != "" {
+				model := cfg.EmbeddingsModel
+				if model == "" {
+					model = "openai/text-embedding-3-small"
+				}
+				s.embedder = NewOpenAIEmbedder(cfg.OpenRouterBaseURL+"/v1", cfg.OpenRouterAPIKey, model)
+			}
 		}
 	}
 	s.vectors = vectorTable(ctx, d.DB.Pool)
@@ -69,6 +89,10 @@ func New(ctx context.Context, d *deps.Deps) *Service {
 	case "typesafe":
 		if cfg.TypesafeAPIKey != "" {
 			s.decider = decide.NewTypeSafe(cfg.TypesafeAPIURL, cfg.TypesafeAPIKey, cfg.TypesafeModel)
+		}
+	case "openrouter":
+		if cfg.OpenRouterAPIKey != "" {
+			s.decider = decide.NewOpenRouter(cfg.OpenRouterBaseURL, cfg.OpenRouterAPIKey, cfg.TypesafeModel, cfg.AppURL)
 		}
 	case "llm":
 		if s.provider != nil {
@@ -153,6 +177,10 @@ type call struct {
 	ticketID *uuid.UUID
 	feature  string
 	resp     Response
+	// model, when set, is used instead of the workspace's model for the feature's tier.
+	model string
+	// charged is what the last charge cost.
+	charged plan.Milli
 }
 
 func (s *Service) newCall(wid uuid.UUID, userID, ticketID *uuid.UUID, feature string) *call {
@@ -166,11 +194,31 @@ func (c *call) reserve(ctx context.Context) error {
 	return c.s.d.Plan.Reserve(ctx, c.s.d.DB.Pool, c.wid, c.feature)
 }
 
+// resolveModel picks the model of a call: an explicit override, else the workspace's
+// choice for the feature's tier when the request asks for an instance default.
+func (c *call) resolveModel(ctx context.Context, requested string) string {
+	if c.model != "" {
+		return c.model
+	}
+	if requested != "" && requested != c.s.models.Default && requested != c.s.models.Fast {
+		return requested
+	}
+	st, err := hd.LoadSettings(ctx, c.s.d.DB.Pool, c.wid)
+	if err != nil {
+		if requested != "" {
+			return requested
+		}
+		return c.s.models.Default
+	}
+	return c.s.tierModel(st.AI(), featureTier(c.feature))
+}
+
 // run reserves and calls the model; onDelta non-nil streams.
 func (c *call) run(ctx context.Context, req Request, onDelta func(string)) (Response, error) {
 	if err := c.reserve(ctx); err != nil {
 		return Response{}, err
 	}
+	req.Model = c.resolveModel(ctx, req.Model)
 	var err error
 	start := time.Now()
 	if onDelta != nil {
@@ -195,7 +243,7 @@ func (c *call) decide(ctx context.Context, dc decide.Decider, req decide.Request
 	}
 	start := time.Now()
 	res, err := dc.Decide(ctx, req)
-	c.resp = Response{Model: dc.Name(), InputTokens: res.InputTokens, OutputTokens: res.OutputTokens}
+	c.resp = Response{Model: dc.Name(), InputTokens: res.InputTokens, OutputTokens: res.OutputTokens, CostUSD: res.CostUSD}
 	if dc.Name() != "jev" {
 		c.resp.Model = res.Model
 	}
@@ -226,8 +274,8 @@ func (c *call) charge(ctx context.Context) {
 	ctx = context.WithoutCancel(ctx)
 	var err error
 	if c.s.d.Plan != nil {
-		err = c.s.d.Plan.Spend(ctx, c.s.d.DB.Pool, c.wid, plan.Usage{UserID: c.userID, TicketID: c.ticketID, Feature: c.feature,
-			Model: c.resp.Model, InputTokens: c.resp.InputTokens, OutputTokens: c.resp.OutputTokens})
+		c.charged, err = c.s.d.Plan.Spend(ctx, c.s.d.DB.Pool, c.wid, plan.Usage{UserID: c.userID, TicketID: c.ticketID, Feature: c.feature,
+			Model: c.resp.Model, InputTokens: c.resp.InputTokens, OutputTokens: c.resp.OutputTokens, CostUSD: c.s.costOf(ctx, c.resp)})
 	}
 	if err != nil {
 		c.s.d.Log.Warn("ai spend failed", "feature", c.feature, "err", err)

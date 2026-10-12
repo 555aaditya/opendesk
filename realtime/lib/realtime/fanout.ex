@@ -16,6 +16,11 @@ defmodule Realtime.Fanout do
 
   The pushed payload is the envelope minus `topics`. Repeats of an envelope
   (the relay delivers at least once) are dropped by `Realtime.Fanout.Dedupe`.
+
+  Live previews on `od.live.<wid>` (`contracts/realtime.md`, "Live events") are
+  pushed as `"live"` `{type, data}` to `contact:<wid>:<contact_id>` and
+  `ticket:<wid>:<ticket_id>`. They carry no `seq` and are never deduplicated
+  or replayed.
   """
 
   require Logger
@@ -25,10 +30,12 @@ defmodule Realtime.Fanout do
   alias Realtime.Metrics
 
   @events_prefix "od.events."
+  @live_prefix "od.live."
   @disconnect "od.control.disconnect"
+  @live_types ~w(ai.reply.started ai.reply.delta ai.reply.tool ai.reply.ended)
 
   @doc "NATS subjects the gateway subscribes to."
-  def subjects, do: [@events_prefix <> ">", @disconnect]
+  def subjects, do: [@events_prefix <> ">", @live_prefix <> ">", @disconnect]
 
   @doc """
   Handles one NATS message. `broadcast` is `(topic, event, payload) -> any`,
@@ -72,7 +79,49 @@ defmodule Realtime.Fanout do
     end
   end
 
+  def handle(@live_prefix <> wid, body, broadcast) do
+    with true <- Ids.uuid?(wid),
+         {:ok, event} <- decode(body),
+         {:ok, topics, payload} <- live(Ids.normalize(wid), event) do
+      Enum.each(topics, &broadcast.(&1, "live", payload))
+      Metrics.incr(:live)
+      {:ok, topics}
+    else
+      {:error, reason} -> reject(reason)
+      _ -> reject(:invalid_subject)
+    end
+  end
+
   def handle(_subject, _body, _broadcast), do: reject(:unknown_subject)
+
+  @doc "The topics and payload of a live preview from workspace `wid`."
+  @spec live(String.t(), map()) :: {:ok, [String.t()], map()} | {:error, atom()}
+  def live(
+        wid,
+        %{
+          "workspace_id" => event_wid,
+          "ticket_id" => tid,
+          "contact_id" => cid,
+          "type" => type,
+          "data" => data
+        }
+      )
+      when is_binary(event_wid) and is_binary(tid) and is_binary(cid) and type in @live_types and
+             is_map(data) do
+    cond do
+      not (Ids.uuid?(event_wid) and Ids.normalize(event_wid) == wid) ->
+        {:error, :workspace_mismatch}
+
+      not (Ids.uuid?(tid) and Ids.uuid?(cid)) ->
+        {:error, :invalid_live}
+
+      true ->
+        topics = ["ticket:#{wid}:#{Ids.normalize(tid)}", "contact:#{wid}:#{Ids.normalize(cid)}"]
+        {:ok, topics, %{"type" => type, "data" => data}}
+    end
+  end
+
+  def live(_wid, _event), do: {:error, :invalid_live}
 
   @doc "The channel topics an envelope from workspace `wid` fans out to."
   @spec topics(String.t(), map()) :: {:ok, [String.t()]} | {:error, atom()}

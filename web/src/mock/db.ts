@@ -14,6 +14,9 @@ import type {
   Envelope,
   Invitation,
   KbArticle,
+  KnowledgeDoc,
+  KnowledgeSource,
+  McpServer,
   KbCollection,
   Mailbox,
   Message,
@@ -61,6 +64,19 @@ export type RoutingState = {
   widgetSeen: boolean;
 };
 
+/** One metered AI call (contracts/billing.md): counts only, never content. */
+export type AiUsageRow = {
+  feature: AIFeature;
+  user_id: string | null;
+  /** Up to 3 decimals. */
+  credits: number;
+  /** An OpenRouter model id, or "jev" for decisions. */
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  at: string;
+};
+
 export type WsData = {
   workspace: Workspace;
   members: MemberRow[];
@@ -97,7 +113,12 @@ export type WsData = {
   /** settings.ai (handlers/ai.ts). */
   ai: AISettings;
   /** AI usage rows, counts only (contracts/ai.md). */
-  aiUsage: { feature: AIFeature; user_id: string | null; credits: number; at: string }[];
+  aiUsage: AiUsageRow[];
+  /** The widget agent's MCP connections (handlers/mcp.ts). */
+  mcpServers: McpServer[];
+  /** Knowledge sources and their documents (handlers/knowledge.ts). */
+  knowledge: KnowledgeSource[];
+  knowledgeDocs: Record<string, KnowledgeDoc[]>;
   /** Assignment rules, auto-away, business hours and triage options. */
   routing: RoutingState;
 };

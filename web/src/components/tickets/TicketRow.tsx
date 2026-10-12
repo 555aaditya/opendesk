@@ -15,6 +15,7 @@ import { SetByOllie, useOllieNote } from "./ollie";
 import { aiDecisions } from "@/lib/decisions";
 import { useTicketViewers } from "./presence";
 import { rowMotion } from "./motion";
+import { LiveChatBadge, UrgentEdge, WaitPill, urgentWash, useChatWait } from "./waiting";
 
 export type QuickAction = "assign" | "snooze" | "solve";
 
@@ -92,7 +93,10 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
   const reduced = useReducedMotion();
   const display = useDisplay();
   const note = useOllieNote();
-  const unread = awaitingReply(t);
+  const wait = useChatWait(t);
+  // A visitor waiting in live chat with nobody on it: the row washes red.
+  const urgent = wait?.state === "urgent" && !t.assignee;
+  const unread = awaitingReply(t) || !!wait;
   const contactName = t.contact?.name || t.contact?.email || tr("row.unknown");
   const subject = t.subject || tr("row.noSubject");
   const showCheck = selecting || selected;
@@ -158,7 +162,9 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
     </Tooltip>
   );
 
-  const channel = t.channel !== "email" && (
+  const channel = t.channel === "chat" ? (
+    <LiveChatBadge urgent={urgent} />
+  ) : t.channel !== "email" && (
     <Tooltip content={channelLabel[t.channel]}>
       <span className="flex shrink-0">
         <ChannelIcon channel={t.channel} plain className="size-3" />
@@ -227,9 +233,10 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
         <div
           className={cn(
             "group relative flex cursor-pointer gap-2.5 border-b border-line-soft py-2.5 pl-3.5 pr-3 transition-colors duration-100",
-            active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken/70",
+            urgent ? cn(urgentWash, active && "shadow-[inset_0_0_0_1px_var(--tone-red-line)]") : active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken/70",
           )}
         >
+          {urgent && <UrgentEdge />}
           <div className="flex w-4 shrink-0 flex-col items-center gap-[7px] pt-px">
             {statusSlot}
             {prioritySlot}
@@ -251,10 +258,10 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
               </span>
             </div>
             <div className="mt-1 flex items-center gap-1.5">
-              <span className="min-w-0 flex-1 truncate text-xs text-fg-3" data-ph-mask>
+              <span className={cn("min-w-0 flex-1 truncate text-xs", urgent ? "text-fg-2" : "text-fg-3")} data-ph-mask>
                 {t.last_message_preview}
               </span>
-              <SlaIfAtRisk ticket={t} />
+              {wait ? <WaitPill wait={wait} compact /> : <SlaIfAtRisk ticket={t} />}
             </div>
           </div>
         </div>
@@ -262,9 +269,10 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
         <div
           className={cn(
             "group relative flex h-11 cursor-pointer items-center gap-3 border-b border-line-soft pl-3.5 pr-4 transition-colors duration-100",
-            active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken/70",
+            urgent ? cn(urgentWash, active && "shadow-[inset_0_0_0_1px_var(--tone-red-line)]") : active ? "bg-active" : selected ? "bg-hover" : "hover:bg-sunken/70",
           )}
         >
+          {urgent && <UrgentEdge />}
           {statusSlot}
           {prioritySlot}
           <span className="flex w-[180px] shrink-0 items-center gap-1.5">
@@ -279,8 +287,8 @@ const Row = forwardRef<HTMLDivElement, RowProps>(function TicketRow(
             <span className={cn("max-w-[60%] shrink-0 truncate text-[13px]", unread ? "font-medium text-fg" : "text-fg-2")} data-ph-mask>
               {subject}
             </span>
-            <SlaIfAtRisk ticket={t} />
-            <span className="min-w-0 truncate text-[12.5px] text-fg-4" data-ph-mask>
+            {wait ? <WaitPill wait={wait} /> : <SlaIfAtRisk ticket={t} />}
+            <span className={cn("min-w-0 truncate text-[12.5px]", urgent ? "text-fg-3" : "text-fg-4")} data-ph-mask>
               {t.last_message_preview}
             </span>
           </span>

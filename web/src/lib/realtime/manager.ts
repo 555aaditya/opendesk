@@ -11,7 +11,7 @@ import { config } from "../config";
 import { applyEnvelope } from "./apply";
 import { syncDiff, syncState, type PresenceDiff, type PresenceState } from "./presence";
 import { SeqSync } from "./seq";
-import { clearPresence, noteCustomerTyping, noteTyping, setPresence, useRealtime } from "./store";
+import { applyLive, clearLive, clearPresence, noteCustomerTyping, noteTyping, setPresence, useRealtime } from "./store";
 import { createSocket, type RtChannel, type RtSocket } from "./transport";
 
 /** Query roots that realtime events keep current (see apply.ts). */
@@ -149,6 +149,7 @@ export class RealtimeManager {
     for (const [tid, e] of this.tickets) {
       e.ch.leave();
       clearPresence(tid);
+      clearLive(tid);
     }
     this.tickets.clear();
     this.socket?.disconnect();
@@ -193,6 +194,7 @@ export class RealtimeManager {
         e.ch.leave();
         this.tickets.delete(id);
         clearPresence(id);
+        if (!desired.has(id)) clearLive(id);
       }
     }
     for (const [id, mode] of desired) {
@@ -218,6 +220,14 @@ export class RealtimeManager {
       ch.on("typing", (p) => {
         const t = p as { user_id: string; name: string };
         if (t.user_id !== this.opts.userId) noteTyping(id, t);
+      });
+      // The widget agent writing a reply: a preview only, replaced by message.created.
+      ch.on("live", (p) => {
+        const l = p as { type?: string; data?: Record<string, unknown> };
+        if (typeof l?.type !== "string" || !l.data || typeof l.data !== "object") return;
+        const tid = typeof l.data.ticket_id === "string" ? l.data.ticket_id : id;
+        if (tid !== id) return;
+        applyLive(id, l.type, l.data);
       });
       // contact_id comes from the visitor's token, so only the ticket's own contact counts.
       ch.on("customer_typing", (p) => {

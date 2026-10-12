@@ -131,8 +131,10 @@ type NewMessage struct {
 	// Trigger overrides the job trigger: "" derives it, "none" skips automations.
 	Trigger   string
 	CreatedAt time.Time
-	// AI marks a reply written by the widget answer bot (messages.ai).
+	// AI marks a reply written by the widget AI agent (messages.ai).
 	AI bool
+	// AIAction is an action card the visitor confirms (contracts/agent.md).
+	AIAction *AIAction
 }
 
 // AddMessage inserts a message, updates the ticket's activity fields, publishes events and
@@ -160,11 +162,11 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 	id := ids.New()
 	_, err := tx.Exec(ctx, `INSERT INTO messages (id, workspace_id, ticket_id, kind, direction, author_type, author_user_id,
 		author_contact_id, body_html, body_text, full_html, subject, from_email, from_name, to_emails, cc_emails, bcc_emails,
-		email_message_id, in_reply_to, "references", inbound_email_id, delivery_status, created_at, ai)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+		email_message_id, in_reply_to, "references", inbound_email_id, delivery_status, created_at, ai, ai_action)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
 		id, nm.WorkspaceID, nm.TicketID, nm.Kind, nm.Direction, nm.AuthorType, nm.AuthorUserID, nm.AuthorContactID,
 		nm.BodyHTML, nm.BodyText, nm.FullHTML, truncateRunes(nm.Subject, 500), nm.FromEmail, nm.FromName, nm.To, nm.Cc, nm.Bcc,
-		nm.EmailMessageID, nm.InReplyTo, nm.References, nm.InboundEmailID, nm.DeliveryStatus, nm.CreatedAt, nm.AI)
+		nm.EmailMessageID, nm.InReplyTo, nm.References, nm.InboundEmailID, nm.DeliveryStatus, nm.CreatedAt, nm.AI, nm.AIAction)
 	if err != nil {
 		return Message{}, fmt.Errorf("insert message: %w", err)
 	}
@@ -188,6 +190,7 @@ func AddMessage(ctx context.Context, tx pgx.Tx, jc Jobs, nm NewMessage) (Message
 		_, err := tx.Exec(ctx, `UPDATE tickets SET last_message_at = $3, last_message_preview = $4,
 			message_count = message_count + 1, updated_at = now(),
 			last_customer_message_at = CASE WHEN $5 THEN $3 ELSE last_customer_message_at END,
+			waiting_since = CASE WHEN $5 THEN COALESCE(waiting_since, $3) ELSE NULL END,
 			status = $6, solved_at = CASE WHEN $6 = 'open' THEN NULL ELSE solved_at END,
 			snoozed_until = CASE WHEN $6 = 'on_hold' THEN snoozed_until ELSE NULL END,
 			first_responded_at = CASE WHEN $7 THEN $3 ELSE first_responded_at END
@@ -300,4 +303,27 @@ func truncateRunes(s string, n int) string {
 	}
 	r := []rune(s)
 	return string(r[:n])
+}
+
+// PublishMessageUpdated publishes message.updated for a message in tx. A reply on a chat
+// ticket is public and reaches the visitor's widget too, like message.created.
+func PublishMessageUpdated(ctx context.Context, tx pgx.Tx, wid, messageID uuid.UUID) error {
+	msg, err := LoadMessage(ctx, tx, wid, messageID)
+	if err != nil {
+		return err
+	}
+	var channel string
+	var contactID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT channel, contact_id FROM tickets WHERE workspace_id = $1 AND id = $2`, wid, msg.TicketID).
+		Scan(&channel, &contactID); err != nil {
+		return err
+	}
+	ev := events.Event{WorkspaceID: wid, Type: "message.updated", Data: map[string]any{"ticket_id": msg.TicketID, "message": msg}}
+	if msg.Kind == "reply" && channel == ChannelChat && contactID != nil {
+		ev.Visibility = events.VisibilityPublic
+		ev.Topics = []string{events.ContactTopic(wid, *contactID)}
+		ev.Data = map[string]any{"ticket_id": msg.TicketID, "message": PublicMessage(msg)}
+	}
+	_, err = events.Publish(ctx, tx, ev)
+	return err
 }

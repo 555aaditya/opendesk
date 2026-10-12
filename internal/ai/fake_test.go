@@ -22,6 +22,9 @@ type fakeLLM struct {
 	mu sync.Mutex
 	// replies by feature (matched on the system prompt); a func gets the request.
 	replies map[string]string
+	// queued replies by feature, used once each before replies. A line "@tool name
+	// {json}" in a reply is a tool call (Anthropic only).
+	queued map[string][]string
 	// failures queued before success: HTTP statuses returned in order.
 	failures []int
 	// requests received, decoded.
@@ -33,7 +36,7 @@ type fakeLLM struct {
 }
 
 func newFake(t testing.TB) *fakeLLM {
-	f := &fakeLLM{t: t, replies: map[string]string{}}
+	f := &fakeLLM{t: t, replies: map[string]string{}, queued: map[string][]string{}}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -43,6 +46,12 @@ func (f *fakeLLM) set(feature, reply string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.replies[feature] = reply
+}
+
+func (f *fakeLLM) queue(feature string, replies ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queued[feature] = append(f.queued[feature], replies...)
 }
 
 func (f *fakeLLM) fail(statuses ...int) {
@@ -83,7 +92,7 @@ func feature(system string) string {
 		return "rewrite"
 	case strings.Contains(system, "You translate"):
 		return "translate"
-	case strings.Contains(system, "live chat"):
+	case strings.Contains(system, "company's website chat"):
 		return "widget"
 	case strings.Contains(system, "help center articles"):
 		return "kb"
@@ -99,7 +108,7 @@ var defaultReplies = map[string]string{
 	"rewrite":   "<p>Hello, thanks for waiting.</p>",
 	"translate": `{"translation":"Hallo Welt","source_language":"en"}`,
 	"kb":        `{"title":"Get a refund","body_html":"<h2>Steps</h2><ol><li>Open billing</li></ol><script>x</script>","excerpt":"How refunds work."}`,
-	"widget":    `{"answerable":true,"answer":"You can reset your password from the sign-in page.","source_ids":[1],"wants_human":false}`,
+	"widget":    "You can reset your password from the sign-in page [1].",
 }
 
 func (f *fakeLLM) serve(w http.ResponseWriter, r *http.Request) {
@@ -146,6 +155,10 @@ func (f *fakeLLM) serve(w http.ResponseWriter, r *http.Request) {
 	feat := feature(system)
 	f.mu.Lock()
 	reply, ok := f.replies[feat]
+	if q := f.queued[feat]; len(q) > 0 {
+		reply, ok = q[0], true
+		f.queued[feat] = q[1:]
+	}
 	f.mu.Unlock()
 	if !ok {
 		reply = defaultReplies[feat]
@@ -164,12 +177,39 @@ func (f *fakeLLM) serve(w http.ResponseWriter, r *http.Request) {
 	f.anthropic(w, model, reply, stream)
 }
 
+// toolLines splits a scripted reply into its text and "@tool name {json}" calls.
+func toolLines(reply string) (string, [][2]string) {
+	var text []string
+	var calls [][2]string
+	for _, line := range strings.Split(reply, "\n") {
+		if rest, ok := strings.CutPrefix(line, "@tool "); ok {
+			name, input, _ := strings.Cut(rest, " ")
+			if strings.TrimSpace(input) == "" {
+				input = "{}"
+			}
+			calls = append(calls, [2]string{name, input})
+			continue
+		}
+		text = append(text, line)
+	}
+	return strings.TrimSpace(strings.Join(text, "\n")), calls
+}
+
 func (f *fakeLLM) anthropic(w http.ResponseWriter, model, text string, stream bool) {
 	usage := map[string]any{"input_tokens": 120, "output_tokens": 30, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+	text, calls := toolLines(text)
+	stop := "end_turn"
+	if len(calls) > 0 {
+		stop = "tool_use"
+	}
 	if !stream {
 		w.Header().Set("Content-Type", "application/json")
+		content := []any{map[string]any{"type": "text", "text": text}}
+		for i, c := range calls {
+			content = append(content, map[string]any{"type": "tool_use", "id": fmt.Sprintf("toolu_%d", i), "name": c[0], "input": json.RawMessage(c[1])})
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": "msg_1", "type": "message", "role": "assistant", "model": model,
-			"content": []any{map[string]any{"type": "text", "text": text}}, "stop_reason": "end_turn", "stop_sequence": nil, "usage": usage})
+			"content": content, "stop_reason": stop, "stop_sequence": nil, "usage": usage})
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -188,7 +228,14 @@ func (f *fakeLLM) anthropic(w http.ResponseWriter, model, text string, stream bo
 		ev("content_block_delta", map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": part}})
 	}
 	ev("content_block_stop", map[string]any{"type": "content_block_stop", "index": 0})
-	ev("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
+	for i, c := range calls {
+		idx := i + 1
+		ev("content_block_start", map[string]any{"type": "content_block_start", "index": idx,
+			"content_block": map[string]any{"type": "tool_use", "id": fmt.Sprintf("toolu_%d", i), "name": c[0], "input": map[string]any{}}})
+		ev("content_block_delta", map[string]any{"type": "content_block_delta", "index": idx, "delta": map[string]any{"type": "input_json_delta", "partial_json": c[1]}})
+		ev("content_block_stop", map[string]any{"type": "content_block_stop", "index": idx})
+	}
+	ev("message_delta", map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": stop, "stop_sequence": nil},
 		"usage": map[string]any{"output_tokens": 30}})
 	ev("message_stop", map[string]any{"type": "message_stop"})
 }

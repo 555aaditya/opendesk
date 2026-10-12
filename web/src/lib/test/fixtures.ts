@@ -21,6 +21,7 @@ export function ticket(over: Partial<Ticket> = {}): Ticket {
     snoozed_until: null,
     last_message_at: "2026-10-01T10:00:00Z",
     last_customer_message_at: null,
+    waiting_since: null,
     last_message_preview: "",
     message_count: 1,
     spam: false,

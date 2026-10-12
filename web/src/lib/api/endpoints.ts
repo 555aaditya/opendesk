@@ -1,6 +1,6 @@
 // Typed wrappers for every endpoint in contracts/api.md.
 
-import { http, stream, type StreamHandlers } from "./client";
+import { http, stream, streamEvents, type StreamHandlers } from "./client";
 import type * as T from "./types";
 
 type ListQuery = { limit?: number; cursor?: string | null };
@@ -313,6 +313,42 @@ export const api = {
     translate: (b: { html?: string; text?: string; target: string }) => http.post<T.TranslateResult>("/v1/ai/translate", b),
     kbDraft: (b: { ticket_ids?: string[]; topic?: string }) => http.post<T.KBArticleDraft>("/v1/kb/articles/ai/draft", b),
     search: (q: string) => http.get<T.SearchResults>("/v1/ai/search", { query: { q } }),
+    /** The models a workspace may choose from, with the instance defaults. */
+    models: () => http.get<T.AIModels>("/v1/ai/models"),
+    agent: {
+      report: (r: T.ReportsRange) => http.get<T.AgentReport>("/v1/ai/agent/report", { query: r }),
+      /** Streams the agent's reply: `delta`, `tool`, `sources`, then `done`. An `error` event throws. */
+      playground: (b: T.PlaygroundBody, onEvent: (e: T.PlaygroundEvent) => void, signal?: AbortSignal) =>
+        streamEvents("/v1/ai/agent/playground", b, (event, data) => onEvent({ event, data } as T.PlaygroundEvent), signal),
+    },
+    mcp: {
+      list: () => http.get<T.Page<T.McpServer>>("/v1/ai/mcp-servers"),
+      create: (b: { name: string; url: string; auth: T.McpAuthInput }) => http.create<T.McpServer>("/v1/ai/mcp-servers", b),
+      update: (id: string, b: T.McpServerPatch) => http.patch<T.McpServer>(`/v1/ai/mcp-servers/${id}`, b),
+      remove: (id: string) => http.del(`/v1/ai/mcp-servers/${id}`),
+      sync: (id: string) => http.post<T.McpServer>(`/v1/ai/mcp-servers/${id}/sync`),
+      /** The authorization URL to send the browser to. */
+      oauthStart: (id: string) => http.post<{ url: string }>(`/v1/ai/mcp-servers/${id}/oauth/start`),
+      testTool: (id: string, tool: string, b: { arguments: Record<string, unknown>; visitor?: T.PlaygroundVisitor }) =>
+        http.post<T.McpToolResult>(`/v1/ai/mcp-servers/${id}/tools/${encodeURIComponent(tool)}/test`, b),
+    },
+    knowledge: {
+      list: (q?: { kind?: T.KnowledgeKind }) => http.get<T.Page<T.KnowledgeSource>>("/v1/ai/knowledge", { query: q }),
+      get: (id: string) => http.get<T.KnowledgeSource>(`/v1/ai/knowledge/${id}`),
+      create: (b: T.KnowledgeCreate) => http.create<T.KnowledgeSource>("/v1/ai/knowledge", b),
+      /** PDF, DOCX, TXT, Markdown, HTML or CSV, at most 20 MB. */
+      upload: (file: File, name?: string) => {
+        const fd = new FormData();
+        fd.append("file", file);
+        if (name) fd.append("name", name);
+        return http.create<T.KnowledgeSource>("/v1/ai/knowledge/files", fd);
+      },
+      update: (id: string, b: T.KnowledgePatch) => http.patch<T.KnowledgeSource>(`/v1/ai/knowledge/${id}`, b),
+      remove: (id: string) => http.del(`/v1/ai/knowledge/${id}`),
+      sync: (id: string) => http.post<T.KnowledgeSource>(`/v1/ai/knowledge/${id}/sync`),
+      docs: (id: string, q?: ListQuery) => http.get<T.Page<T.KnowledgeDoc>>(`/v1/ai/knowledge/${id}/docs`, { query: q }),
+      removeDoc: (id: string, docId: string) => http.del(`/v1/ai/knowledge/${id}/docs/${docId}`),
+    },
   },
   public: {
     help: (slug: string) => http.get<T.PublicHelpHome>(`/v1/public/help/${slug}`, pub),

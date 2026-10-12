@@ -299,6 +299,10 @@ export type NewMessage = {
   has_quoted?: boolean;
   delivery?: Message["delivery_status"];
   delivery_error?: string;
+  /** A widget agent reply under this bot name (contracts/agent.md "Output and posting"). */
+  bot?: string;
+  ai_action?: Message["ai_action"];
+  ai_rating?: Message["ai_rating"];
 };
 
 export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
@@ -310,18 +314,22 @@ export function buildMessage(ws: WsData, t: Ticket, m: NewMessage): Message {
   const msg: Message = {
     id: uuid(),
     ticket_id: t.id,
-    ai: false,
+    ai: !!m.bot,
+    ai_action: m.ai_action ?? null,
+    ai_rating: m.ai_rating ?? null,
     kind: m.kind,
     direction: m.direction,
     author: inbound
       ? { type: "contact", user: null, contact }
-      : { type: "user", user: m.user ?? null, contact: null },
+      : m.bot
+        ? { type: "system", user: null, contact: null }
+        : { type: "user", user: m.user ?? null, contact: null },
     body_html: m.html,
     body_text: stripHtml(m.html),
     has_quoted: m.has_quoted ?? false,
     subject: inbound ? t.subject : `Re: ${t.subject}`,
     from_email: inbound ? (contact?.email ?? "") : (mailbox?.email ?? "support@fieldnote.app"),
-    from_name: inbound ? (contact?.name ?? "") : `${m.user?.name ?? "Fieldnote"} (Fieldnote)`,
+    from_name: inbound ? (contact?.name ?? "") : m.bot ? m.bot : `${m.user?.name ?? "Fieldnote"} (Fieldnote)`,
     to: inbound ? [mailbox?.email ?? "support@fieldnote.app"] : contact?.email ? [contact.email] : [],
     cc: m.cc ?? [],
     bcc: m.bcc ?? [],
@@ -350,6 +358,7 @@ export function addMessage(ws: WsData, t: Ticket, m: NewMessage, opts: { publish
     changes.push("last_message_at");
     if (m.direction === "inbound") {
       t.last_customer_message_at = msg.created_at;
+      t.waiting_since ??= msg.created_at;
       if (t.status !== "open" && !t.spam) {
         const from = t.status;
         t.status = "open";
@@ -358,9 +367,12 @@ export function addMessage(ws: WsData, t: Ticket, m: NewMessage, opts: { publish
         if (doPublish) addActivity(ws, t, "status_changed", { from, to: "open" }, null);
         else addActivity(ws, t, "status_changed", { from, to: "open" }, null, msg.created_at, false);
       }
-    } else if (!t.first_responded_at) {
-      t.first_responded_at = msg.created_at;
-      changes.push("first_responded_at");
+    } else {
+      t.waiting_since = null;
+      if (!t.first_responded_at && !m.bot) {
+        t.first_responded_at = msg.created_at;
+        changes.push("first_responded_at");
+      }
     }
   }
   t.message_count += 1;
@@ -416,6 +428,7 @@ export function newTicket(
     snoozed_until: null,
     last_message_at: at,
     last_customer_message_at: null,
+    waiting_since: null,
     last_message_preview: "",
     message_count: 0,
     spam: false,

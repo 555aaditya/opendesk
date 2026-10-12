@@ -29,9 +29,11 @@ type AIConfig struct {
 		Default string `json:"default"`
 		Fast    string `json:"fast"`
 	} `json:"models"`
-	Embeddings bool           `json:"embeddings"`
-	Features   hd.AISettings  `json:"features"`
-	Costs      map[string]int `json:"costs"`
+	Embeddings bool               `json:"embeddings"`
+	Features   hd.AISettings      `json:"features"`
+	Costs      map[string]float64 `json:"costs" doc:"Typical credits per call, the minimum balance to start one"`
+	// Metered reports that credits follow real usage (contracts/billing.md).
+	Metered bool `json:"metered"`
 	// AssistantName is the name AI acts under: the assistant, and the actor of every
 	// change AI makes.
 	AssistantName string `json:"assistant_name"`
@@ -39,8 +41,16 @@ type AIConfig struct {
 	Decisions hd.DecisionEngine `json:"decisions"`
 }
 
+// ModelList is GET /v1/ai/models.
+type ModelList struct {
+	Data    []ModelInfo `json:"data"`
+	Default string      `json:"default" doc:"The instance default model (AI_MODEL)"`
+	Fast    string      `json:"fast" doc:"The instance fast model (AI_FAST_MODEL)"`
+}
+
 func (s *Service) register(api huma.API) {
 	tags := []string{"AI"}
+	s.registerAgent(api)
 
 	huma.Register(api, huma.Operation{OperationID: "ai-config", Method: http.MethodGet, Path: "/v1/ai/config",
 		Summary: "AI configuration", Description: "Whether AI is available, the models, and the workspace's AI settings.", Tags: tags},
@@ -53,17 +63,29 @@ func (s *Service) register(api huma.API) {
 			if err != nil {
 				return nil, httpx.Wrap(err)
 			}
-			out := AIConfig{Enabled: s.Enabled(), Provider: "none", Features: st.AI(), Costs: map[string]int{}, AssistantName: AssistantName,
-				Decisions: hd.Engine(s.d.Cfg)}
-			for k, v := range plan.Costs {
-				out.Costs[k] = v
+			out := AIConfig{Enabled: s.Enabled(), Provider: "none", Features: st.AI(), Costs: map[string]float64{}, AssistantName: AssistantName,
+				Decisions: hd.Engine(s.d.Cfg), Metered: true}
+			for k, v := range plan.Typical {
+				out.Costs[k] = v.Credits()
 			}
 			if s.Enabled() {
 				out.Provider = s.provider.Name()
-				out.Models.Default, out.Models.Fast = s.models.Default, s.models.Fast
+				out.Models.Default, out.Models.Fast = s.tierModel(out.Features, tierDefault), s.tierModel(out.Features, tierFast)
 				out.Embeddings = s.semantic()
 			}
 			return &struct{ Body AIConfig }{out}, nil
+		})
+
+	huma.Register(api, huma.Operation{OperationID: "ai-models", Method: http.MethodGet, Path: "/v1/ai/models",
+		Summary: "AI models", Description: "The models a workspace may choose, with prices in credits per million tokens when known.", Tags: tags},
+		func(ctx context.Context, _ *struct{}) (*struct{ Body ModelList }, error) {
+			if _, err := auth.RequireWorkspace(ctx, auth.RoleViewer, auth.ScopeSettingsRead); err != nil {
+				return nil, httpx.Wrap(err)
+			}
+			if !s.Enabled() {
+				return nil, errDisabled
+			}
+			return &struct{ Body ModelList }{ModelList{Data: s.Catalog(ctx), Default: s.models.Default, Fast: s.models.Fast}}, nil
 		})
 
 	huma.Register(api, huma.Operation{OperationID: "ai-update-settings", Method: http.MethodPatch, Path: "/v1/ai/settings",
@@ -76,7 +98,7 @@ func (s *Service) register(api huma.API) {
 			if !s.Enabled() {
 				return nil, errDisabled
 			}
-			patch, err := hd.ValidateAIPatch(in.Body)
+			patch, err := hd.ValidateAIPatch(in.Body, s.allowedModel)
 			if err != nil {
 				return nil, err
 			}

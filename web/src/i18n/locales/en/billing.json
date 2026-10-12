@@ -154,7 +154,10 @@
     "other": "Other",
     "day": "Day",
     "table": "Show as table",
-    "chart": "Show as chart"
+    "chart": "Show as chart",
+    "metered": "Credits follow real usage: longer conversations and larger models use more.",
+    "byModel": "By model",
+    "decisionModel": "Decision model"
   },
   "features": {
     "summarize": "Summaries",
@@ -166,6 +169,7 @@
     "copilot": "Ask about a ticket",
     "draft_reply": "Draft replies",
     "answer": "Widget answers",
+    "playground": "Agent playground",
     "kb_draft": "Article drafts",
     "assistant": "Assistant",
     "other": "Other"

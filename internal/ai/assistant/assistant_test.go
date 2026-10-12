@@ -113,7 +113,7 @@ func newEnv(t *testing.T, billing bool) *env {
 	cfg := *base.Cfg
 	cfg.AIProvider, cfg.AIModel, cfg.AIFastModel = "openai", "m", "m"
 	d.Cfg = &cfg
-	d.Plan = plan.New(billing)
+	d.Plan = plan.New(billing, 1.5)
 	m := newModel(t)
 	svc := ai.New(context.Background(), &d).WithProvider(ai.NewOpenAI(m.srv.URL, "k"), nil, "m", "m")
 
@@ -267,7 +267,7 @@ func TestReadToolsAndContainment(t *testing.T) {
 	}
 	// Usage rows hold counts only.
 	var n int
-	e.Scalar(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'assistant' AND credits = 2`, &n, e.WS.ID)
+	e.Scalar(`SELECT count(*) FROM ai_usage WHERE workspace_id = $1 AND feature = 'assistant' AND millicredits = 2000`, &n, e.WS.ID)
 	if n != 2 {
 		t.Fatalf("usage rows %d", n)
 	}
@@ -459,8 +459,8 @@ func TestOffAndCredits(t *testing.T) {
 	agent := e.WS.Agent.As(e.WS)
 	sid := e.session(agent)
 	// Credits used up: refused before the model is called.
-	e.Exec(`INSERT INTO ai_credits (workspace_id, included_used, period_start) VALUES ($1, 1000000, date_trunc('month', now() AT TIME ZONE 'utc'))
-		ON CONFLICT (workspace_id) DO UPDATE SET included_used = 1000000`, e.WS.ID)
+	e.Exec(`INSERT INTO ai_credits (workspace_id, included_used_milli, period_start) VALUES ($1, 1000000000, date_trunc('month', now() AT TIME ZONE 'utc'))
+		ON CONFLICT (workspace_id) DO UPDATE SET included_used_milli = 1000000000`, e.WS.ID)
 	st, _, body := e.stream("/v1/assistant/sessions/"+sid+"/messages", agent, map[string]any{"text": "Hi"})
 	if st != 402 || !strings.Contains(body, "no_credits") {
 		t.Fatalf("credits: %d %s", st, body)

@@ -31,8 +31,8 @@ client appends `/websocket`.
 | `workspace:<wid>`             | `ws` token with that `wid`                     | `"event"` with every envelope for that workspace (visibility `agents` or `public`) |
 | | | Pushed envelopes omit `topics`: per-user events (`notification.created`) are told apart by the channel they arrive on (`user:<uid>`), not by `topics` |
 | `user:<uid>`                  | `ws` token, `kind=user`, `sub == uid`          | `"event"` envelopes whose topics include `user:<uid>` |
-| `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, same `wid`            | Presence (`presence_state`, `presence_diff`) and `"typing"` |
-| `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, and `"typing"` from agents |
+| `ticket:<wid>:<ticket_id>`    | `ws` token, `kind=user`, same `wid`            | Presence (`presence_state`, `presence_diff`), `"typing"` and `"live"` |
+| `contact:<wid>:<contact_id>`  | widget socket: `widget_ws` token with `sub == contact_id`, same `wid` | `"event"` for public envelopes with that topic, `"typing"` from agents and `"live"` |
 
 Join params on `ticket:<wid>:<tid>`: `{"watch": true}` watches a ticket (the inbox list
 shows who is on it): the joiner receives `presence_state`/`presence_diff` but is **not**
@@ -55,6 +55,30 @@ On `contact:<wid>:<cid>`:
   to `ticket:<wid>:<ticket_id>`.
 
 Clients send messages through REST, never through the socket.
+
+## Live events
+
+Short-lived previews that are never stored or replayed: the widget agent's reply as it is generated
+(`contracts/agent.md`). The API publishes them on NATS subject **`od.live.<wid>`**:
+
+```jsonc
+{ "workspace_id": "…", "ticket_id": "…", "contact_id": "…",
+  "type": "ai.reply.started" | "ai.reply.delta" | "ai.reply.tool" | "ai.reply.ended", "data": { /* below */ } }
+```
+
+The gateway checks that `workspace_id` matches the subject and that the ids are uuids, then pushes
+`"live"` with `{type, data}` to `contact:<wid>:<contact_id>` and `ticket:<wid>:<ticket_id>` (watchers
+included). There is no `seq` and no catch-up: a client that misses them still gets the posted
+message as `message.created`.
+
+| type | data |
+| --- | --- |
+| `ai.reply.started` | `{reply_id, ticket_id, bot: {name}}`: the agent is writing (show a typing state) |
+| `ai.reply.delta` | `{reply_id, ticket_id, text}`: append `text` (markdown; hide `[n]` citation markers) |
+| `ai.reply.tool` | `{reply_id, ticket_id, tool: string /* display name */, status: "running" \| "done" \| "error"}`: the agent is using a tool (show "Checking <tool>…") |
+| `ai.reply.ended` | `{reply_id, ticket_id, message_id: string \| null, handoff: boolean, action_id: string \| null}`: `message_id` is the posted message (replace the preview with it when its `message.created` arrives); `null` means nothing was posted (drop the preview); `action_id` when the message asks the visitor to confirm an action |
+
+`reply_id` is a uuid per generated reply. Events of one reply arrive in order.
 
 ## Missed events
 

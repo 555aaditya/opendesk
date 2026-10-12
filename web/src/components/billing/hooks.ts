@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { intlLocale } from "@/i18n";
+import { credits } from "@/lib/format";
 import { api } from "@/lib/api/endpoints";
 import { q } from "@/lib/queries";
 import { atLeast, useRole } from "@/lib/session";
@@ -46,6 +47,8 @@ export function useFmt() {
   return {
     locale,
     num: (n: number) => nf.format(n),
+    /** Credits are decimals (metered to 0.001): 1,234.5, 0.42. */
+    credits,
     date: (iso: string | null | undefined) => {
       if (!iso) return "";
       const d = new Date(iso);
