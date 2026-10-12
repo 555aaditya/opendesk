@@ -496,6 +496,49 @@ export type Webhook = {
   enabled: boolean;
   created_at: string;
 };
+/** A product connected for Ollie over MCP (contracts/integrations.md). */
+export type IntegrationStarter = { label: string; prompt: string };
+export type IntegrationCategory = "issues" | "docs" | "chat" | "crm" | "payments" | "automation" | "files";
+export type IntegrationProvider = {
+  key: string;
+  name: string;
+  category: IntegrationCategory;
+  description: string;
+  url: string;
+  auth: "oauth" | "token";
+  token_help?: string;
+  token_url?: string;
+  starters: IntegrationStarter[];
+};
+export type IntegrationTool = { name: string; title: string; description: string; read_only: boolean; enabled: boolean };
+export type Integration = {
+  id: string;
+  /** A catalog key, or "custom". */
+  provider: string;
+  name: string;
+  host: string;
+  url?: string;
+  auth_type: "oauth" | "token" | "none";
+  status: "pending" | "connected" | "error";
+  enabled: boolean;
+  last_error: string;
+  tools: IntegrationTool[];
+  starters: IntegrationStarter[];
+  synced_at: string | null;
+  created_at: string;
+};
+export type TicketLink = {
+  id: string;
+  ticket_id: string;
+  integration_id: string | null;
+  /** A catalog key, "custom" or "link". */
+  provider: string;
+  url: string;
+  title: string;
+  actor_type: "user" | "ai" | "api";
+  created_by: string | null;
+  created_at: string;
+};
 export type WebhookDelivery = {
   id: string;
   event_id: string;

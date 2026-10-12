@@ -37,8 +37,9 @@ Self-hosted = `opendesk` + `realtime` + `postgres` behind Caddy on one domain: `
 - Areas own packages: `internal/core` (auth, accounts, workspaces, members, API keys,
   webhooks, audit, notifications, events API, realtime tokens), `internal/email`
   (mailboxes, inbound, outbound), `internal/helpdesk` (tickets, contacts, KB, widget,
-  SLA, automations, reports), `internal/billing` (Stripe, plans; Cloud only) and
-  `internal/ai` (AI features, providers, embeddings). Plan limits and AI credits go
+  SLA, automations, reports), `internal/billing` (Stripe, plans; Cloud only),
+  `internal/ai` (AI features, providers, embeddings) and `internal/integrations`
+  (connected products over MCP, ticket links; `contracts/integrations.md`). Plan limits and AI credits go
   through `d.Plan` (`internal/plan`, `contracts/billing.md`); AI through `internal/ai`
   (`contracts/ai.md`). Each exposes `Register`, `RegisterWorkers`, `Periodic`,
   `Background` (see `internal/app`). Shared ticket writes live in `internal/domain`:
@@ -121,7 +122,7 @@ Errors, logging, data
   event. Request logs never include query strings or bodies.
 - Mailbox credentials, OAuth tokens, webhook secrets, TOTP secrets: AES-GCM via `d.Box`.
 - Security events are audit-logged: login, failed login, 2FA changes, password change,
-  member and role changes, API key and webhook changes, mailbox connect/disconnect.
+  member and role changes, API key and webhook changes, mailbox and integration connect/disconnect.
 - Users can delete their account and owners their workspace (data removed, not hidden).
 - HTTP responses carry `httpx.SecurityHeaders`; the gateway checks `Origin`.
 - CI runs `govulncheck`, `pnpm audit`, `mix deps.audit` and a Trivy image scan.

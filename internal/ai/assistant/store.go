@@ -64,7 +64,7 @@ type Step struct {
 
 // Ref is a clickable reference to something in the workspace.
 type Ref struct {
-	Kind   string `json:"kind" enum:"ticket,contact,article,view,automation,member"`
+	Kind   string `json:"kind" enum:"ticket,contact,article,view,automation,member,external" doc:"external: ID is the https link"`
 	ID     string `json:"id"`
 	Label  string `json:"label"`
 	Number int64  `json:"number,omitempty"`

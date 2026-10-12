@@ -2,7 +2,7 @@
 // approval card that shows exactly what a change will do before it runs.
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Ban, Check, Clock, Send, X } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Ban, Check, Clock, Send, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
@@ -52,7 +52,31 @@ function StepIcon({ status }: { status: AssistantStep["status"] }) {
   );
 }
 
+const chip =
+  "inline-flex h-5 max-w-[200px] items-center gap-1 rounded-[5px] border border-line bg-surface px-1.5 text-[11px] text-fg-2 transition-colors enabled:hover:border-line-strong enabled:hover:text-fg disabled:cursor-default";
+
+/** Only https links from a connected product open, in a new tab. */
+export function externalHref(r: AssistantRef): string | null {
+  if (r.kind !== "external") return null;
+  try {
+    const u = new URL(r.id);
+    return u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function RefChip({ r }: { r: AssistantRef }) {
+  const href = externalHref(r);
+  if (r.kind === "external") {
+    if (!href) return null;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" title={r.id} className={cn(chip, "hover:border-line-strong hover:text-fg")}>
+        <span className="truncate">{r.label || new URL(href).host}</span>
+        <ArrowUpRight className="size-3 shrink-0 text-fg-4" aria-hidden />
+      </a>
+    );
+  }
   const clickable = r.kind !== "member";
   return (
     <button
@@ -60,7 +84,7 @@ export function RefChip({ r }: { r: AssistantRef }) {
       disabled={!clickable}
       onClick={() => clickable && void openRef(r)}
       title={r.label}
-      className="inline-flex h-5 max-w-[200px] items-center gap-1 rounded-[5px] border border-line bg-surface px-1.5 text-[11px] text-fg-2 transition-colors enabled:hover:border-line-strong enabled:hover:text-fg disabled:cursor-default"
+      className={chip}
     >
       {r.kind === "ticket" && r.number ? <span className="mono font-medium text-tone-violet">#{r.number}</span> : null}
       <span className="truncate">{r.label || r.kind}</span>
@@ -147,6 +171,11 @@ export function ApprovalCard({ approval, busy, onDecide }: { approval: Approval;
           <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium", tone.amber.chip)}>
             <Send className="size-3" />
             {t("approval.external")}
+          </span>
+        )}
+        {p.system && (
+          <span className={cn("inline-flex h-5 max-w-[140px] shrink-0 items-center rounded-[5px] px-1.5 text-[11px] font-medium", tone.violet.chip)}>
+            <span className="truncate">{t("approval.system", { system: p.system })}</span>
           </span>
         )}
       </div>

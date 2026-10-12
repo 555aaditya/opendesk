@@ -7,11 +7,9 @@ Dependencies installed from npm carry their own licenses in `node_modules` and a
 
 - Source: https://www.beautifului.dev/ (copy-paste components; the source is published on the site)
 - License: MIT
-- Adapted in: `src/components/ai/ui/` (Thinking, StreamingText, Cards, Recommendation, DiffView,
-  TaskRows, PromptBar) and used by `src/components/ai/**` and the Ask AI mode of
-  `src/app/CommandPalette.tsx`.
-- Components adapted: Thinking, Loading State, Streaming Text, Tool Chips, Approval Card,
-  Recommendation Card, Context Cards, Insight Cards, Diff Table, Task Rows, Prompt Bar, Chat Composer.
+- Adapted in: `src/components/ai/ui/` (Thinking, StreamingText, DiffView, TaskRows) and used by
+  `src/components/ai/**` and the Ask AI mode of `src/app/CommandPalette.tsx`.
+- Components adapted: Thinking, Loading State, Streaming Text, Tool Chips, Diff Table, Task Rows.
 - Changes: restyled to opendesk design tokens, radii and the violet AI tone; rewritten for
   Tailwind v4, motion/react and lucide-react; scripted demo timelines replaced by real
   progress; demo data, charts, shaders and brand marks removed; strings moved to i18next.

@@ -85,7 +85,7 @@ type Message = {
 };
 type Attachment = { id: string; filename: string; content_type: string; size_bytes: number; inline: boolean; url: string };
 type Activity = { id: string; ticket_id: string; actor: { type: string; user: UserRef | null }; type: string; data: Record<string, unknown>; created_at: string };
-// activity types: status_changed{from,to} priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score}
+// activity types: status_changed{from,to} priority_changed{from,to} severity_changed{from: Severity | null, to: Severity | null} assigned{from,to,via?: "round_robin"|"load_balanced"|"triage"} (actor "system", or "ai" for via "triage") team_changed tagged{tag} untagged{tag} sla_breached{kind} merged{into} csat_received{score} linked{link_id,url,title,provider} unlinked{url,title,provider}
 // field_changed{key, name, from, to} (one per custom field; from/to are FieldValue | null)
 // AI (actor.type "ai", contracts/ai.md): ai_triaged{category,sentiment,language,priority,severity,via,model?,engine?}; AI changes carry {via, model?: "jev", confidence?: number} ai_answered{message_id,sources,tools} ai_action{action_id,tool,status} ai_handoff (actor "ai" or "contact")
 
@@ -220,6 +220,7 @@ type Notification = { id: string; type: "assigned" | "mentioned" | "customer_rep
 | CRUD | `/v1/webhooks`, `/v1/webhooks/{id}` | `{url, description, events, enabled}` create → `Webhook & {secret}`. `events: ["*"]` (or `[]`) is every event, including types added later; a list may use `resource.*` |
 | GET | `/v1/webhooks/{id}/deliveries` | list |
 | POST | `/v1/webhooks/{id}/test` | sends `webhook.test` → 202 `WebhookDelivery` |
+| CRUD | `/v1/integrations`, `/v1/integrations/{id}` | admin users only. Connected products for Ollie (MCP servers); see `contracts/integrations.md`, which also lists `/v1/tickets/{id}/links` |
 | GET | `/v1/audit-logs` | admin, list, optional `?action=&entity_type=` |
 | GET | `/v1/events?since=<seq>&limit=` | `limit` default 500, max 1000 → `{data: Envelope[], latest_seq, resync: bool}`. Members, and API keys with `realtime` or `tickets:read` |
 | POST | `/v1/realtime/token` | → `{token, url, expires_at}` (users and keys with `realtime`) |

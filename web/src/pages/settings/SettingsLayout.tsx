@@ -11,7 +11,6 @@ import {
   Bot,
   FlaskConical,
   LayoutDashboard,
-  Plug,
   Building2,
   CreditCard,
   Gauge,
@@ -21,12 +20,14 @@ import {
   ListChecks,
   MessageCircle,
   MessageSquareText,
+  Plug,
   Shield,
   SlidersHorizontal,
   Shuffle,
   Sparkles,
   Clock,
   Tag,
+  Wrench,
   User,
   Users,
   UsersRound,
@@ -61,7 +62,8 @@ type NavPath =
   | "/settings/ai/behaviour"
   | "/settings/ai/knowledge"
   | "/settings/ai/tools"
-  | "/settings/ai/playground";
+  | "/settings/ai/playground"
+  | "/settings/integrations";
 
 const AGENT_GROUP = "AI agent";
 
@@ -82,6 +84,7 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
       { to: "/settings/mailboxes", label: "Mailboxes", icon: <Inbox /> },
       { to: "/settings/billing", label: "Plan and billing", icon: <CreditCard /> },
       { to: "/settings/ai", label: "AI", icon: <Bot /> },
+      { to: "/settings/integrations", label: "Integrations", icon: <Plug /> },
     ],
   },
   {
@@ -105,7 +108,7 @@ const groups: { title: string; items: { to: NavPath; label: string; icon: ReactN
       { to: "/settings/ai/agent", label: "Overview", icon: <LayoutDashboard /> },
       { to: "/settings/ai/behaviour", label: "Behaviour", icon: <SlidersHorizontal /> },
       { to: "/settings/ai/knowledge", label: "Knowledge", icon: <BookOpen /> },
-      { to: "/settings/ai/tools", label: "Tools", icon: <Plug /> },
+      { to: "/settings/ai/tools", label: "Tools", icon: <Wrench /> },
       { to: "/settings/ai/playground", label: "Playground", icon: <FlaskConical /> },
     ],
   },

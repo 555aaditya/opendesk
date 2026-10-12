@@ -1,10 +1,8 @@
 // The AI teammate's identity inside tickets: its name (assistant_name from the
-// AI config, "Ollie" by default), a small violet mark for things it set, and the
+// AI config, "Ollie" by default), a tiny still Ollie on things it set, and the
 // Ollie blob as the avatar on timeline lines it authored.
 
-import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { tone } from "@/lib/tones";
 import { useQuery } from "@tanstack/react-query";
 import { q } from "@/lib/queries";
 import { OllieMark } from "@/components/assistant/OllieMark";
@@ -21,10 +19,7 @@ export function isAIActor(actor: { type: string } | null | undefined) {
   return actor?.type === "ai";
 }
 
-/**
- * What to say about a value the AI chose: "Ollie set this · 92% sure · via Jev"
- * when Jev decided it, "Ollie set this" otherwise.
- */
+/** What to say about a value the AI chose: "Ollie set this · 92% sure", or "Ollie set this". */
 export function useOllieNote() {
   const { t } = useTranslation("inbox");
   const name = useAssistantName();
@@ -32,24 +27,19 @@ export function useOllieNote() {
     const n = field ? decisionNote(aiDecisions(ticket), field) : null;
     const parts = [t("ollie.setThis", { name })];
     if (n?.sure != null) parts.push(t("ollie.sure", { pct: n.sure }));
-    if (n?.jev) parts.push(t("ollie.viaJev"));
     return parts.join(" · ");
   };
 }
 
-/** A tiny violet sparkle with "Set by Ollie"; sits on a value the AI chose. `note` replaces the tooltip. */
-export function SetByOllie({ className, note }: { className?: string; note?: string }) {
+/** A tiny still Ollie with "Set by Ollie"; sits on a value the AI chose. `note` replaces the tooltip. */
+export function SetByOllie({ className, note, size = 12 }: { className?: string; note?: string; size?: number }) {
   const { t } = useTranslation("inbox");
   const name = useAssistantName();
   const label = note ?? t("ollie.setBy", { name });
   return (
     <Tooltip content={label}>
-      <span
-        role="img"
-        aria-label={label}
-        className={cn("inline-flex size-3 shrink-0 items-center justify-center rounded-xs", tone.violet.soft, tone.violet.text, className)}
-      >
-        <Sparkles className="size-2" strokeWidth={2.25} />
+      <span role="img" aria-label={label} className={cn("ollie-still inline-flex shrink-0 rounded-full", className)} style={{ width: size, height: size }}>
+        <OllieMark size={size} eyes={false} />
       </span>
     </Tooltip>
   );

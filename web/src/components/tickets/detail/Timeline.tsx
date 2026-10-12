@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, PencilLine, Star, Tag as TagIcon, TimerOff, Users, UserRound } from "lucide-react";
+import { AlarmClock, Hand, ShieldAlert, Sparkles, ArrowRightLeft, CircleDot, GitMerge, Link2, PencilLine, Star, Tag as TagIcon, TimerOff, Users, UserRound } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
@@ -42,6 +42,17 @@ const B = <span className="font-medium text-fg-2" />;
 const M = <span className="mono text-fg-2" />;
 
 type Line = { icon: ReactNode; text: ReactNode; hue?: "red" | "ai" };
+
+/** Only https links from other tools are opened. */
+function safeLink(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" ? u.href : null;
+  } catch {
+    return null;
+  }
+}
 
 type Ctx = { teams?: Team[]; members?: Member[]; tags?: Tag[]; fields?: CustomField[]; display: ReturnType<typeof useDisplay>; ollie: string };
 
@@ -123,6 +134,26 @@ function describe(a: Activity, t: TFunction<"inbox">, { teams, members, tags, fi
       const from = typeof d.from_number === "number" ? { number: d.from_number } : (d.from as { number?: number } | undefined);
       return { icon: <GitMerge />, text: into ? line("activity.mergedInto", { number: into.number }) : line("activity.mergedFrom", { number: from?.number }) };
     }
+    case "linked":
+    case "unlinked": {
+      const href = safeLink(d.url);
+      const title = (typeof d.title === "string" && d.title) || (href ? new URL(href).host : "");
+      return {
+        icon: <Link2 />,
+        text: (
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span className="shrink-0">{line(a.type === "linked" ? "activity.linked" : "activity.unlinked")}</span>
+            {href && a.type === "linked" ? (
+              <a href={href} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate font-medium text-fg-2 underline decoration-line-strong underline-offset-2 hover:text-fg">
+                {title}
+              </a>
+            ) : (
+              <span className="min-w-0 truncate font-medium text-fg-3">{title}</span>
+            )}
+          </span>
+        ),
+      };
+    }
     case "csat_received":
       return {
         icon: <Star className={tone.amber.text} />,
@@ -183,16 +214,15 @@ function ActivityLine({ a }: { a: Activity }) {
   );
 }
 
-/** How sure Jev was about an AI change ({model: "jev", confidence} in the activity data). */
+/** How sure Ollie was about an AI change ({confidence} in the activity data). */
 function DecisionMeta({ a, ollie }: { a: Activity; ollie: string }) {
   const { t } = useTranslation("inbox");
   const sure = typeof a.data.confidence === "number" ? pct(a.data.confidence) : null;
-  const jev = a.data.model === "jev";
-  if (sure == null && !jev) return null;
-  const note = [t("ollie.setThis", { name: ollie }), ...(sure != null ? [t("ollie.sure", { pct: sure })] : []), ...(jev ? [t("ollie.viaJev")] : [])].join(" · ");
+  if (sure == null) return null;
+  const note = `${t("ollie.setThis", { name: ollie })} · ${t("ollie.sure", { pct: sure })}`;
   return (
     <Tooltip content={note}>
-      <span className={cn("mono shrink-0 rounded-sm px-1 text-[10px] tabular-nums", tone[AI_TONE].text, tone[AI_TONE].soft)}>{sure != null ? `${sure}%` : "Jev"}</span>
+      <span className={cn("mono shrink-0 rounded-sm px-1 text-[10px] tabular-nums", tone[AI_TONE].text, tone[AI_TONE].soft)}>{sure}%</span>
     </Tooltip>
   );
 }

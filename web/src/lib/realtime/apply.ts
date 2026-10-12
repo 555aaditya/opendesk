@@ -14,6 +14,7 @@ import type {
   Notification,
   Page,
   Ticket,
+  TicketLink,
   Workspace,
 } from "../api/types";
 import { qk, removeFromList, upsertInList } from "../queries";
@@ -45,6 +46,7 @@ const simpleLists: Record<string, { key: readonly unknown[]; field: string }> = 
   kb_collection: { key: qk.kbCollections, field: "kb_collection" },
   team: { key: qk.teams, field: "team" },
   webhook: { key: qk.webhooks, field: "webhook" },
+  integration: { key: qk.integrations, field: "integration" },
 };
 
 let countsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -199,6 +201,13 @@ export function applyEnvelope(qc: QueryClient, env: Envelope, ctx: ApplyContext)
       if (srv) upsertInList(qc, qk.mcpServers, srv);
       else void qc.invalidateQueries({ queryKey: qk.mcpServers });
     }
+    return;
+  }
+
+  if (resource === "ticket_link") {
+    const tid = d.ticket_id as string;
+    if (verb === "deleted") removeFromList(qc, qk.ticketLinks(tid), d.link_id as string);
+    else if (d.link) appendUnique(qc, qk.ticketLinks(tid), d.link as TicketLink);
     return;
   }
 

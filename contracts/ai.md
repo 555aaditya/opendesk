@@ -276,9 +276,10 @@ interface PageContext { path?: string; page?: "inbox"|"view"|"ticket"|"contacts"
 interface Step { id: string; tool: string; label: string;
   status: "running"|"done"|"error"|"awaiting_approval"|"approved"|"denied"|"expired";
   summary?: string; refs?: Ref[]; action_id?: string }
-interface Ref { kind: "ticket"|"contact"|"article"|"view"|"automation"|"member"; id: string; label: string; number?: number }
+interface Ref { kind: "ticket"|"contact"|"article"|"view"|"automation"|"member"|"external" /* id is the https link */; id: string; label: string; number?: number }
 interface Preview { title: string; summary?: string; changes?: {field: string; from: string; to: string}[];
-  body?: string /* markdown, a reply or note */; targets?: Ref[]; total?: number; external?: boolean /* reaches a customer */ }
+  body?: string /* markdown, a reply or note */; targets?: Ref[]; total?: number; external?: boolean /* reaches a customer */;
+  system?: string /* the connected product the change runs in, e.g. "Linear" */ }
 interface Approval { action_id: string; call_id: string; tool: string; preview: Preview; token: string; expires_at: string }
 interface Item { role: "user"|"assistant"; text: string; steps: Step[]; context?: PageContext }
 interface Tip { key: string; text: string; prompt: string; severity: "high"|"medium"|"low"; count: number }
@@ -314,6 +315,9 @@ and activities:
   `add_note`, `draft_reply` (sent only on approval; `external: true`), `create_kb_draft`
   (saved as a draft), `create_view` (personal); admin: `create_automation_draft` (saved
   disabled). Tools the user's role cannot use are not offered to the model.
+- connected (agent+): the workspace's integrations' MCP tools, named `<slug>__<tool>`
+  (`contracts/integrations.md`). Server-marked read-only tools are reads; every other one
+  is a write with `preview.system` set.
 
 Approvals:
 - A write is stored as an `assistant_actions` row (`pending`, 15 minutes) and the client

@@ -480,6 +480,17 @@ const sAgentPlayground = settingsPage("/ai/playground", "Agent playground", () =
   void qc.prefetchQuery(q.widgetSettings());
   return Promise.all([qc.ensureQueryData(q.aiConfig()), qc.ensureQueryData(q.workspace())]);
 });
+const sIntegrations = createRoute({
+  getParentRoute: () => settingsLayout,
+  path: "/integrations",
+  validateSearch: (s: Record<string, unknown>): { connected?: string; error?: string } => ({ connected: str(s.connected), error: str(s.error) }),
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(q.integrationCatalog());
+    return context.queryClient.ensureQueryData(q.integrations());
+  },
+  component: page(() => import("./pages/settings/Integrations")),
+  staticData: { title: "Integrations" },
+});
 
 const routeTree = rootRoute.addChildren([
   helpRoute.addChildren([helpHomeRoute, helpCollectionRoute, helpArticleRoute, helpSearchRoute]),
@@ -536,6 +547,7 @@ const routeTree = rootRoute.addChildren([
       sAgentKnowledge,
       sAgentTools,
       sAgentPlayground,
+      sIntegrations,
     ]),
   ]),
 ]);

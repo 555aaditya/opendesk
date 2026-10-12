@@ -11,8 +11,19 @@ import { aiDecisions } from "@/lib/decisions";
 import { applyPatch, findTicket } from "../tickets";
 import { nowIso, uuid } from "../util";
 import { assertAi } from "./ai";
+import { connected, linkTicket } from "./integrations";
 
-type Pending = { id: string; callId: string; ticketIds: string[]; patch: Record<string, unknown>; summary: string; token: string; step: AssistantStep };
+type Pending = {
+  id: string;
+  callId: string;
+  ticketIds: string[];
+  patch: Record<string, unknown>;
+  summary: string;
+  token: string;
+  step: AssistantStep;
+  /** A connected tool's change, run on approval instead of a ticket patch. */
+  external?: () => Partial<AssistantStep> & { text: string };
+};
 type Sess = AssistantSession & { wid: string; items: TranscriptItem[]; pending: Pending | null };
 
 const sessions: Sess[] = [];
@@ -93,6 +104,9 @@ async function agent(ctx: Ctx, s: Sess, text: string, ticketId: string | undefin
   const id = () => `call_${uuid().slice(0, 8)}`;
   const current = (ticketId && findTicket(ws, ticketId)) || open(ws).find((t) => !t.assignee) || open(ws)[0];
 
+  const tools = await connectedTools(ctx, s, lower, current, emit, item, id);
+  if (tools) return tools;
+
   if (/\b(who should|assign|take this|take it)\b/.test(lower) && current) {
     await step(emit, { id: id(), tool: "get_ticket", label: "Reading the ticket", status: "running" }, () => ({ label: "Read the ticket", summary: `#${current.number}`, refs: [ref(current)] }), item);
     const team = teammates(ws);
@@ -160,6 +174,90 @@ async function agent(ctx: Ctx, s: Sess, text: string, ticketId: string | undefin
   await step(emit, { id: id(), tool: "search_tickets", label: "Searching tickets", status: "running" }, () => ({ label: "Searched tickets", summary: `Found ${urgent.length} tickets`, refs: urgent.map(ref) }), item);
   await say(emit, item, urgent.length ? `These need a look first:\n\n${urgent.map((t) => `- ${line(t)}`).join("\n")}\n\nWant me to find owners for the unassigned ones?` : "Nothing urgent right now. The queue is in good shape.");
   return "complete";
+}
+
+const productWords: Record<string, RegExp> = {
+  linear: /\blinear\b/,
+  github: /\bgithub\b/,
+  atlassian: /\b(jira|confluence|atlassian)\b/,
+  sentry: /\bsentry\b/,
+  notion: /\bnotion\b/,
+  slack: /\bslack\b/,
+  stripe: /\bstripe\b/,
+  asana: /\basana\b/,
+};
+const productName: Record<string, string> = { linear: "Linear", github: "GitHub", atlassian: "Jira", sentry: "Sentry", notion: "Notion", slack: "Slack", stripe: "Stripe", asana: "Asana" };
+
+/** Requests for a connected product: lookups run, anything else waits for approval and links back. */
+async function connectedTools(ctx: Ctx, s: Sess, lower: string, current: Ticket | undefined, emit: Emit, item: TranscriptItem, id: () => string) {
+  const ws = ctx.ws;
+  const named = Object.keys(productWords).find((k) => productWords[k].test(lower));
+  const wantsIssue = /\b(open|create|file|make|log)\b.*\b(issue|bug|task)\b/.test(lower);
+  if (!named && !wantsIssue) return null;
+  const all = connected(ws);
+  const hit = all.find((c) => c.x.provider === named) ?? (!named ? all.find((c) => ["linear", "github", "atlassian", "asana"].includes(c.x.provider)) : undefined);
+  if (!hit) {
+    if (!named) return null;
+    await say(emit, item, `${productName[named]} isn't connected yet. An admin can connect it in **Settings, Integrations**, and then I can work there for you.`);
+    return "complete";
+  }
+  const { x, hosts } = hit;
+  const slug = x.provider === "custom" ? x.name.toLowerCase().replace(/[^a-z0-9]+/g, "_") : x.provider;
+  const enabled = (n: string) => x.tools.find((tl) => tl.name === n && tl.enabled);
+  const lookup = x.tools.find((tl) => tl.read_only && tl.enabled);
+  const create = x.tools.find((tl) => !tl.read_only && tl.enabled && /create|open|post|new/i.test(tl.name)) ?? enabled("create_issue");
+  const host = hosts[0] ?? x.host;
+
+  if (/\b(find|search|related|already|look up|check)\b/.test(lower) || !create) {
+    if (!lookup) {
+      await say(emit, item, `Every lookup tool for ${x.name} is turned off, so I can't search it right now.`);
+      return "complete";
+    }
+    await step(emit, { id: id(), tool: `${slug}__${lookup.name}`, label: `Checking ${x.name}`, status: "running" }, () => ({ label: `Checked ${x.name}`, summary: `Read from ${x.name}` }), item);
+    await say(emit, item, current ? `I searched ${x.name} for "${current.subject}" and found **no open item** that covers it yet. Want me to create one and link it here?` : `I searched ${x.name} and found nothing that matches.`);
+    return "complete";
+  }
+  if (!current) {
+    await say(emit, item, `Open the ticket you want this for, and I'll prepare it in ${x.name}.`);
+    return "complete";
+  }
+  await step(emit, { id: id(), tool: "get_ticket", label: "Reading the ticket", status: "running" }, () => ({ label: "Read the ticket", summary: `#${current.number}`, refs: [ref(current)] }), item);
+  const who = current.contact?.name ?? "A customer";
+  const title = current.subject.length > 80 ? `${current.subject.slice(0, 77)}…` : current.subject;
+  const body = `**Reported by** ${who} in opendesk #${current.number}.\n\n${current.last_message_preview || "No details yet."}\n\n**Impact:** the customer is ${current.priority === "urgent" || current.priority === "high" ? "blocked" : "affected"}.`;
+  await say(emit, item, `Here's the ${x.name} ${x.provider === "slack" ? "message" : "item"} I'd create from #${current.number}:`);
+  const pid = uuid();
+  const st: AssistantStep = { id: id(), tool: `${slug}__${create.name}`, label: `Preparing ${create.title.toLowerCase()} in ${x.name}`, status: "awaiting_approval", action_id: pid };
+  await emit("tool", st);
+  item.steps.push(st);
+  const preview: Preview = {
+    title: `${x.name}: ${create.title}`,
+    system: x.name,
+    changes: [{ field: "Title", from: "", to: title }, ...(x.provider === "linear" ? [{ field: "Team", from: "", to: "Support" }, { field: "Priority", from: "", to: current.priority === "urgent" ? "Urgent" : current.priority === "high" ? "High" : "Medium" }] : [])],
+    body,
+  };
+  const n = 180 + current.number;
+  const url = x.provider === "github" ? `https://github.com/fieldnote/app/issues/${n}` : x.provider === "atlassian" ? `https://fieldnote.atlassian.net/browse/SUP-${n}` : `https://${host}/fieldnote/issue/FN-${n}`;
+  s.pending = {
+    id: pid,
+    callId: st.id,
+    ticketIds: [],
+    patch: {},
+    summary: "",
+    token: uuid(),
+    step: st,
+    external: () => {
+      linkTicket(ws, current, x, url, title, "ai");
+      return {
+        label: `Done in ${x.name}`,
+        summary: `Created in ${x.name} and linked to the ticket`,
+        refs: [{ kind: "external", id: url, label: title }],
+        text: `Created it in ${x.name} and linked it to #${current.number}. Anyone on the ticket can open it from **Linked**.`,
+      };
+    },
+  };
+  await emit("approval", approvalOf(s.pending, preview));
+  return "awaiting_approval";
 }
 
 function stream(run: (emit: Emit) => Promise<void>): Response {
@@ -278,6 +376,15 @@ export function registerAssistant() {
       p.step.status = "approved";
       await emit("tool", p.step);
       await sleep(450);
+      if (p.external) {
+        const { text, ...done } = p.external();
+        Object.assign(p.step, done, { status: "done" });
+        await emit("tool", p.step);
+        await say(emit, item, text);
+        spend(ctx.ws, "assistant");
+        await emit("done", { status: "complete" });
+        return;
+      }
       const me = userRef(db.meId);
       for (const tid of p.ticketIds) {
         const t = findTicket(ctx.ws, tid);

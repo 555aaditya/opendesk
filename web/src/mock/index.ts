@@ -13,6 +13,7 @@ import { registerAgent } from "./handlers/agent";
 import { registerAuth, setSignedIn } from "./handlers/auth";
 import { registerBilling } from "./handlers/billing";
 import { registerKnowledge } from "./handlers/knowledge";
+import { registerIntegrations } from "./handlers/integrations";
 import { registerLabels } from "./handlers/labels";
 import { registerMcp } from "./handlers/mcp";
 import { registerResources } from "./handlers/resources";
@@ -60,6 +61,7 @@ export function installMock(): void {
   registerAgent();
   registerMcp();
   registerKnowledge();
+  registerIntegrations();
 
   setTransport((input, init) => dispatch(input, init));
   setSocketFactory(socketFactory);

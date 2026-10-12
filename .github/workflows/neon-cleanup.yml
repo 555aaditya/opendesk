@@ -12,7 +12,7 @@ permissions: {}
 jobs:
   delete-branch:
     name: Delete Neon branch
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: vars.NEON_PROJECT_ID != '' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3.2.1

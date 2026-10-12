@@ -46,3 +46,7 @@ Conversations are private to you. Open past ones from the history button, rename
 ## Credits and settings
 
 Each answer uses 2 credits per model turn (see [Cloud plans and billing](/guides/billing/)). Admins can turn Ollie off for the workspace in **Settings → AI**. On a self-hosted instance Ollie needs an AI provider that supports tool use (Anthropic, or an OpenAI-compatible endpoint with tools); see [AI on a self-hosted instance](/self-hosting/ai/).
+
+## Your other tools
+
+Connect Linear, GitHub, Jira, Sentry, Slack, Stripe and others in **Settings, Integrations**, and Ollie can work there too, with the same approvals. See [Integrations](/guides/integrations/).

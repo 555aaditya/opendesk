@@ -337,6 +337,8 @@
     "mergedInto": "<b>{{who}}</b> merged this into <m>#{{number}}</m>",
     "mergedFrom": "<b>{{who}}</b> merged <m>#{{number}}</m> into this ticket",
     "csat": "The customer rated this <m>{{score}}/5</m>",
+    "linked": "<b>{{who}}</b> linked",
+    "unlinked": "<b>{{who}}</b> removed the link to",
     "triaged": "<b>{{who}}</b> triaged this",
     "triagedAs": "<b>{{who}}</b> triaged this as <b>{{category}}</b>",
     "aiAnswered": "<b>{{who}}</b> answered from the knowledge base",
@@ -454,7 +456,10 @@
     "filter": "Fields",
     "yes": "Yes",
     "no": "No",
-    "me": "Me"
+    "me": "Me",
+    "showEmpty_one": "Show {{count}} empty field",
+    "showEmpty_other": "Show {{count}} empty fields",
+    "hideEmpty": "Hide empty fields"
   },
   "labels": {
     "pickOne": "{{name}}, pick one",
@@ -473,7 +478,6 @@
     "setBy": "Set by {{name}}",
     "said": "{{name}} replied",
     "sure": "{{pct}}% sure",
-    "viaJev": "via Jev",
     "setThis": "{{name}} set this"
   },
   "suggest": {
@@ -515,5 +519,12 @@
     "posting": "is posting",
     "thinking": "Thinking",
     "handingOff": "Handing off to your team"
+  },
+  "links": {
+    "title": "Linked",
+    "removed": "Link removed",
+    "remove": "Remove link",
+    "removeNamed": "Remove the link to {{title}}",
+    "byOllie": "Created by {{name}}"
   }
 }

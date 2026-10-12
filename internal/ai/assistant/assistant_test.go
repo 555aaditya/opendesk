@@ -26,6 +26,7 @@ import (
 	"github.com/useopendesk/opendesk/internal/helpdesk/hdtest"
 	"github.com/useopendesk/opendesk/internal/httpx"
 	"github.com/useopendesk/opendesk/internal/ids"
+	"github.com/useopendesk/opendesk/internal/integrations"
 	"github.com/useopendesk/opendesk/internal/jobs"
 	"github.com/useopendesk/opendesk/internal/plan"
 )
@@ -125,6 +126,7 @@ func newEnv(t *testing.T, billing bool) *env {
 	api := humachi.New(r, huma.DefaultConfig("opendesk test", "test"))
 	core.Register(&d, api, r)
 	helpdesk.Register(&d, api, r)
+	integrations.Register(&d, api, r)
 	New(&d, svc, api.Adapter()).register(api)
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
