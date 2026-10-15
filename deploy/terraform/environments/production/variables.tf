@@ -78,6 +78,12 @@ variable "github_repo" {
   default = "opendesk/opendesk"
 }
 
+variable "github_repo_immutable" {
+  description = "The repository in GitHub's immutable OIDC subject, owner@owner_id/name@repo_id (gh api repos/OWNER/REPO/actions/oidc/customization/sub shows the prefix). Empty trusts github_repo only."
+  type        = string
+  default     = ""
+}
+
 variable "create_github_oidc_provider" {
   type    = bool
   default = true

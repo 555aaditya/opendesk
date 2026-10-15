@@ -39,10 +39,12 @@ data "aws_iam_policy_document" "trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.issuer}:sub"
-      values = [
-        "repo:${var.github_repo}:ref:refs/heads/main",
-        "repo:${var.github_repo}:environment:production",
-      ]
+      # Both subject forms: by name, and the immutable one with the owner's and the
+      # repository's numeric ids, which GitHub sends once a repository opts in.
+      values = flatten([for r in compact([var.github_repo, var.github_repo_immutable]) : [
+        "repo:${r}:ref:refs/heads/main",
+        "repo:${r}:environment:production",
+      ]])
     }
   }
 }

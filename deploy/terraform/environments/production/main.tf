@@ -565,6 +565,7 @@ module "github_oidc" {
   source = "../../modules/github-oidc"
 
   github_repo                = var.github_repo
+  github_repo_immutable      = var.github_repo_immutable
   create_oidc_provider       = var.create_github_oidc_provider
   existing_oidc_provider_arn = var.existing_github_oidc_provider_arn
   cluster_name               = aws_ecs_cluster.this.name

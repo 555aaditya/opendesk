@@ -3,6 +3,12 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_repo_immutable" {
+  description = "owner@owner_id/name@repo_id: the repository in GitHub's immutable OIDC subject, for a repository that sends it. Empty trusts the name form only."
+  type        = string
+  default     = ""
+}
+
 variable "role_name" {
   type    = string
   default = "opendesk-github-deploy"
