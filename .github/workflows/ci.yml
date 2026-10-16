@@ -105,6 +105,11 @@ jobs:
             terraform:
               - *shared
               - 'deploy/terraform/**'
+              - '.github/actions/terraform/**'
+              - 'scripts/tfplan.sh'
+              - 'scripts/check-tfplan.sh'
+              - 'scripts/tfvars.sh'
+              - 'scripts/put-secret.sh'
             cloudflare:
               - *shared
               - 'deploy/cloudflare/**'
@@ -413,6 +418,11 @@ jobs:
           terraform_wrapper: false
       - name: terraform fmt
         run: terraform fmt -check -recursive -diff deploy/terraform
+      - name: Plan summary and operator scripts
+        run: |
+          ./scripts/check-tfplan.sh
+          command -v shellcheck >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck; }
+          shellcheck scripts/tfplan.sh scripts/check-tfplan.sh scripts/tfvars.sh scripts/put-secret.sh
       - name: terraform validate
         run: |
           for d in deploy/terraform/environments/* deploy/terraform/modules/*; do
